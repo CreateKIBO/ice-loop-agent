@@ -65,12 +65,28 @@ function initPlanning() {
   newForm.elements.series.addEventListener('change',()=>{planningState.episodeTouched=false;loadPlanningContext().catch(error=>toast(error.message));});
   newDialog.addEventListener('close',()=>{++planningState.token;planningState.context=null;planningState.proposal=null;planningState.loading=false;planningState.busy=false;});
 }
+const historyState={rows:[],filter:''};
+function historyFilteredRows(){const f=historyState.filter;return f===''?historyState.rows:historyState.rows.filter(row=>f==='__none__'?!row.series:row.series===f);}
+function historyCountText(){const all=historyState.rows.length,shown=historyFilteredRows().length;return all===shown?`历史文章 · ${all} 篇`:`历史文章 · ${shown}/${all} 篇`;}
+function historyRowHtml(row,options,date){return `<form class="publication-panel history-record" data-history-id="${esc(row.history_id)}" data-hash="${esc(row.content_hash)}"><div class="history-title"><label>标题<input name="title" value="${esc(row.title)}" required maxlength="300"></label>${badge(row.status==='published'?'已发布':'草稿',row.status==='published'?'green':'')}<button type="button" class="button text-button small" data-plan-action="preview-history" data-id="${esc(row.history_id)}">阅读正文 ↗</button></div><div class="history-fields"><label>栏目<select name="series" required><option value="">请选择栏目</option>${options(row.series)}</select></label><label>期号<input name="episode" type="number" min="1" max="9999" required value="${row.episode??''}"></label><label>状态<select name="status"><option value="draft" ${row.status==='draft'?'selected':''}>草稿</option><option value="published" ${row.status==='published'?'selected':''}>已发布</option></select></label><label>实际发布日期<input name="published_at" type="date" max="${date}" value="${esc(row.published_at)}" ${row.status==='published'?'required':''}></label><button type="submit" class="button secondary small">保存登记</button></div><div class="history-body" hidden></div></form>`;}
+function renderHistoryList(){
+  const columns=activeAccount().columns,today=new Date(),date=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const options=selected=>columns.map(c=>`<option value="${esc(c.code)}" ${c.code===selected?'selected':''}>${esc(c.code)} · ${esc(c.name)}</option>`).join('');
+  const rows=historyFilteredRows();
+  const count=document.querySelector('#history-count'),list=document.querySelector('#history-list');
+  if(count)count.textContent=historyCountText();
+  if(list)list.innerHTML=rows.map(row=>historyRowHtml(row,options,date)).join('')||(historyState.filter?'<div class="empty-state"><h3>该栏目还没有历史文章</h3><p>换一个栏目看看，或在草稿箱导入文章后回来登记。</p></div>':'<div class="empty-state"><h3>还没有历史文章</h3><p>在草稿箱导入文章，或在公众号设置中填写存稿目录。</p></div>');
+}
 async function renderHistory() {
   const accountId=activeAccount().id;
   const rows=await api('history.list'); if(ui.view!=='history'||activeAccount().id!==accountId)return;
   const columns=activeAccount().columns, today=new Date(), date=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const options=selected=>columns.map(c=>`<option value="${esc(c.code)}" ${c.code===selected?'selected':''}>${esc(c.code)} · ${esc(c.name)}</option>`).join('');
-  workspace.innerHTML=pageHeading('EDITORIAL MEMORY','下一篇，从已有内容出发。','登记真实发布进度，让选题和系列衔接有据可依。')+`<section class="publication-panel history-progress"><form id="history-progress-form"><div><h3>快速设置已发布进度</h3><p class="muted">已有文章还没导入？先设置期号，之后可在草稿箱导入正文，再逐篇登记。0 表示尚未发布。</p></div><label>栏目<select name="series">${options(columns[0].code)}</select></label><label>已发布到第几期<input name="episode" type="number" required min="0" max="9999"></label><button class="button primary" type="submit">保存进度</button></form><p id="history-progress-status" class="muted" role="status"></p></section><div class="section-bar"><h2>历史文章 · ${rows.length} 篇</h2><button class="button text-button" data-plan-action="refresh-history">刷新来源 ↻</button></div><p class="muted history-note">存稿和完成任务默认是草稿。手动登记“已发布”仅更新本地记录，不会向微信发送文章；发布时的正文会留存为历史快照。</p><div class="history-list">${rows.map(row=>`<form class="publication-panel history-record" data-history-id="${esc(row.history_id)}" data-hash="${esc(row.content_hash)}"><div class="history-title"><label>标题<input name="title" value="${esc(row.title)}" required maxlength="300"></label>${badge(row.status==='published'?'已发布':'草稿',row.status==='published'?'green':'')}<button type="button" class="button text-button small" data-plan-action="preview-history" data-id="${esc(row.history_id)}">阅读正文 ↗</button></div><div class="history-fields"><label>栏目<select name="series" required><option value="">请选择栏目</option>${options(row.series)}</select></label><label>期号<input name="episode" type="number" min="1" max="9999" required value="${row.episode??''}"></label><label>状态<select name="status"><option value="draft" ${row.status==='draft'?'selected':''}>草稿</option><option value="published" ${row.status==='published'?'selected':''}>已发布</option></select></label><label>实际发布日期<input name="published_at" type="date" max="${date}" value="${esc(row.published_at)}" ${row.status==='published'?'required':''}></label><button type="submit" class="button secondary small">保存登记</button></div><div class="history-body" hidden></div></form>`).join('')||'<div class="empty-state"><h3>还没有历史文章</h3><p>在草稿箱导入文章，或在公众号设置中填写存稿目录。</p></div>'}</div>`;
+  historyState.rows=rows;
+  if(historyState.filter!==''&&historyState.filter!=='__none__'&&!columns.some(c=>c.code===historyState.filter))historyState.filter='';
+  const hasUnsorted=rows.some(row=>!row.series);
+  workspace.innerHTML=pageHeading('EDITORIAL MEMORY','下一篇，从已有内容出发。','登记真实发布进度，让选题和系列衔接有据可依。')+`<section class="publication-panel history-progress"><form id="history-progress-form"><div><h3>快速设置已发布进度</h3><p class="muted">已有文章还没导入？先设置期号，之后可在草稿箱导入正文，再逐篇登记。0 表示尚未发布。</p></div><label>栏目<select name="series">${options(columns[0].code)}</select></label><label>已发布到第几期<input name="episode" type="number" required min="0" max="9999"></label><button class="button primary" type="submit">保存进度</button></form><p id="history-progress-status" class="muted" role="status"></p></section><div class="section-bar"><h2 id="history-count"></h2><div class="history-toolbar"><label class="history-filter-label" for="history-series-filter">按栏目查看</label><select id="history-series-filter" aria-label="按栏目筛选历史文章"><option value="">全部栏目</option>${options(historyState.filter)}${hasUnsorted?`<option value="__none__" ${historyState.filter==='__none__'?'selected':''}>未分类</option>`:''}</select><button class="button text-button" data-plan-action="refresh-history">刷新来源 ↻</button></div></div><p class="muted history-note">存稿和完成任务默认是草稿。手动登记“已发布”仅更新本地记录，不会向微信发送文章；发布时的正文会留存为历史快照。</p><div class="history-list" id="history-list"></div>`;
+  renderHistoryList();
   await loadHistoryProgress();
 }
 async function loadHistoryProgress() {
@@ -94,6 +110,7 @@ document.addEventListener('click',async event=>{
 });
 document.addEventListener('change',event=>{
   if(event.target.closest('#history-progress-form') && event.target.name==='series')loadHistoryProgress().catch(error=>toast(error.message));
+  if(event.target.id==='history-series-filter'){historyState.filter=event.target.value;renderHistoryList();}
   if(event.target.closest('.history-record') && event.target.name==='status')event.target.form.elements.published_at.required=event.target.value==='published';
 });
 document.addEventListener('submit',async event=>{
