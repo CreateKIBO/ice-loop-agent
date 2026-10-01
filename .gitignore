@@ -1,0 +1,7 @@
+# 本地工具状态不入库
+.mimosa/
+.video_agent/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

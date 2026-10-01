@@ -1,0 +1,64 @@
+{
+  "title": "ICE Loop · 公众号创作工作台",
+  "connected": true,
+  "heading": "从一个想法，到一篇好文章。",
+  "jobs": 1,
+  "bodyWidth": 1446,
+  "viewport": 1446,
+  "previewEscaped": true,
+  "gates": [
+    "topic",
+    "outline",
+    "final_title",
+    "asset_plan"
+  ],
+  "completed": true,
+  "readiness": "assets_pending",
+  "runs": 3,
+  "exported": true,
+  "evidenceCards": 3,
+  "assetCards": 4,
+  "modelCards": 5,
+  "libraryArticles": 10,
+  "navigationStable": true,
+  "nativeScreenshot": {
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790869149229\\screenshots\\studio-1790869162859.png"
+  },
+  "compact": {
+    "bodyWidth": 1026,
+    "viewport": 1026,
+    "heading": "从一个想法，到一篇好文章。"
+  },
+  "publications": {
+    "filled": true,
+    "editable": true,
+    "protectedEdit": true,
+    "noTask": true,
+    "customColumn": true,
+    "draftSaved": true,
+    "isolated": true,
+    "restored": true,
+    "accountId": "account-62a25c76764d"
+  },
+  "planning": {
+    "nextEpisode": true,
+    "manualEpisodeProtected": true,
+    "protectedTitle": true,
+    "candidates": true,
+    "adopted": true,
+    "confirmed": true,
+    "staleIgnored": true,
+    "historyPage": true,
+    "noTask": true
+  },
+  "resources": {
+    "cards": 1,
+    "palette": 6,
+    "measured": true,
+    "preview": true
+  },
+  "pythonTests": 125,
+  "finalFocusedPythonTests": 33,
+  "nodeTests": 10,
+  "paidModelCalls": 0
+}

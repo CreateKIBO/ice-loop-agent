@@ -1,0 +1,76 @@
+{
+  "R01_real_route_falls_back_to_mock": {
+    "reproduced": true,
+    "actual_adapter": "mock",
+    "reviewer_primary": "mock"
+  },
+  "R02_approved_topic_regenerated": {
+    "reproduced": true,
+    "calls": 2,
+    "state": "awaiting_approval",
+    "old_title": "candidate-1",
+    "new_title": "candidate-2"
+  },
+  "R03_model_call_limit_not_enforced": {
+    "reproduced": true,
+    "configured_limit": 1,
+    "actual_invocations": 11
+  },
+  "R04_duplicate_candidates_hide_missing_slots": {
+    "reproduced": true,
+    "ready": true,
+    "accepted_candidates": 4,
+    "required_slots": 4,
+    "exported_images": 1
+  },
+  "R05_new_selected_candidate_not_exported": {
+    "reproduced": true,
+    "database_selected": "cand-1ef5217ba51d",
+    "new_candidate": "cand-1ef5217ba51d"
+  },
+  "R06_changed_code_keeps_old_run_evidence": {
+    "reproduced": true,
+    "ready": true,
+    "code_hash_matches": false
+  },
+  "R07_only_image_header_accepted": {
+    "reproduced": true,
+    "bytes": 8
+  },
+  "R08_truncated_responses_accepted": {
+    "reproduced": true,
+    "length_result_returned": "truncated article",
+    "unfinished_sse_finish_reason": "stop"
+  },
+  "R09_missing_business_fields_accepted": {
+    "reproduced": true,
+    "errors": []
+  },
+  "R10_verified_claim_without_source_passes": {
+    "reproduced": true,
+    "blocking": 0
+  },
+  "R11_model_controls_verification_status": {
+    "reproduced": true,
+    "stored_status": "verified"
+  },
+  "R12_model_failure_leaves_running_job": {
+    "reproduced": true,
+    "escaped_exception": "AuthError",
+    "stored_state": "running"
+  },
+  "R13_shared_store_rejects_worker_thread": {
+    "reproduced": true,
+    "error": [
+      "ProgrammingError"
+    ]
+  },
+  "R14_send_lease_not_atomic": {
+    "reproduced": true,
+    "successful_leases": 2,
+    "outcomes": [
+      "sending",
+      "sending"
+    ]
+  }
+}

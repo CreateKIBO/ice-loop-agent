@@ -1,0 +1,18 @@
+# 沙箱与运行数据不入库
+.demo-runtime/
+.demo-articles/
+.test-tmp/
+__pycache__/
+*.pyc
+*.egg-info/
+.mimosa/
+.venv/
+.tools/
+.deps/
+.review-uv-cache/
+.desktop-runtime/
+.desktop-articles/
+desktop/node_modules/
+desktop/dist/
+desktop/.npm-cache/
+desktop/.electron-cache/

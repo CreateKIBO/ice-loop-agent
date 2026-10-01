@@ -1,0 +1,32 @@
+{
+  "title": "ICE Loop Studio",
+  "connected": true,
+  "heading": "从一个想法，到一篇好文章。",
+  "jobs": 1,
+  "bodyWidth": 1446,
+  "viewport": 1446,
+  "previewEscaped": true,
+  "gates": [
+    "topic",
+    "outline",
+    "final_title",
+    "asset_plan"
+  ],
+  "completed": true,
+  "readiness": "assets_pending",
+  "runs": 3,
+  "exported": true,
+  "evidenceCards": 3,
+  "assetCards": 4,
+  "modelCards": 5,
+  "libraryArticles": 10,
+  "navigationStable": true,
+  "nativeScreenshot": {
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790860776293\\screenshots\\studio-1790860789637.png"
+  },
+  "compact": {
+    "bodyWidth": 1026,
+    "viewport": 1026,
+    "heading": "从一个想法，到一篇好文章。"
+  }
+}
