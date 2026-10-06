@@ -32,6 +32,7 @@
         else output.push('<div class="figure-placeholder">▧ &nbsp;' + escapeHTML(figure[1]) + '<br>配图位置 · 待导入图片</div>');
       } else if (/^>/.test(line)) { flush(); output.push('<blockquote>' + inline(line.replace(/^>\s?/, '')) + '</blockquote>'); }
       else if (/^[-*]\s/.test(line)) { flush(); output.push('<p class="list-line">• ' + inline(line.slice(2)) + '</p>'); }
+      else if (/^\d+[.)]\s/.test(line)) { flush(); output.push('<p class="list-line">' + inline(line) + '</p>'); }
       else if (!line.trim()) flush();
       else paragraph.push(line);
     }

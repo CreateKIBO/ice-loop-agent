@@ -1,0 +1,13 @@
+Error: Error: Error invoking remote method 'ice:request': Error: 无效请求
+    at ChildProcess.<anonymous> (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\tests\prompt-smoke.cjs:17:91)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12) Error occurred in handler for 'ice:request': Error: 无效请求
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:293:128
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:118964)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'ice:request': Error: 文章引擎尚未连接，请重新启动工作台
+    at request (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:75:81)
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:294:24
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:118964)
+    at Session.emit (node:events:514:28)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\prompt-native-1791190509576

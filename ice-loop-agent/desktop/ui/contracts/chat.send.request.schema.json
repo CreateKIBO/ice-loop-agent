@@ -1,0 +1,89 @@
+{
+  "$id": "chat.send.request",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ChatMode": {
+      "enum": [
+        "discuss",
+        "draft",
+        "edit",
+        "images"
+      ],
+      "title": "ChatMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "chat.send 参数合同（与 creative_chat.CreativeChat.send 对齐）。",
+  "properties": {
+    "conversation_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Conversation Id",
+      "type": "string"
+    },
+    "text": {
+      "default": "",
+      "maxLength": 12000,
+      "title": "Text",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/ChatMode",
+      "default": "discuss"
+    },
+    "references": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "title": "References",
+      "type": "array"
+    },
+    "clarification_message_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clarification Message Id"
+    },
+    "candidate_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Id"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "幂等键：同一会话重复提交同 request_id 返回同一结果",
+      "title": "Request Id"
+    }
+  },
+  "required": [
+    "conversation_id"
+  ],
+  "title": "ChatSendRequest",
+  "type": "object"
+}

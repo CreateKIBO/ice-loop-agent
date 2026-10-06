@@ -1,0 +1,183 @@
+{
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791206131955",
+  "packaged": true,
+  "fixtureRequests": [
+    {
+      "site": "tapnow",
+      "path": "/start"
+    },
+    {
+      "site": "tapnow",
+      "path": "/next"
+    },
+    {
+      "site": "tapnow",
+      "path": "/start"
+    },
+    {
+      "site": "tapnow",
+      "path": "/next"
+    },
+    {
+      "site": "tapnow",
+      "path": "/download"
+    },
+    {
+      "site": "tapnow",
+      "path": "/login"
+    }
+  ],
+  "tapnowRouteInside": true,
+  "liveTapNow": {
+    "url": "",
+    "title": "",
+    "error": "",
+    "dom": {
+      "readyState": "not_committed",
+      "visibleCharacters": 0
+    },
+    "captured": false,
+    "captureError": "Screenshot surface timeout"
+  },
+  "liveWeChat": {
+    "url": "",
+    "title": "",
+    "error": "",
+    "dom": {
+      "readyState": "not_committed",
+      "visibleCharacters": 0
+    },
+    "captured": false,
+    "captureError": "Screenshot surface timeout"
+  },
+  "isolatedPreferences": {
+    "nodeIntegration": false,
+    "sandbox": true,
+    "preload": null
+  },
+  "sessionOnDataDrive": true,
+  "remoteHasNoBridge": true,
+  "collapseEnlargesWebpage": true,
+  "collapsePreferenceSaved": true,
+  "expandedViewEnlargesWebpage": true,
+  "layoutKeepsRemotePage": true,
+  "expandedViewRestores": true,
+  "chromeControlsAccessible": true,
+  "collapsedBrowserLayout": {
+    "host": {
+      "x": 94.66667175292969,
+      "y": 244.0625,
+      "width": 1316,
+      "height": 638.6041870117188
+    },
+    "native": {
+      "x": 95,
+      "y": 244,
+      "width": 1316,
+      "height": 639
+    },
+    "expected": {
+      "x": 95,
+      "y": 244,
+      "width": 1316,
+      "height": 639
+    },
+    "size": [
+      1446,
+      903
+    ],
+    "aligned": true,
+    "inside": true,
+    "hostFullyVisible": true
+  },
+  "sidebarCollapsedBounds": true,
+  "expandedBrowserLayout": {
+    "host": {
+      "x": 266.66668701171875,
+      "y": 244.0625,
+      "width": 1144,
+      "height": 638.6041870117188
+    },
+    "native": {
+      "x": 267,
+      "y": 244,
+      "width": 1144,
+      "height": 639
+    },
+    "expected": {
+      "x": 267,
+      "y": 244,
+      "width": 1144,
+      "height": 639
+    },
+    "size": [
+      1446,
+      903
+    ],
+    "aligned": true,
+    "inside": true,
+    "hostFullyVisible": true
+  },
+  "sidebarExpandedBounds": true,
+  "remoteShortcutOrigin": {
+    "url": "https://browser-fixture.example/start",
+    "focused": true,
+    "element": "next"
+  },
+  "remoteShortcutOpensLocalPalette": true,
+  "browserRestoredAfterPalette": true,
+  "preferencesCoverRemoteView": true,
+  "browserRestoredAfterPreferences": true,
+  "siteCookiesIsolated": true,
+  "cookieRetainedAfterNavigation": true,
+  "back": true,
+  "forward": true,
+  "invalidURLRejected": true,
+  "downloadSaved": true,
+  "popupInside": true,
+  "popupNoBridge": true,
+  "hiddenOnLeave": true,
+  "scrollResetOnEnter": true,
+  "minimumBrowserLayout": {
+    "host": {
+      "x": 226.6666717529297,
+      "y": 232.0625,
+      "width": 764,
+      "height": 431.2708435058594
+    },
+    "native": {
+      "x": 227,
+      "y": 232,
+      "width": 764,
+      "height": 431
+    },
+    "expected": {
+      "x": 227,
+      "y": 232,
+      "width": 764,
+      "height": 431
+    },
+    "size": [
+      1026,
+      684
+    ],
+    "aligned": true,
+    "inside": true,
+    "hostFullyVisible": true
+  },
+  "minimumWindowActualSize": [
+    1041,
+    722
+  ],
+  "minimumWindowConstraint": [
+    1040,
+    720
+  ],
+  "minimumWindowSize": true,
+  "minimumHostFullyVisible": true,
+  "compactBounds": true,
+  "compactNoOverflow": true,
+  "minimumExpandedViewVisible": true,
+  "accountCookiesIsolated": true,
+  "persistentCookieAfterViewRecreate": true
+}

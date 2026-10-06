@@ -4,18 +4,36 @@
   "brand": {
     "name": "ICE Loop",
     "slogan": "可执行的想象。",
-    "colors": ["#2448DB", "#15191F", "#F3F2ED"],
+    "colors": [
+      "#2448DB",
+      "#15191F",
+      "#F3F2ED"
+    ],
     "persona": "冷静、准确、开放、有耐心",
-    "name_rule": "ICE 大写、Loop 首字母大写、中间一个空格"
+    "name_rule": "ICE 大写、Loop 首字母大写、中间一个空格",
+    "visual_brief": "Restrained flat editorial design; signal blue #2448DB, ink black #15191F, warm white #F3F2ED. Use the approved ICE / LOOP stacked wordmark with interwoven double O only as an unchanged supplied asset; never redraw the avatar. Use left-aligned large sans-serif Chinese titles, at most two lines, mono-style series labels, thin rules and generous whitespace. Cover: 2.35:1, 6% safe margins; title area about 60%, identity area about 30%. PY: warm-white background and blue identity; JV: ink-black background and warm-white identity; AI: warm-white background with sparse step markers; WK: signal-blue background and warm-white identity. Body diagrams: 4:3, clear reading order, short exact labels and mobile-readable type. No 3D, gradients, shadows, real product logos, cartoon robots, ice cubes or fake screenshots.",
+    "image_style": "restrained flat editorial; no 3D, gradients or shadows"
   },
   "article": {
     "title_max_chars": 30,
     "title_hook_chars": 15,
-    "abstract_chars": [54, 120],
-    "words_range": [1500, 3000],
-    "code_blocks": [1, 3],
+    "abstract_chars": [
+      54,
+      120
+    ],
+    "words_range": [
+      1500,
+      3000
+    ],
+    "code_blocks": [
+      1,
+      3
+    ],
     "code_block_max_lines": 20,
-    "key_comment_lines": [2, 4],
+    "key_comment_lines": [
+      2,
+      4
+    ],
     "required_ending_heading": "写在最后",
     "ending_triad": {
       "ice_recap_keyword": "ICE 循环",
@@ -31,15 +49,44 @@
     "max_dash": 0
   },
   "banned_brand_words": [
-    "小白闭眼冲", "闭眼冲", "无脑冲", "保姆级", "全网最强", "颠覆", "史诗级",
-    "革命性", "重新定义", "重磅", "炸裂", "必看", "震惊"
+    "小白闭眼冲",
+    "闭眼冲",
+    "无脑冲",
+    "保姆级",
+    "全网最强",
+    "颠覆",
+    "史诗级",
+    "革命性",
+    "重新定义",
+    "重磅",
+    "炸裂",
+    "必看",
+    "震惊"
   ],
   "banned_ai_phrases": [
-    "说白了", "本质上", "换句话说", "不可否认", "综上所述", "总的来说",
-    "值得注意的是", "不难发现", "让我们来看看", "接下来让我们", "这意味着",
-    "意味着什么", "当然可以", "很高兴为您", "以下是", "希望这对你有帮助",
-    "未来可期", "拭目以待", "在当今", "随着技术的不断进步", "众所周知",
-    "毋庸置疑", "显而易见"
+    "说白了",
+    "本质上",
+    "换句话说",
+    "不可否认",
+    "综上所述",
+    "总的来说",
+    "值得注意的是",
+    "不难发现",
+    "让我们来看看",
+    "接下来让我们",
+    "这意味着",
+    "意味着什么",
+    "当然可以",
+    "很高兴为您",
+    "以下是",
+    "希望这对你有帮助",
+    "未来可期",
+    "拭目以待",
+    "在当今",
+    "随着技术的不断进步",
+    "众所周知",
+    "毋庸置疑",
+    "显而易见"
   ],
   "banned_patterns": [
     "首先[^。]{0,40}其次",
@@ -48,14 +95,36 @@
   ],
   "banned_punctuation": {
     "dash": "——",
-    "curly_quotes": ["\u201c", "\u201d", "\u2018", "\u2019"],
-    "emotional": ["。。。", "？？？", "= =", "?!?!"]
+    "curly_quotes": [
+      "“",
+      "”",
+      "‘",
+      "’"
+    ],
+    "emotional": [
+      "。。。",
+      "？？？",
+      "= =",
+      "?!?!"
+    ]
   },
   "series": {
-    "PY": {"name": "Python 从 0 到 1", "cover_template": "视觉资产/03-封面-Python-001.png"},
-    "JV": {"name": "Java 打怪升级", "cover_template": "视觉资产/04-封面-Java-001.png"},
-    "AI": {"name": "AI 实作/氛围编程实验室", "cover_template": "视觉资产/05-封面-AI-001.png"},
-    "WK": {"name": "工具周刊", "cover_template": "视觉资产/06-封面-工具周刊-001.png"}
+    "PY": {
+      "name": "Python 从 0 到 1",
+      "cover_template": "视觉资产/03-封面-Python-001.png"
+    },
+    "JV": {
+      "name": "Java 打怪升级",
+      "cover_template": "视觉资产/04-封面-Java-001.png"
+    },
+    "AI": {
+      "name": "AI 实作/氛围编程实验室",
+      "cover_template": "视觉资产/05-封面-AI-001.png"
+    },
+    "WK": {
+      "name": "工具周刊",
+      "cover_template": "视觉资产/06-封面-工具周刊-001.png"
+    }
   },
   "wk_extra_rules": {
     "zero_price_numbers": true,
@@ -63,7 +132,11 @@
     "require_weekly_code_section": "本周一段代码"
   },
   "reviews": {
-    "required": ["topic", "outline", "final_title"]
+    "required": [
+      "topic",
+      "outline",
+      "final_title"
+    ]
   },
   "assets": {
     "generation_provider": "tapnow_browser",
@@ -71,7 +144,10 @@
     "generation_requires_plan_approval": true,
     "placeholder_pattern": "![图{N}：{说明}](待配图：{类型}｜{获取方式})",
     "cover_ratio": "2.35:1",
-    "cover_size": [1880, 800],
+    "cover_size": [
+      1880,
+      800
+    ],
     "min_body_figures": 2
   },
   "storage": {

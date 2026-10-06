@@ -1,0 +1,6 @@
+Native prompt test timeout G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\prompt-native-1791191212387
+Error: ENOENT: no such file or directory, open 'G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\prompt-native-1791191212387\prompt-smoke.json'
+    at Object.readFileSync (node:fs:440:20)
+    at ChildProcess.<anonymous> (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\tests\prompt-smoke.cjs:18:32)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)  G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\prompt-native-1791191212387

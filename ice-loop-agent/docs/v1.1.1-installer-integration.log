@@ -1,0 +1,17 @@
+{
+  "area": "E:\\ICE-Installer-Validation\\run-1790956857439",
+  "silent_old_install": true,
+  "running_upgrade": true,
+  "old_main_stopped": true,
+  "workspace_original_path": "E:\\ICE-Installer-Validation\\run-1790956857439\\program\\ICE-Workspace-upgrade-test",
+  "workspace_bytes_retained": true,
+  "unrelated_processes_retained": true,
+  "restarted_with_original_database": true,
+  "bootstrap_with_original_database": true,
+  "paid_model_calls": false,
+  "installed_asar_matches_release": true,
+  "test_identity": "7419f5e9-6d04-4ef4-9c1b-d2e2c3de1581",
+  "actual_user_installation_untouched": true,
+  "test_uninstall_completed": true,
+  "fresh_install_without_workspace": true
+}

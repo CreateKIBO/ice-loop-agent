@@ -1,0 +1,200 @@
+Local components bundled.
+390 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.8
+390 INFO: Python: 3.12.13
+433 INFO: Platform: Windows-11-10.0.26200-SP0
+433 INFO: Python environment: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.venv
+468 INFO: wrote build\ice-engine.spec
+582 INFO: Module search paths (PYTHONPATH):
+['G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\python312.zip',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\DLLs',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\Lib',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\win32',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\pythonwin',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\build',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent']
+1080 INFO: Appending 'datas' from .spec
+1082 INFO: checking Analysis
+1125 INFO: Building because G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\desktop_service.py changed
+1126 INFO: Looking for Python shared library...
+1127 INFO: Using Python shared library: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.tools\python\cpython-3.12.13-windows-x86_64-none\python312.dll
+1128 INFO: Running Analysis Analysis-00.toc
+1128 INFO: Target bytecode optimization level: 0
+1128 INFO: Initializing module dependency graph...
+1132 INFO: Initializing module graph hook caches...
+1177 INFO: Analyzing modules for base_library.zip ...
+2664 INFO: Processing standard module hook 'hook-encodings.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3221 INFO: Processing standard module hook 'hook-math.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3367 INFO: Processing standard module hook 'hook-heapq.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+4035 INFO: Processing standard module hook 'hook-pickle.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5182 INFO: Caching module dependency graph...
+5212 INFO: Analyzing G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\build\engine_entry.py
+5373 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5506 INFO: Processing standard module hook 'hook-xml.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5690 INFO: Processing standard module hook 'hook-_ctypes.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5763 INFO: Processing standard module hook 'hook-sqlite3.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6223 INFO: Processing standard module hook 'hook-platform.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6609 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6654 INFO: Processing standard module hook 'hook-PIL.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6740 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7312 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7704 INFO: Processing standard module hook 'hook-difflib.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7844 INFO: Processing module hooks (post-graph stage)...
+8072 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8178 INFO: Performing binary vs. data reclassification (9 entries)
+8186 INFO: Looking for ctypes DLLs
+8191 INFO: Analyzing run-time hooks ...
+8193 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+8197 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+8200 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+8220 INFO: Creating base_library.zip...
+9072 INFO: Looking for dynamic libraries
+9361 INFO: Extra DLL search directories (AddDllDirectory): []
+9361 INFO: Extra DLL search directories (PATH): []
+10348 INFO: Warnings written to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\warn-ice-engine.txt
+10379 INFO: Graph cross-reference written to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\xref-ice-engine.html
+10525 INFO: checking PYZ
+10530 INFO: Building because toc changed
+10530 INFO: Building PYZ (ZlibArchive) G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\PYZ-00.pyz
+12167 INFO: Building PYZ (ZlibArchive) G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\PYZ-00.pyz completed successfully.
+12229 INFO: checking PKG
+12231 INFO: Building because G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\PYZ-00.pyz changed
+12231 INFO: Building PKG (CArchive) ice-engine.pkg
+12450 INFO: Building PKG (CArchive) ice-engine.pkg completed successfully.
+12476 INFO: Bootloader G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+12476 INFO: checking EXE
+12481 INFO: Rebuilding EXE-00.toc because pkg is more recent
+12481 INFO: Building EXE from EXE-00.toc
+12491 INFO: Copying bootloader EXE to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\ice-engine.exe
+14263 INFO: Copying icon to EXE
+14344 INFO: Copying 0 resources to EXE
+14344 INFO: Embedding manifest in EXE
+14413 INFO: Appending PKG archive to EXE
+17166 INFO: Fixing EXE headers
+21283 INFO: Building EXE from EXE-00.toc completed successfully.
+21407 INFO: checking COLLECT
+21410 INFO: Removing dir G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\dist\ice-engine
+22602 INFO: Building COLLECT COLLECT-00.toc
+69267 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+69298 INFO: Build complete! The results are available in: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\dist
+Release resources prepared: G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\dist
+Removed generated Python cache directories: 0
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\electron-builder.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • executing @electron/rebuild  electronVersion=44.5.1 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.5.1 appOutDir=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked
+  • custom electronDist provided but no zip found; assuming unpacked electron directory.  electronDist=node_modules\electron\dist expectedFile=electron-v44.5.1-win32-x64.zip
+  • copying Electron  source=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\node_modules\electron\dist destination=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked
+(node:50924) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\ICE Loop Studio.exe
+  • building        target=zip arch=x64 file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.2-x64.zip
+  • building        target=nsis file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.2-Setup.exe archs=x64 oneClick=false perMachine=false
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe
+  ⨯ C:\Users\13622\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=media.iceloop.studio"
+Command line defined: "APP_GUID=23c96aa4-bc77-5664-8abf-1fa0a0d33342"
+Command line defined: "UNINSTALL_APP_KEY=23c96aa4-bc77-5664-8abf-1fa0a0d33342"
+Command line defined: "PRODUCT_NAME=ICE Loop Studio"
+Command line defined: "PRODUCT_FILENAME=ICE Loop Studio"
+Command line defined: "APP_FILENAME=ICE Loop Studio"
+Command line defined: "APP_DESCRIPTION=֧�ֶ๫�ںŵ������ݸ����Ӿ��ʲ������ݴ������湤��̨"
+Command line defined: "VERSION=1.5.2"
+Command line defined: "PROJECT_DIR=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\desktop"
+Command line defined: "BUILD_RESOURCES_DIR=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\desktop\build"
+Command line defined: "APP_PACKAGE_NAME=ice-loop-studio"
+Command line defined: "APP_64=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\ice-loop-studio-1.5.2-x64.nsis.zip"
+Command line defined: "APP_64_NAME=ice-loop-studio-1.5.2-x64.nsis.zip"
+Command line defined: "APP_64_HASH=68D52213C4F83485F7DAF8E09BD8D2A3CE13D71D98D67DE5ED9C0994A9334D5BCBB6A9D716A46A9DF6E3B4B78A877F676118D5AEECD61E5A44C7615235A3B40F"
+Command line defined: "APP_64_UNPACKED_SIZE=459737"
+Command line defined: "APP_INSTALLER_STORE_FILE=ice-loop-studio-updater\installer.exe"
+Command line defined: "ZIP_COMPRESSION"
+Command line defined: "COMPRESSION_METHOD=zip"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=ICE Loop Studio"
+Command line defined: "UNINSTALL_DISPLAY_NAME=ICE Loop Studio 1.5.2"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "ESTIMATED_SIZE=459737"
+Command line defined: "COMPRESS=auto"
+Command line defined: "UNINSTALLER_OUT_FILE=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe"
+Processing config: C:\Users\13622\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+Processed 1 file, 9 command line commands, writing output (x86-unicode):
+
+Output: "G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.2-Setup.exe"
+Install: 4 pages (256 bytes), 1 section (16408 bytes), 1838 instructions (51464 bytes), 10138 strings (121390 bytes), 26 language tables (9308 bytes).
+
+Using zlib compression.
+
+EXE header size:               59904 / 39424 bytes
+Install code:                  46117 / 199290 bytes
+Install data:              189899792 / 190212025 bytes
+
+Error output:
+Error: can't write 67108864 bytes to output
+Error - aborting creation process
+  failedTask=build stackTrace=Error: C:\Users\13622\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=media.iceloop.studio"
+Command line defined: "APP_GUID=23c96aa4-bc77-5664-8abf-1fa0a0d33342"
+Command line defined: "UNINSTALL_APP_KEY=23c96aa4-bc77-5664-8abf-1fa0a0d33342"
+Command line defined: "PRODUCT_NAME=ICE Loop Studio"
+Command line defined: "PRODUCT_FILENAME=ICE Loop Studio"
+Command line defined: "APP_FILENAME=ICE Loop Studio"
+Command line defined: "APP_DESCRIPTION=֧�ֶ๫�ںŵ������ݸ����Ӿ��ʲ������ݴ������湤��̨"
+Command line defined: "VERSION=1.5.2"
+Command line defined: "PROJECT_DIR=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\desktop"
+Command line defined: "BUILD_RESOURCES_DIR=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\desktop\build"
+Command line defined: "APP_PACKAGE_NAME=ice-loop-studio"
+Command line defined: "APP_64=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\ice-loop-studio-1.5.2-x64.nsis.zip"
+Command line defined: "APP_64_NAME=ice-loop-studio-1.5.2-x64.nsis.zip"
+Command line defined: "APP_64_HASH=68D52213C4F83485F7DAF8E09BD8D2A3CE13D71D98D67DE5ED9C0994A9334D5BCBB6A9D716A46A9DF6E3B4B78A877F676118D5AEECD61E5A44C7615235A3B40F"
+Command line defined: "APP_64_UNPACKED_SIZE=459737"
+Command line defined: "APP_INSTALLER_STORE_FILE=ice-loop-studio-updater\installer.exe"
+Command line defined: "ZIP_COMPRESSION"
+Command line defined: "COMPRESSION_METHOD=zip"
+Command line defined: "MULTIUSER_INSTALLMODE_ALLOW_ELEVATION"
+Command line defined: "INSTALL_MODE_PER_ALL_USERS_REQUIRED"
+Command line defined: "allowToChangeInstallationDirectory"
+Command line defined: "SHORTCUT_NAME=ICE Loop Studio"
+Command line defined: "UNINSTALL_DISPLAY_NAME=ICE Loop Studio 1.5.2"
+Command line defined: "MUI_WELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "MUI_UNWELCOMEFINISHPAGE_BITMAP=${NSISDIR}\Contrib\Graphics\Wizard\nsis3-metro.bmp"
+Command line defined: "ESTIMATED_SIZE=459737"
+Command line defined: "COMPRESS=auto"
+Command line defined: "UNINSTALLER_OUT_FILE=G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe"
+Processing config: C:\Users\13622\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Processed 1 file, 9 command line commands, writing output (x86-unicode):
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Output: "G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.2-Setup.exe"
+Install: 4 pages (256 bytes), 1 section (16408 bytes), 1838 instructions (51464 bytes), 10138 strings (121390 bytes), 26 language tables (9308 bytes).
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Using zlib compression.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         EXE header size:               59904 / 39424 bytes
+Install code:                  46117 / 199290 bytes
+Install data:              189899792 / 190212025 bytes
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         Error output:
+Error: can't write 67108864 bytes to output
+Error - aborting creation process
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             at ChildProcess.<anonymous> (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\node_modules\builder-util\src\util.ts:259:14)
+    at Object.onceWrapper (node:events:623:26)
+    at ChildProcess.emit (node:events:508:28)
+    at ChildProcess.cp.emit (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at maybeClose (node:internal/child_process:1100:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)

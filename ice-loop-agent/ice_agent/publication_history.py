@@ -42,7 +42,9 @@ class PublicationHistory:
         with self.store.transaction():
             if root_value and Path(root_value).is_dir():
                 root = normalize(root_value)
-                for folder in sorted(root.iterdir())[:500]:
+                from .article_library import library_entries
+                for entry in library_entries(self.account):
+                    folder = Path(entry['file_path']).parent
                     if not folder.is_dir():
                         continue
                     try:
@@ -64,7 +66,7 @@ class PublicationHistory:
                                     headers.append(stream.readline()[:500])
                         pattern = r"^\s*(?:#\s*)?(" + "|".join(re.escape(code) for code in sorted(self.columns)) + r")\s*[/／_-]\s*(\d{1,4})(?!\d)"
                         match = next((m for header in headers if (m := re.search(pattern,header))), None)
-                        series, episode = (match[1],int(match[2])) if match else ("",None)
+                        series, episode = (match[1],int(match[2])) if match else (entry['series'],entry['episode'])
                         self._index("library:"+sha256_text(str(file)),title,body,series,episode)
                     except (OSError, UnicodeError, ValueError):
                         # Damaged or escaping files are not included in model context.
@@ -73,13 +75,16 @@ class PublicationHistory:
             rows = self.store.conn.execute("SELECT * FROM articles ORDER BY created_at").fetchall()
             for row in rows:
                 spec = json.loads(row["spec_json"])
-                if spec.get("account_id","ice-loop") != self.account["id"] or spec.get("demo"):
+                if spec.get("account_id","ice-loop") != self.account["id"] or spec.get("demo") or spec.get('image_only'):
                     continue
-                revision = self.store.conn.execute("SELECT content FROM article_revisions WHERE article_id=? AND kind IN ('manual','integrated','draft') ORDER BY rowid DESC LIMIT 1", (row["article_id"],)).fetchone()
+                revision = self.store.conn.execute("SELECT content FROM article_revisions WHERE article_id=? AND kind IN ('restore','manual','final','integrated','draft') ORDER BY rowid DESC LIMIT 1", (row["article_id"],)).fetchone()
                 body = revision[0] if revision else ""
                 self._index("article:"+row["article_id"],row["final_title"] or row["working_title"] or row["topic"],body,row["series"],row["episode"])
             for row in self.store.conn.execute("SELECT * FROM publication_drafts WHERE account_id=?", (self.account["id"],)).fetchall():
-                self._index("draft:"+row["draft_id"],row["title"],row["body"])
+                metadata = None
+                if self.store.conn.execute("SELECT 1 FROM sqlite_master WHERE name='creative_article_metadata'").fetchone():
+                    metadata = self.store.conn.execute('SELECT series,episode FROM creative_article_metadata WHERE account_id=? AND draft_id=?',(self.account['id'],row['draft_id'])).fetchone()
+                self._index("draft:"+row["draft_id"],row["title"],row["body"],metadata['series'] if metadata else '',metadata['episode'] if metadata else None)
 
     def records(self, *, bodies: bool = False) -> list[dict]:
         self.sync()
@@ -122,7 +127,7 @@ class PublicationHistory:
         self.store.conn.commit()
         return self.context(series)
 
-    def context(self, series: str) -> dict:
+    def context(self, series: str, episode: int | None = None) -> dict:
         if series not in self.columns:
             raise ValueError("请选择当前公众号的栏目")
         records = self.records(bodies=True)
@@ -130,15 +135,30 @@ class PublicationHistory:
         published = sorted((row for row in relevant if row["status"]=="published"),key=lambda row:(row["episode"],row["published_at"]),reverse=True)
         progress = self.store.conn.execute("SELECT published_episode FROM publication_progress WHERE account_id=? AND series=?", (self.account["id"],series)).fetchone()
         maximum = max([row["episode"] for row in published]+[progress[0] if progress else 0])
-        latest = published[0] if published and published[0]["episode"] == maximum else None
-        chosen = published[:6] + [row for row in relevant if row["status"]!="published"][:3] + [row for row in records if not row["series"]][:2]
-        history = [{"history_id":row["history_id"],"title":row["title"],"series":row["series"],"episode":row["episode"],"status":row["status"],"body_excerpt":row["body"][:3500],"ending_excerpt":section_excerpt(row["body"],"写在最后|结语|总结|下期",1400)} for row in chosen]
+        target = episode if episode is not None else maximum+1
+        if type(target) is not int or not 1 <= target <= 10000:
+            raise ValueError('拟题期号需为1–9999')
+        # Only preceding articles in this series. Published snapshots win over
+        # alternate drafts for the same issue; do not pass future bodies.
+        preceding = sorted((row for row in relevant if row['episode'] is not None and row['episode']<target and row['body'].strip()),
+                           key=lambda row:(row['episode'],row['status']=='published',row['updated_at'],row['history_id']),reverse=True)
+        chosen=[];seen=set()
+        for row in preceding:
+            if row['episode'] not in seen:
+                chosen.append(row);seen.add(row['episode'])
+            if len(chosen)==5:break
+        latest = next((row for row in chosen if row['episode']==target-1),None)
+        history = [{"history_id":row["history_id"],"title":row["title"],"series":row["series"],"episode":row["episode"],"status":row["status"],
+                    "body_excerpt":row["body"],"ending_excerpt":section_excerpt(row["body"],"写在最后|结语|总结|下期",1400)} for row in chosen]
         context_hash = sha256_json({"account":self.account,"series":series,"progress":maximum,
-                                   "records":[(r["history_id"],r["content_hash"]) for r in records]})
+                                   "records":[(r["history_id"],r["content_hash"]) for r in relevant]})
         return {"account_id":self.account["id"],"series":series,"last_published_episode":maximum,
                 "next_episode":maximum+1 if maximum<9999 else None,"context_hash":context_hash,
-                "history":history,"known_titles":[{"history_id":r["history_id"],"title":r["title"],"series":r["series"],"episode":r["episode"],"status":r["status"]} for r in records[:60]],
+                "reference_episode":target,"history":history,
+                "known_titles":[{"history_id":r["history_id"],"title":r["title"],"series":r["series"],"episode":r["episode"],"status":r["status"]} for r in relevant],
+                "body_history_count":len(history),"title_history_count":len(relevant),
+                "previous_status":latest['status'] if latest else '',
                 "previous_exercise":section_excerpt(latest["body"],"动手|练习|挑战|试一试") if latest else "",
                 "previous_preview":section_excerpt(latest["body"],"写在最后|结语|总结|下期") if latest else "",
                 "published_count":len(published),"draft_count":sum(row["status"]!="published" for row in relevant),
-                "same_episode_drafts":sum(row["status"]!="published" and row["episode"]==maximum+1 for row in relevant)}
+                "same_episode_drafts":sum(row["status"]!="published" and row["episode"]==target for row in relevant)}

@@ -1,0 +1,30 @@
+{
+  "run_id": "run-921ce64f6716",
+  "code_artifact_id": "src-657228a75796",
+  "code_sha256": "0889d115bba25db67346ca36224528f9215c41883be055a892a7b09ebd70ba0b",
+  "execution_mode": "local_reviewed",
+  "argv": [
+    "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\release\\win-unpacked\\resources\\teaching-python\\python.exe",
+    "-B",
+    "snippet_2.py"
+  ],
+  "runtime": {
+    "python": "3.12.13",
+    "os": "nt",
+    "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-b28e962745b1",
+    "container_image": "",
+    "ordering_semantics": "stdin/stdout/stderr separately recorded; no inferred interleaving",
+    "source_path": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\run-evidence\\run-921ce64f6716\\snippet_2.py",
+    "process_cleanup": "owned_process_tree_reaped",
+    "output_limited": "false",
+    "workspace_cleanup": "removed_owned_workspace"
+  },
+  "stdin_events": [],
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\r\n  File \"G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-b28e962745b1\\snippet_2.py\", line 1, in <module>\r\n    print(1/0)\r\n          ~^~\r\nZeroDivisionError: division by zero\r\n",
+  "exit_code": 1,
+  "timed_out": false,
+  "started_at": "2026-10-05T23:17:39+08:00",
+  "duration_ms": 157,
+  "output_sha256": "512be13ade5a017212219ed780591f66e9bcd674bdac85ebc31af89e1a93a824"
+}

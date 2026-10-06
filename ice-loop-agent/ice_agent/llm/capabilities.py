@@ -53,7 +53,7 @@ PROVIDER_PRESETS: dict[str, dict] = {
         "base_url": "https://api.deepseek.com",
         "api_key_env": "DEEPSEEK_API_KEY",
         "model_id": "deepseek-flash",
-        "capabilities": CapabilitySet(thinking="can_disable"),
+        "capabilities": CapabilitySet(thinking="can_disable",vision="documented",evidence_date="2026-10-03"),
     },
     "kimi": {
         "service": "moonshot-cn",
@@ -78,6 +78,13 @@ PROVIDER_PRESETS: dict[str, dict] = {
         "api_key_env": "ARK_API_KEY",
         "model_id": "doubao-seed-2-1-pro-260628",
         "capabilities": CapabilitySet(thinking="unknown"),
+    },
+    "minimax": {
+        "service":"minimax-cn-native",
+        "base_url":"https://api.minimax.cn/v1",
+        "api_key_env":"MINIMAX_API_KEY",
+        "model_id":"MiniMax-M3",
+        "capabilities":CapabilitySet(thinking="can_disable",vision="documented",json_object="unknown",evidence_date="2026-10-02"),
     },
     "mock": {
         "service": "offline-mock",

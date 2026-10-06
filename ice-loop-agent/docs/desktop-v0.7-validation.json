@@ -1,0 +1,115 @@
+{
+  "title": "ICE Loop · 公众号创作工作台",
+  "connected": true,
+  "heading": "从一个想法，到一篇好文章。",
+  "jobs": 1,
+  "bodyWidth": 1446,
+  "viewport": 1446,
+  "previewEscaped": true,
+  "gates": [
+    "topic",
+    "outline",
+    "final_title",
+    "asset_plan"
+  ],
+  "completed": true,
+  "readiness": "assets_pending",
+  "runs": 3,
+  "exported": true,
+  "evidenceCards": 3,
+  "assetCards": 4,
+  "runCapture": {
+    "valid": true,
+    "source": "run_capture",
+    "resource": true,
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790881636139\\assets\\97a57854d377c4225b44fc48a0fcc421e2ca76febc17a4e3028f4d0da68004a7.png"
+  },
+  "promptReady": true,
+  "promptCopied": true,
+  "maintenance": {
+    "saved": true,
+    "diff": true,
+    "restored": true,
+    "historyUI": true,
+    "diffUI": true,
+    "htmlEntry": true,
+    "job_id": "job-5d97e3a4d292",
+    "export_folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790881636139\\articles\\001-for 和 while：让电脑替你重复干活",
+    "backup": true,
+    "packageChecked": true,
+    "restore": true,
+    "restart": true,
+    "backup_file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-backup-b0b8b96d-0972-4848-9021-5365a1be048a.zip",
+    "restored_runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-restored-2d91233f-428d-46cc-94b5-d7ad1cdf7e99\\runtime",
+    "htmlRendered": true
+  },
+  "visionPanel": true,
+  "modelCards": 5,
+  "libraryArticles": 10,
+  "navigationStable": true,
+  "nativeScreenshot": {
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790881636139\\screenshots\\studio-1790881684064.png"
+  },
+  "resourcePipeline": {
+    "ready": true,
+    "slots": 4
+  },
+  "compact": {
+    "bodyWidth": 1026,
+    "viewport": 1026,
+    "heading": "从一个想法，到一篇好文章。"
+  },
+  "publications": {
+    "filled": true,
+    "editable": true,
+    "protectedEdit": true,
+    "noTask": true,
+    "customColumn": true,
+    "draftSaved": true,
+    "isolated": true,
+    "restored": true,
+    "accountId": "account-3e5963f1a538"
+  },
+  "planning": {
+    "nextEpisode": true,
+    "manualEpisodeProtected": true,
+    "protectedTitle": true,
+    "candidates": true,
+    "adopted": true,
+    "confirmed": true,
+    "staleIgnored": true,
+    "historyPage": true,
+    "noTask": true
+  },
+  "resources": {
+    "editable": true,
+    "searchable": true,
+    "filterWorks": true,
+    "tapnowEntry": true,
+    "cards": 1,
+    "palette": 6,
+    "measured": true,
+    "preview": true
+  },
+  "supplements": {
+    "job_id": "job-a2275266fd72",
+    "readonly": true,
+    "manualTapNow": true,
+    "planEdited": true,
+    "rejected": true,
+    "reaccepted": true,
+    "cleared": true,
+    "actualRun": true,
+    "screenshot": true,
+    "resourceReuse": true,
+    "noModelCalls": true,
+    "stillNeedsTextReview": true,
+    "export_folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790881636139\\articles\\account-3e5963f1a538\\补图候选\\002-LIFE  007 补图保留原稿",
+    "source_hash": "fe29a723fbbaa83eb0e3bbf5e0da79ab51e49a0f131944d85a9f2bbbf9d2c322",
+    "screenshot_file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790881636139\\assets\\f4072ddf0c750d261df50ff61a8ffe512ad20e65c48ed0c8c6c509bda19b40b7.png",
+    "originalPreserved": true,
+    "textPreserved": true,
+    "promptExported": true,
+    "compact": true
+  }
+}

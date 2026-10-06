@@ -1,0 +1,16 @@
+Error: Browser acceptance timeout {"size":[1446,903],"state":{"site":"tapnow","account_id":"ice-loop","url":"https://app.tapnow.media/home","title":"","loading":false,"canBack":false,"canForward":false,"error":"","visible":true},"layout":{"view":"browser","inner":[1446,903],"rect":{"x":266.66668701171875,"y":368.5520935058594,"width":1144,"height":481.41668701171875},"scroll":[0,0],"host":"<div id=\"browser-host\" class=\"browser-host\" aria-label=\"微信公众号后台 内嵌网页\"></div>"}}
+    at Object.run (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser-smoke.cjs:38:85)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:410:43) Error occurred in handler for 'ice:request': Error: 文章引擎尚未连接，请重新启动工作台
+    at request (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:75:81)
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:294:24
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:118964)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'ice:browser-show': Error: 文章引擎已退出，请重启工作台
+    at ChildProcess.exited (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:189:85)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:295:12)
+Error occurred in handler for 'ice:request': Error: 文章引擎已退出，请重启工作台
+    at ChildProcess.exited (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:189:85)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:295:12)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\browser-1791129467237

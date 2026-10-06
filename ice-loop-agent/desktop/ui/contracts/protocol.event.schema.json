@@ -1,0 +1,63 @@
+{
+  "$id": "protocol.event",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "持久事件流的一行（M1-05 入库后经游标回放）。",
+  "properties": {
+    "kind": {
+      "const": "event",
+      "default": "event",
+      "title": "Kind",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "default": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Event Id",
+      "type": "string"
+    },
+    "stream_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Stream Id",
+      "type": "string"
+    },
+    "account_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Account Id",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 1,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "type": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Type",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "stream_id",
+    "account_id",
+    "sequence",
+    "type"
+  ],
+  "title": "ProtocolEvent",
+  "type": "object"
+}

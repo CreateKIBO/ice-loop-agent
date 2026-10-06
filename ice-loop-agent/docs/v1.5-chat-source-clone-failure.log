@@ -1,0 +1,4 @@
+Error: window.originalDraftNavigation=startCreativeFrom;startCreativeFrom=async function(...args){const opened=await window.originalDraftNavigation :: An object could not be cloned.
+    at js (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:8:250)
+    at async module.exports (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:235:3)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:388:22) G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\chat-desktop-1791127338841

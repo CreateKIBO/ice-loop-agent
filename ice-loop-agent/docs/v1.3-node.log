@@ -1,0 +1,43 @@
+✔ automatic screenshots fill only empty real slots and re-export without human approval (1.8366ms)
+✔ screenshot failure is visible and does not repeat every poll (0.2961ms)
+✔ review mode, running tasks, and image-only jobs never auto-capture (0.172ms)
+✔ a human-rejected run screenshot stays rejected after a queue restart (0.1678ms)
+✔ fill blanks preserves supplied topic and user materials (0.6516ms)
+✔ replace existing requires explicit choice (0.114ms)
+✔ late response preserves concurrent edits even in replace mode (0.0971ms)
+✔ touched fields are protected even when text was restored (0.0844ms)
+✔ changing series or episode discards entire suggestion (0.4845ms)
+✔ unknown keys and blank suggestions never mutate the form (0.1959ms)
+✔ scroll and resize cannot cancel opening the embedded browser (4.5576ms)
+✔ leaving before the next frame cancels both mounting and bounds updates (8.0413ms)
+✔ embedded sites are fixed HTTPS entry points (0.7783ms)
+✔ remote navigation cannot load local files or privileged app pages (0.2844ms)
+✔ site and publication cookies use distinct durable partitions (0.5691ms)
+✔ native view remains inside content area and below application controls (0.2013ms)
+✔ silent OS clipboard denial cannot report text copied (169.0321ms)
+✔ clipboard exceptions preserve complete rich manual fallback (154.4717ms)
+✔ text success requires matching readback with Windows newline normalization (0.2625ms)
+✔ rich success requires both HTML and plain text readback (0.4746ms)
+✔ raw HTML and script inside code are escaped (0.9886ms)
+✔ untrusted links do not become navigable URLs (0.2555ms)
+✔ only managed image data can appear in preview (0.2214ms)
+✔ article headings and literal console output are preserved (0.2135ms)
+✔ history filter helpers load with the module (0.7232ms)
+✔ no filter shows every record with a plain total (2.557ms)
+✔ series filter narrows list and shows shown/total count (0.259ms)
+✔ unsorted filter selects records without a series (0.2039ms)
+✔ empty filter result explains the series has no records yet (0.1479ms)
+✔ records keep editable fields after filtering (0.1274ms)
+✔ web capture blocks non-public destinations (0.9909ms)
+✔ cover uses complete reviewed cover prompt (1.0172ms)
+✔ real screenshot has no AI generation prompt (0.1148ms)
+✔ body image retains its own prompt (0.0773ms)
+✔ resource search covers editable labels and analyzed content (0.1745ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 571.6492

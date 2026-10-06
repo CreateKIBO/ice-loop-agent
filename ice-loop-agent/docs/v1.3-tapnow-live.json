@@ -1,0 +1,15 @@
+{
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\tapnow-live-1791112820908",
+  "url": "https://app.tapnow.media/home",
+  "readOnly": true,
+  "page": {
+    "url": "https://app.tapnow.media/home",
+    "title": "TapNow｜你的智能体创意画布",
+    "readyState": "interactive",
+    "visibleCharacters": 2035,
+    "canvasCount": 1
+  },
+  "center": "<div class=\"flex w-full items-center justify-between gap-3\"><div class=\"flex min-w-0 items-center gap-2\"><div class=\"relative flex items-center\"><input type=\"file\" accept=\"image/png,image/jpg,image/jpeg,image/webp,image/heic,image/heif,video/mp4\" multiple=\"\" class=\"hidden\"><input type=\"file\" accept=\".md,.markdown,text/markdown,text/x-markdown\" class=\"hidden\"><input type=\"file\" class=\"hidden\" webkitdirectory=\"\" directory=\"\"><button type=\"button\" aria-label=\"添加\" class=\"flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white/10 p-0 text-foreground transition-all hover:bg-white/15\" id=\"radix-:rk:\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\" data-slot=\"dropdown-menu-trigger\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" view",
+  "screenshot": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\tapnow-live-1791112820908\\live-tapnow.png",
+  "rendered": true
+}

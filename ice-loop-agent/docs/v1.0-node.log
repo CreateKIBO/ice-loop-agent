@@ -1,0 +1,33 @@
+✔ fill blanks preserves supplied topic and user materials (0.8175ms)
+✔ replace existing requires explicit choice (0.1121ms)
+✔ late response preserves concurrent edits even in replace mode (0.0969ms)
+✔ touched fields are protected even when text was restored (0.1119ms)
+✔ changing series or episode discards entire suggestion (0.553ms)
+✔ unknown keys and blank suggestions never mutate the form (0.1781ms)
+✔ silent OS clipboard denial cannot report text copied (157.3898ms)
+✔ clipboard exceptions preserve complete rich manual fallback (156.676ms)
+✔ text success requires matching readback with Windows newline normalization (0.2806ms)
+✔ rich success requires both HTML and plain text readback (0.4804ms)
+✔ raw HTML and script inside code are escaped (1.047ms)
+✔ untrusted links do not become navigable URLs (0.2481ms)
+✔ only managed image data can appear in preview (0.2045ms)
+✔ article headings and literal console output are preserved (0.1937ms)
+✔ history filter helpers load with the module (0.6343ms)
+✔ no filter shows every record with a plain total (1.5344ms)
+✔ series filter narrows list and shows shown/total count (0.2622ms)
+✔ unsorted filter selects records without a series (0.175ms)
+✔ empty filter result explains the series has no records yet (0.1795ms)
+✔ records keep editable fields after filtering (0.167ms)
+✔ web capture blocks non-public destinations (0.7964ms)
+✔ cover uses complete reviewed cover prompt (0.5262ms)
+✔ real screenshot has no AI generation prompt (0.1027ms)
+✔ body image retains its own prompt (0.0737ms)
+✔ resource search covers editable labels and analyzed content (0.1609ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 473.0732

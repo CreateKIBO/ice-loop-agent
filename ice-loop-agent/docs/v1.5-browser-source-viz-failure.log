@@ -1,0 +1,5 @@
+Error: UnknownVizError Error occurred in handler for 'ice:browser-command': Error: 请输入有效的 HTTPS 网页地址
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser.cjs:111:62
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118948)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\browser-1791130981810

@@ -1,0 +1,12 @@
+{
+  "archived_evidence_count": 1602,
+  "archive_crc_valid": true,
+  "native": {
+    "prompt-packaged": 29,
+    "chat-packaged": 85,
+    "browser-packaged": 32
+  },
+  "assets": 7,
+  "python": 35,
+  "node": 62
+}

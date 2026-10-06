@@ -1,0 +1,19 @@
+{
+  "version": "1.5.3",
+  "zip_matches_unpacked": true,
+  "setup_payload_matches_unpacked": true,
+  "engine_matches_latest_build": true,
+  "user_data_included": false,
+  "files": [
+    {
+      "name": "ICE-Loop-Studio-1.5.3-Setup.exe",
+      "bytes": 190021403,
+      "sha256": "3d0ac51d2fcb055a8f373a79756b96a959c773034fb148c74db3d7fd9d85c8e4"
+    },
+    {
+      "name": "ICE-Loop-Studio-1.5.3-x64.zip",
+      "bytes": 189645749,
+      "sha256": "82152759d5fd3698e9858f18a77f01ee512a15650b6dac0bfa37379ebf468cd0"
+    }
+  ]
+}

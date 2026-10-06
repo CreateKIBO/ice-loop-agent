@@ -1,16 +1,30 @@
 {
   "name": "ice-loop-studio",
-  "version": "0.4.0",
+  "version": "1.5.3",
   "private": true,
   "description": "支持多公众号档案、草稿与视觉资产的内容创作桌面工作台",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer/app.js && node --check renderer/publication.js && node --check renderer/brief.js && node --check renderer/planning.js",
+    "start:new-ui": "electron . --new-ui",
+    "build:components": "node build-components.cjs",
+    "build:ui": "npm --prefix ui run build",
+    "check:ui": "npm --prefix ui run typecheck",
+    "check:chat": "node --check renderer/creative-chat.js && node --check chat-smoke.cjs",
+    "smoke:chat": "node tests/chat-smoke.cjs",
+    "smoke:ui": "node tests/ui-smoke.cjs",
+    "check": "node --check main.cjs && node --check preload.cjs && node --check renderer/app.js && node --check renderer/publication.js && node --check renderer/brief.js && node --check renderer/planning.js && node --check renderer/outlines.js && node --check renderer/visual.js && node --check renderer/capture.js && node --check renderer/maintenance.js && node --check renderer/supplements.js",
     "test": "node --test tests/*.test.cjs",
-    "smoke": "node tests/desktop-smoke.cjs"
+    "smoke": "node tests/desktop-smoke.cjs",
+    "release": "electron-builder --config electron-builder.json --win nsis zip --x64",
+    "check:tools": "node --check tools.cjs && node --check renderer/workbench.js && node --check renderer/execution.js"
   },
   "devDependencies": {
-    "electron": "44.5.1"
+    "@shoelace-style/shoelace": "2.20.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.0.12",
+    "esbuild": "0.25.12",
+    "lucide": "0.468.0",
+    "motion": "14.0.0"
   }
 }

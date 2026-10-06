@@ -161,6 +161,8 @@ class RunSpec:
     timeout_s: float = 30.0
     expected: str = ""         # 教学预期输出（用于比较，不作断言）
     expect_failure: bool = False   # 预期报错素材（§14.5）
+    execution_mode: str = 'local_reviewed'
+    container_image: str = ''
 
 
 @dataclass

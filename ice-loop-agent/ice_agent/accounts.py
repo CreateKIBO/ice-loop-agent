@@ -9,6 +9,17 @@ from .config import load_profile
 from .domain.types import new_id
 from .paths import assert_not_c_drive, normalize
 
+ICE_VISUAL_BRIEF = (
+    'Restrained flat editorial design; signal blue #2448DB, ink black #15191F, warm white #F3F2ED. '
+    'Use the approved ICE / LOOP stacked wordmark with interwoven double O only as an unchanged supplied asset; never redraw the avatar. '
+    'Use left-aligned large sans-serif Chinese titles, at most two lines, mono-style series labels, thin rules and generous whitespace. '
+    'Cover: 2.35:1, 6% safe margins; title area about 60%, identity area about 30%. '
+    'PY: warm-white background and blue identity; JV: ink-black background and warm-white identity; '
+    'AI: warm-white background with sparse step markers; WK: signal-blue background and warm-white identity. '
+    'Body diagrams: 4:3, clear reading order, short exact labels and mobile-readable type. '
+    'No 3D, gradients, shadows, real product logos, cartoon robots, ice cubes or fake screenshots.'
+)
+
 
 def default_account(root: Path, runtime: Path, article_root: str) -> dict:
     return {"id": "ice-loop", "preset": "ice-loop", "name": "ICE Loop",
@@ -16,6 +27,7 @@ def default_account(root: Path, runtime: Path, article_root: str) -> dict:
             "audience": "零基础在校学生", "persona": "冷静、准确、开放、有耐心",
             "slogan": "可执行的想象。", "colors": "#2448DB, #15191F, #F3F2ED",
             "image_style": "restrained flat editorial; no 3D, gradients or shadows",
+            "visual_brief": ICE_VISUAL_BRIEF,
             "ending_heading": "写在最后", "closing_sentence": "**可执行的想象，从{X}开始。**",
             "words_range": [1800, 2600], "banned_words": load_profile()["banned_brand_words"],
             "columns": [{"code": code, "name": value["name"]} for code, value in load_profile()["series"].items()],
@@ -30,10 +42,11 @@ def normalize_account(data: dict, runtime: Path, *, account_id: str | None = Non
     result = {"id": aid, "preset": "ice-loop" if aid == "ice-loop" and data.get("preset") == "ice-loop" else "general"}
     defaults = {"name": "", "positioning": "", "audience": "", "persona": "自然、准确、清晰",
                 "slogan": "", "colors": "#2448DB, #15191F, #F3F2ED", "image_style": "flat editorial",
-                "ending_heading": "写在最后", "closing_sentence": "", "brand_document": ""}
+                "ending_heading": "写在最后", "closing_sentence": "", "brand_document": "",
+                "visual_brief": ICE_VISUAL_BRIEF if result['preset']=='ice-loop' else ''}
     for key, default in defaults.items():
         value = data.get(key, default)
-        maximum = 20000 if key == "brand_document" else 2000 if key == "positioning" else 500
+        maximum = 20000 if key == "brand_document" else 6000 if key == 'visual_brief' else 2000 if key == "positioning" else 500
         if not isinstance(value, str) or len(value) > maximum:
             raise ValueError(f"{key} 需为不超过 {maximum} 字的文本")
         result[key] = value.strip()
@@ -41,6 +54,7 @@ def normalize_account(data: dict, runtime: Path, *, account_id: str | None = Non
         raise ValueError("请填写公众号名称和目标读者")
     if result["preset"] == "ice-loop" and result["name"] != "ICE Loop":
         result["preset"] = "general"
+        if 'visual_brief' not in data:result['visual_brief']=''
     if not result["ending_heading"] or len(result["ending_heading"]) > 50:
         raise ValueError("结尾标题需为 1–50 字")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}(?:\s*,\s*#[0-9a-fA-F]{6}){0,5}", result["colors"]):
@@ -90,6 +104,8 @@ def profile_from_account(account: dict) -> dict:
                         "slogan": account["slogan"], "colors": [c.strip() for c in account["colors"].split(",")],
                         "positioning": account["positioning"], "audience": account["audience"],
                         "image_style": account["image_style"], "document": account["brand_document"]}
+    profile['brand']['visual_brief'] = account.get('visual_brief', ICE_VISUAL_BRIEF if account.get('preset')=='ice-loop' else '')
+    profile['brand']['preset'] = account.get('preset','general')
     profile["series"] = {c["code"]: {"name": c["name"], "cover_template": ""} for c in account["columns"]}
     profile["article"]["words_range"] = account["words_range"]
     profile["article"]["required_ending_heading"] = account["ending_heading"]

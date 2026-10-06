@@ -1,0 +1,4 @@
+Error: changeView("chat") :: Renderer evaluation exceeded 30 seconds
+    at js (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:22:276)
+    at async module.exports (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:248:3)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:388:22) G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\chat-desktop-1791130014621

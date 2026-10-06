@@ -1,0 +1,11 @@
+{
+  "version": "1.5.2",
+  "method": "normal NSIS template on NTFS, reused audited ZIP; completed staging installer recovered after user-authorized G disk cleanup",
+  "source_zip_sha512": "XqrXmFDdbBcaA+mmCRMNmxzXSOMAH3bMHCmSp0ZoFW61Eqy7KirWPpQ+0DW6IAHp1pEYzoqfczNmpwsVXljpsA==",
+  "installer_bytes": 189949261,
+  "installer_sha256": "92fda621f69dc327f5b7b8d6a754baac3c8188ce56e0bd1d7978944e4849240d",
+  "staging_root": "E:/Codex-ICE-Build-1.5.2-01a0f697",
+  "staging_archive_verified": true,
+  "existing_copy_reused": true,
+  "existing_installation_touched": false
+}

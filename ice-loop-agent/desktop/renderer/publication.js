@@ -2,6 +2,8 @@
 function activeAccount() { return ui.bootstrap.account; }
 function syncPublication() {
   const account = activeAccount();
+  const color=account.colors.split(',')[0].trim();
+  if(/^#[0-9a-f]{6}$/i.test(color))for(const name of ['--chat-accent','--sl-color-primary-600','--sl-color-primary-500','--blue'])document.documentElement.style.setProperty(name,color);
   document.title = `${account.name} · 公众号创作工作台`;
   document.querySelector('.wordmark strong').textContent = account.name;
   document.querySelector('.sidebar-bottom p').textContent = account.slogan || '让内容成为你的作品。';
@@ -11,12 +13,24 @@ function syncPublication() {
   for (const key of Object.keys(seriesNames)) delete seriesNames[key];
   for (const column of account.columns) seriesNames[column.code] = column.name;
   newForm.elements.series.innerHTML = account.columns.map(c => `<option value="${esc(c.code)}">${esc(c.code)} · ${esc(c.name)}</option>`).join('');
-  document.querySelector('.avatar').textContent = account.name.slice(0, 1);
+  const avatar=document.querySelector('.avatar');if(avatar)avatar.textContent = account.name.slice(0, 1);
 }
 async function useBootstrap(result, view = 'accounts') {
-  if (ui.bootstrap?.account?.id !== result.account.id) { newDialog.close(); newForm.reset(); newForm.querySelectorAll('.ai-filled').forEach(n => n.classList.remove('ai-filled')); newForm.elements.episode.value = '1'; planningState.autoExercise=''; }
+  const accountChanged=ui.bootstrap?.account?.id !== result.account.id;
+  if (accountChanged) {
+    // Save under the mounted publication before changing the global actor. Old
+    // controls must be gone while the next publication's lists are loading.
+    window.iceWriting?.persist();
+    if(typeof unmountBrowser==='function')unmountBrowser();
+    ui.view='loading'; ui.currentJob=null; ui.currentDraft=null; ui.detail=null; ui.images={};
+    workspace.classList.remove('chat-workspace');
+    workspace.innerHTML='<div class="empty-state" role="status"><h3>正在切换公众号…</h3><p>正在载入该公众号的会话与草稿。</p></div>';
+    newDialog.close(); newForm.reset(); newForm.querySelectorAll('.ai-filled').forEach(n => n.classList.remove('ai-filled')); newForm.elements.episode.value = '1'; planningState.autoExercise='';
+  }
   ui.bootstrap = result; ui.jobs = result.jobs; ui.dirty = false; ui.draftDirty = false; ui.accountDirty = false;
+  if(accountChanged){document.querySelector('#recent-conversations').replaceChildren();document.querySelector('#sidebar-drafts').replaceChildren();document.querySelector('#chat-review-count').textContent='0';document.querySelector('#creative-dialog')?.close();if(typeof resetCreativeAccount==='function')resetCreativeAccount();}
   syncPublication(); document.querySelector('#job-count').textContent = ui.jobs.length;
+  if(typeof refreshConversationList==='function')await refreshConversationList().catch(error=>toast(error.message));
   changeView(view);
 }
 function accountInput(label, name, value, extra = '') { return `<label>${label}<input name="${name}" value="${esc(value || '')}" ${extra}></label>`; }
@@ -36,6 +50,7 @@ function renderAccounts(account = activeAccount(), fresh = false) {
     <div class="section-bar"><h2>配色与资产</h2><span class="eyebrow">03 / VISUAL</span></div>
     ${accountInput('主题色（HEX，以逗号分隔）','colors',account.colors,'required maxlength="100"')}
     ${accountInput('配图风格','image_style',account.image_style,'maxlength="500"')}
+    <label>生图视觉规范（布局、文字、禁止项）<textarea name="visual_brief" rows="5" maxlength="6000" placeholder="封面布局、图内文字、正式标志的保留方式，以及禁止出现的元素。">${esc(account.visual_brief||'')}</textarea></label>
     <p class="muted">可到「配图资源箱」导入封面或视觉样例，从真实像素提取颜色并生成 AI 配色建议。</p>
     <div class="section-bar"><h2>导入规范与存储</h2><span class="eyebrow">04 / SOURCES</span></div>
     <label>品牌说明 / 写作规范<textarea name="brand_document" rows="6" maxlength="20000" placeholder="粘贴或导入自己的品牌手册、语言风格、内容结构说明。">${esc(account.brand_document || '')}</textarea></label>
@@ -58,7 +73,7 @@ function renderAccounts(account = activeAccount(), fresh = false) {
 }
 function freshAccount() { return {name:'',audience:'',positioning:'',persona:'自然、准确、清晰',slogan:'',columns:[{code:'ART',name:'日常文章'}],words_range:[1200,2400],ending_heading:'写在最后',closing_sentence:'',colors:'#2448DB, #15191F, #F3F2ED',image_style:'flat editorial',banned_words:[],brand_document:'',article_root:'',library_root:'',preset:'general'}; }
 async function renderDrafts() {
-  const aid = activeAccount().id; const drafts = await api('drafts.list');
+  const aid = activeAccount().id; const drafts = await api('drafts.list'); if(typeof refreshConversationList==='function')await refreshConversationList();
   if (ui.view !== 'drafts' || activeAccount().id !== aid) return;
   workspace.innerHTML = pageHeading('ROOM FOR YOUR WORDS','草稿箱','独立保存想法、导入文章草稿，编辑后再交给写作流程。', '<div class="button-row"><button class="button secondary" data-pub-action="import-draft">导入草稿</button><button class="button primary" data-pub-action="new-draft">＋ 写一份草稿</button></div>') + `<div class="library-grid">${drafts.map(d => `<article class="library-card"><span class="eyebrow">PERSONAL DRAFT / ${dateString(d.updated_at)}</span><h3>${esc(d.title)}</h3><button class="button text-button" data-pub-action="open-draft" data-id="${esc(d.draft_id)}">继续编辑 ↗</button></article>`).join('') || '<div class="empty-state"><h3>先把想法，放在这里。</h3><p>支持 Markdown 草稿；保存和预览后仍可继续修改。</p></div>'}</div><div class="section-bar"><h2>当前公众号的文章任务</h2></div><div class="library-grid">${ui.jobs.map(j => `<article class="library-card" data-job="${esc(j.job_id)}" tabindex="0" role="button"><span class="eyebrow">${esc(stateNames[j.state])}</span><h3>${esc(j.final_title || j.topic)}</h3><p>打开写作与审核工作区 ↗</p></article>`).join('')}</div>`;
 }
@@ -66,7 +81,7 @@ function renderDraftEditor(draft = {title:'',body:'',content_hash:''}) {
   ui.currentDraft = draft; ui.draftDirty = false;
   workspace.innerHTML = `<button class="button text-button" data-view="drafts">← 返回草稿箱</button>` + pageHeading('DRAFT IN PROGRESS','把文字留住，再慢慢完善。','手动草稿独立保存，不代表已经完成事实与发布审核。') + `<div class="editor-panel"><form id="draft-form"><div class="draft-title-row"><label>草稿标题<input name="title" required maxlength="300" value="${esc(draft.title)}" placeholder="为这篇草稿起个名字"></label><button class="button primary" type="submit">保存草稿</button></div><textarea name="body" id="draft-editor" class="markdown-editor" placeholder="写下想法，或粘贴已有文章…">${esc(draft.body)}</textarea><div class="draft-title-row"><span id="draft-save-status" class="muted">${draft.draft_id ? '已保存的本地草稿' : '尚未保存'}</span><div class="button-row"><button type="button" class="button secondary" data-pub-action="draft-preview">阅读预览</button><button type="button" class="button secondary" data-pub-action="draft-to-brief">交给 AI 继续创作 ↗</button><button type="button" class="button secondary" data-pub-action="export-draft">导出 Markdown</button></div></div></form><div id="draft-preview" class="markdown-preview" hidden></div></div>`;
   document.querySelector('#draft-form').addEventListener('input', () => { ui.draftDirty = true; document.querySelector('#draft-save-status').textContent = '有未保存修改'; });
-  document.querySelector('#draft-form').addEventListener('submit', async event => { event.preventDefault(); const button = event.submitter || event.target.querySelector('[type="submit"]'); button.disabled = true; try { const values = Object.fromEntries(new FormData(event.target)); ui.currentDraft = await api('drafts.save', {...values, draft_id:ui.currentDraft.draft_id, content_hash:ui.currentDraft.content_hash}); ui.draftDirty = false; document.querySelector('#draft-save-status').textContent = '已保存'; toast('草稿已保存'); } catch (error) {toast(error.message);} finally {button.disabled = false;} });
+  document.querySelector('#draft-form').addEventListener('submit', async event => { event.preventDefault(); const button = event.submitter || event.target.querySelector('[type="submit"]'); button.disabled = true; try { const values = Object.fromEntries(new FormData(event.target)); ui.currentDraft = await api('drafts.save', {...values, draft_id:ui.currentDraft.draft_id, content_hash:ui.currentDraft.content_hash}); ui.draftDirty = false; document.querySelector('#draft-save-status').textContent = '已保存'; toast('草稿已保存'); if(typeof refreshConversationList==='function')await refreshConversationList(); } catch (error) {toast(error.message);} finally {button.disabled = false;} });
 }
 function paletteHTML(colors) { return `<div class="palette-row">${colors.map(c => `<span class="palette-item"><i data-color="${esc(c.hex || c)}"></i><small>${esc(c.hex || c)}${c.share === undefined ? '' : ` · ${Math.round(c.share*100)}%`}</small></span>`).join('')}</div>`; }
 function paintPalettes() { workspace.querySelectorAll('[data-color]').forEach(node => { if (/^#[\da-f]{6}$/i.test(node.dataset.color)) node.style.backgroundColor = node.dataset.color; }); }
@@ -101,13 +116,7 @@ document.querySelector('#resource-pick-form').addEventListener('submit', async e
   try { const form = event.target; await api('resources.use', {resource_id:pickingResource,job_id:form.elements.job_id.value,figure_no:Number(form.elements.figure_no.value)}); document.querySelector('#resource-picker').close(); toast('图片已选入文章图位，可到文章工作区预览'); }
   catch (error) {toast(error.message);} finally {button.disabled = false;}
 });
-async function renderResources() {
-  const aid = activeAccount().id; const resources = await api('resources.list');
-  if (ui.view !== 'resources' || activeAccount().id !== aid) return;
-  workspace.innerHTML = pageHeading('YOUR VISUAL LIBRARY','配图资源箱与资产分析','从你的封面、插图和视觉参考中，建立公众号的配色依据。', '<div class="button-row"><button class="button secondary" data-pub-action="analyze-all-resources">综合分析配色 ↗</button><button class="button primary" data-pub-action="import-resource">＋ 导入图片</button></div>') + `<div class="asset-grid resource-grid">${resources.map(r => `<article class="asset-card" data-resource="${esc(r.resource_id)}"><div class="asset-visual"><img alt="${esc(r.title)}" data-resource-image="${esc(r.resource_id)}"></div><div class="asset-info"><h3>${esc(r.title)}</h3><p>${r.width} × ${r.height} · 已归档副本</p><div class="resource-label">实际像素主色</div>${paletteHTML(r.palette)}${r.analysis ? `<div class="resource-analysis"><div class="resource-label">AI 主题配色建议 · ${r.analysis.source_resource_ids?.length || 1} 项参考</div>${paletteHTML(r.analysis.theme_colors)}<p>${esc(r.analysis.explanation)}</p><label>应用前可调整色值<input class="resource-colors" value="${esc(r.analysis.theme_colors.join(', '))}" maxlength="100"></label><button class="button primary small" data-pub-action="apply-palette" data-id="${esc(r.resource_id)}">应用到当前公众号</button></div>` : ''}<div class="button-row"><button class="button secondary small" data-pub-action="analyze-resource" data-id="${esc(r.resource_id)}">${r.analysis ? '重新分析配色' : 'AI 分析配色'} ↗</button><button class="button secondary small" data-pub-action="use-resource" data-id="${esc(r.resource_id)}">用于文章配图</button></div><p class="resource-caption">颜色由本地像素统计提取；AI 仅接收色值、占比与账号定位。</p></div></article>`).join('') || '<div class="empty-state"><h3>把你的视觉参考，放进资源箱。</h3><p>支持 PNG、JPEG、WebP，导入即提取主色；AI 建议由你点击生成。</p></div>'}</div>`;
-  paintPalettes();
-  await Promise.allSettled(resources.map(async r => { const preview = await api('resources.preview', {resource_id:r.resource_id}); if (ui.view !== 'resources' || activeAccount().id !== aid) return; const image = workspace.querySelector(`[data-resource-image="${r.resource_id}"]`); if (image) image.src = preview.data_url; }));
-}
+async function renderResources() { return renderVisualResources(); }
 document.querySelector('#account-switch').addEventListener('change', async event => {
   const aid = event.target.value;
   if ((ui.dirty || ui.draftDirty || ui.accountDirty) && !confirm('有未保存修改，确认切换公众号并放弃修改？')) { event.target.value = activeAccount().id; return; }
@@ -124,7 +133,7 @@ document.addEventListener('click', async event => {
     else if (action === 'open-draft') renderDraftEditor(await api('drafts.get', {draft_id:button.dataset.id}));
     else if (action === 'import-draft') { const result = await window.ice.importDraft(); if (result) renderDraftEditor(result); }
     else if (action === 'draft-preview') { const preview = document.querySelector('#draft-preview'); preview.innerHTML = renderMarkdown(document.querySelector('#draft-editor').value); preview.hidden = !preview.hidden; if (!preview.hidden) preview.scrollIntoView({behavior:'smooth'}); }
-    else if (action === 'draft-to-brief') { const form = document.querySelector('#draft-form'); if (!form.reportValidity()) return; if (!ui.currentDraft.draft_id || ui.draftDirty) { ui.currentDraft = await api('drafts.save', {...Object.fromEntries(new FormData(form)), draft_id:ui.currentDraft.draft_id, content_hash:ui.currentDraft.content_hash}); ui.draftDirty = false; document.querySelector('#draft-save-status').textContent = '已保存'; } newForm.reset(); newForm.elements.topic.value = form.elements.title.value.slice(0,30); newForm.elements.materials_text.value = form.elements.body.value.slice(0,12000); await openNewArticle(); }
+    else if (action === 'draft-to-brief') { const form = document.querySelector('#draft-form'); if (!form.reportValidity()) return; if (!ui.currentDraft.draft_id || ui.draftDirty) { ui.currentDraft = await api('drafts.save', {...Object.fromEntries(new FormData(form)), draft_id:ui.currentDraft.draft_id, content_hash:ui.currentDraft.content_hash}); ui.draftDirty = false; document.querySelector('#draft-save-status').textContent = '已保存'; } await startCreativeFrom({type:'draft',id:ui.currentDraft.draft_id}); }
     else if (action === 'export-draft') { if (!ui.currentDraft.draft_id || ui.draftDirty) throw Error('请先保存当前草稿，再导出'); await window.ice.exportDraft(ui.currentDraft.draft_id); }
     else if (action === 'import-resource') { const result = await window.ice.importResource(); if (result) { await renderResources(); toast('图片已归档，主要颜色已提取'); } }
     else if (action === 'analyze-resource') { const original = button.textContent; button.textContent = '正在分析…'; try { await api('resources.analyze', {resource_id:button.dataset.id}); await renderResources(); toast('配色建议已生成，可调整后应用'); } finally { button.textContent = original; } }

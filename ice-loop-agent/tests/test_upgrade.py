@@ -199,7 +199,7 @@ class TestDesktopUpgrade(unittest.TestCase):
     def test_bootstrap_never_returns_credentials(self):
         self.service.call('secrets.set', {'keys':{}})
         result = self.service.call('bootstrap')
-        self.assertEqual(len(result['settings']['profiles']), 5)
+        self.assertEqual(len(result['settings']['profiles']), 6)
         self.assertFalse(result['tapnow']['automation_ready'])
         self.assertTrue(all('has_key' in p and 'api_key' not in p for p in result['settings']['profiles']))
 

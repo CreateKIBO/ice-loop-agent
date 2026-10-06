@@ -1,0 +1,41 @@
+{
+  "name": "ice-loop-ui",
+  "private": true,
+  "version": "2.0.0-alpha.1",
+  "type": "module",
+  "scripts": {
+    "gen:validators": "node scripts/gen-validators.mjs",
+    "gen:types": "node scripts/gen-ts-types.mjs",
+    "gen": "npm run gen:validators && npm run gen:types",
+    "build": "npm run gen && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "1.2.0",
+    "@radix-ui/react-dropdown-menu": "2.1.25",
+    "@radix-ui/react-select": "2.3.8",
+    "@radix-ui/react-switch": "1.3.8",
+    "@radix-ui/react-tabs": "1.1.22",
+    "@radix-ui/react-tooltip": "1.3.0",
+    "@tanstack/react-query": "5.104.1",
+    "@tanstack/react-virtual": "3.14.13",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "@xyflow/react": "12.12.0",
+    "ajv": "8.20.0",
+    "codemirror": "6.0.2",
+    "dompurify": "3.4.16",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.3"
+  }
+}

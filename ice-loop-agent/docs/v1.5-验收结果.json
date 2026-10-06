@@ -1,0 +1,1111 @@
+{
+  "version": "1.5.0",
+  "recorded_at": "2026-10-05T00:41:23.888383+08:00",
+  "node": {
+    "passed": 60,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "tests": 60,
+    "log": "v1.5-node-tests.log"
+  },
+  "source_desktop": {
+    "passed": 85,
+    "failed": 0,
+    "log": "v1.5-chat-source.log",
+    "assertion_names": [
+      "accountSwitchInputIsolated",
+      "accountSwitchInputRecovered",
+      "accountSwitchUnloadsComposer",
+      "approvalEdited",
+      "archiveCancelled",
+      "archiveConversation",
+      "archiveDirtyNotice",
+      "archiveTask",
+      "articleFocusMode",
+      "articleGuidance",
+      "branchCancel",
+      "branchConfirmed",
+      "candidate",
+      "clarificationFirst",
+      "clarificationReply",
+      "commandAccountIsolation",
+      "commandCloseReopen",
+      "commandKeyboard",
+      "commandOpensConversation",
+      "commandOpensDraft",
+      "commandOpensTask",
+      "commandQueuedReopen",
+      "commandSearchRecords",
+      "compact",
+      "components",
+      "concurrentInputPreserved",
+      "deferSave",
+      "deleteConversation",
+      "deleteKeepsSavedDraft",
+      "deleteTask",
+      "deleteTaskKeepsArticle",
+      "densityPreference",
+      "diff",
+      "discussionNoArticle",
+      "draftEntry",
+      "draftOption",
+      "draftSidebar",
+      "explicitBranch",
+      "fastCompletionUnlocks",
+      "firstMessageHandoff",
+      "history",
+      "historyReadingPreserved",
+      "inputAcrossConversations",
+      "inputAcrossPages",
+      "inputRecovery",
+      "isolation",
+      "journeyAccepted",
+      "journeyCandidate",
+      "journeyPending",
+      "journeySaved",
+      "libraryEntryStable",
+      "messageReadingStatePreserved",
+      "motionLibraryActive",
+      "motionPreferenceClears",
+      "newContextReset",
+      "newConversationStartsDraft",
+      "noUnexpectedRendererErrors",
+      "pending",
+      "pendingSendPreservesTyping",
+      "persisted",
+      "pollDefersUntilChatMounted",
+      "progress",
+      "prompts",
+      "readonlyRespected",
+      "reducedMotion",
+      "referenceRemoval",
+      "restoreConversation",
+      "restoreDeletedConversation",
+      "restoreDeletedTask",
+      "restoreTaskPaused",
+      "returnToLatest",
+      "reuseArticle",
+      "reviewUnsavedProtected",
+      "sameConversation",
+      "saveChoice",
+      "saveDraft",
+      "saveIdempotent",
+      "savedDraftContinues",
+      "sharedBody",
+      "sidebarCollapse",
+      "sidebarRestore",
+      "submittedInputCleared",
+      "templatePreservesInput",
+      "uniqueRecentEntries",
+      "unsavedProtected"
+    ],
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\chat-desktop-1791130614763",
+      "components": true,
+      "discussionNoArticle": true,
+      "history": true,
+      "sameConversation": true,
+      "uniqueRecentEntries": true,
+      "explicitBranch": true,
+      "branchCancel": true,
+      "branchConfirmed": true,
+      "draftOption": true,
+      "motionLibraryActive": true,
+      "reducedMotion": true,
+      "journeyCandidate": true,
+      "saveChoice": true,
+      "progress": true,
+      "deferSave": true,
+      "candidate": true,
+      "diff": true,
+      "unsavedProtected": true,
+      "journeyPending": true,
+      "pending": true,
+      "reviewUnsavedProtected": true,
+      "approvalEdited": true,
+      "draftEntry": true,
+      "reuseArticle": true,
+      "sharedBody": true,
+      "journeyAccepted": true,
+      "prompts": true,
+      "compact": true,
+      "isolation": true,
+      "persisted": true,
+      "newContextReset": true,
+      "saveDraft": true,
+      "journeySaved": true,
+      "saveIdempotent": true,
+      "draftSidebar": true,
+      "savedDraftContinues": true,
+      "clarificationFirst": true,
+      "clarificationReply": true,
+      "libraryEntryStable": true,
+      "archiveDirtyNotice": true,
+      "archiveCancelled": true,
+      "archiveConversation": true,
+      "restoreConversation": true,
+      "deleteConversation": true,
+      "deleteKeepsSavedDraft": true,
+      "restoreDeletedConversation": true,
+      "fastCompletionUnlocks": true,
+      "archiveTask": true,
+      "restoreTaskPaused": true,
+      "deleteTask": true,
+      "deleteTaskKeepsArticle": true,
+      "restoreDeletedTask": true,
+      "newConversationStartsDraft": true,
+      "inputRecovery": true,
+      "concurrentInputPreserved": true,
+      "submittedInputCleared": true,
+      "templatePreservesInput": true,
+      "referenceRemoval": true,
+      "messageReadingStatePreserved": true,
+      "historyReadingPreserved": true,
+      "returnToLatest": true,
+      "articleFocusMode": true,
+      "articleGuidance": true,
+      "readonlyRespected": true,
+      "commandKeyboard": true,
+      "commandSearchRecords": true,
+      "commandOpensDraft": true,
+      "commandQueuedReopen": true,
+      "commandCloseReopen": true,
+      "commandOpensConversation": true,
+      "commandOpensTask": true,
+      "commandAccountIsolation": true,
+      "inputAcrossConversations": true,
+      "inputAcrossPages": true,
+      "accountSwitchUnloadsComposer": true,
+      "accountSwitchInputIsolated": true,
+      "accountSwitchInputRecovered": true,
+      "pollDefersUntilChatMounted": true,
+      "sidebarCollapse": true,
+      "sidebarRestore": true,
+      "motionPreferenceClears": true,
+      "densityPreference": true,
+      "pendingSendPreservesTyping": true,
+      "firstMessageHandoff": true,
+      "noUnexpectedRendererErrors": true
+    }
+  },
+  "packaged_desktop": {
+    "passed": 85,
+    "failed": 0,
+    "log": "v1.5-chat-packaged.log",
+    "assertion_names": [
+      "accountSwitchInputIsolated",
+      "accountSwitchInputRecovered",
+      "accountSwitchUnloadsComposer",
+      "approvalEdited",
+      "archiveCancelled",
+      "archiveConversation",
+      "archiveDirtyNotice",
+      "archiveTask",
+      "articleFocusMode",
+      "articleGuidance",
+      "branchCancel",
+      "branchConfirmed",
+      "candidate",
+      "clarificationFirst",
+      "clarificationReply",
+      "commandAccountIsolation",
+      "commandCloseReopen",
+      "commandKeyboard",
+      "commandOpensConversation",
+      "commandOpensDraft",
+      "commandOpensTask",
+      "commandQueuedReopen",
+      "commandSearchRecords",
+      "compact",
+      "components",
+      "concurrentInputPreserved",
+      "deferSave",
+      "deleteConversation",
+      "deleteKeepsSavedDraft",
+      "deleteTask",
+      "deleteTaskKeepsArticle",
+      "densityPreference",
+      "diff",
+      "discussionNoArticle",
+      "draftEntry",
+      "draftOption",
+      "draftSidebar",
+      "explicitBranch",
+      "fastCompletionUnlocks",
+      "firstMessageHandoff",
+      "history",
+      "historyReadingPreserved",
+      "inputAcrossConversations",
+      "inputAcrossPages",
+      "inputRecovery",
+      "isolation",
+      "journeyAccepted",
+      "journeyCandidate",
+      "journeyPending",
+      "journeySaved",
+      "libraryEntryStable",
+      "messageReadingStatePreserved",
+      "motionLibraryActive",
+      "motionPreferenceClears",
+      "newContextReset",
+      "newConversationStartsDraft",
+      "noUnexpectedRendererErrors",
+      "pending",
+      "pendingSendPreservesTyping",
+      "persisted",
+      "pollDefersUntilChatMounted",
+      "progress",
+      "prompts",
+      "readonlyRespected",
+      "reducedMotion",
+      "referenceRemoval",
+      "restoreConversation",
+      "restoreDeletedConversation",
+      "restoreDeletedTask",
+      "restoreTaskPaused",
+      "returnToLatest",
+      "reuseArticle",
+      "reviewUnsavedProtected",
+      "sameConversation",
+      "saveChoice",
+      "saveDraft",
+      "saveIdempotent",
+      "savedDraftContinues",
+      "sharedBody",
+      "sidebarCollapse",
+      "sidebarRestore",
+      "submittedInputCleared",
+      "templatePreservesInput",
+      "uniqueRecentEntries",
+      "unsavedProtected"
+    ],
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\chat-desktop-1791130827237",
+      "components": true,
+      "discussionNoArticle": true,
+      "history": true,
+      "sameConversation": true,
+      "uniqueRecentEntries": true,
+      "explicitBranch": true,
+      "branchCancel": true,
+      "branchConfirmed": true,
+      "draftOption": true,
+      "motionLibraryActive": true,
+      "reducedMotion": true,
+      "journeyCandidate": true,
+      "saveChoice": true,
+      "progress": true,
+      "deferSave": true,
+      "candidate": true,
+      "diff": true,
+      "unsavedProtected": true,
+      "journeyPending": true,
+      "pending": true,
+      "reviewUnsavedProtected": true,
+      "approvalEdited": true,
+      "draftEntry": true,
+      "reuseArticle": true,
+      "sharedBody": true,
+      "journeyAccepted": true,
+      "prompts": true,
+      "compact": true,
+      "isolation": true,
+      "persisted": true,
+      "newContextReset": true,
+      "saveDraft": true,
+      "journeySaved": true,
+      "saveIdempotent": true,
+      "draftSidebar": true,
+      "savedDraftContinues": true,
+      "clarificationFirst": true,
+      "clarificationReply": true,
+      "libraryEntryStable": true,
+      "archiveDirtyNotice": true,
+      "archiveCancelled": true,
+      "archiveConversation": true,
+      "restoreConversation": true,
+      "deleteConversation": true,
+      "deleteKeepsSavedDraft": true,
+      "restoreDeletedConversation": true,
+      "fastCompletionUnlocks": true,
+      "archiveTask": true,
+      "restoreTaskPaused": true,
+      "deleteTask": true,
+      "deleteTaskKeepsArticle": true,
+      "restoreDeletedTask": true,
+      "newConversationStartsDraft": true,
+      "inputRecovery": true,
+      "concurrentInputPreserved": true,
+      "submittedInputCleared": true,
+      "templatePreservesInput": true,
+      "referenceRemoval": true,
+      "messageReadingStatePreserved": true,
+      "historyReadingPreserved": true,
+      "returnToLatest": true,
+      "articleFocusMode": true,
+      "articleGuidance": true,
+      "readonlyRespected": true,
+      "commandKeyboard": true,
+      "commandSearchRecords": true,
+      "commandOpensDraft": true,
+      "commandQueuedReopen": true,
+      "commandCloseReopen": true,
+      "commandOpensConversation": true,
+      "commandOpensTask": true,
+      "commandAccountIsolation": true,
+      "inputAcrossConversations": true,
+      "inputAcrossPages": true,
+      "accountSwitchUnloadsComposer": true,
+      "accountSwitchInputIsolated": true,
+      "accountSwitchInputRecovered": true,
+      "pollDefersUntilChatMounted": true,
+      "sidebarCollapse": true,
+      "sidebarRestore": true,
+      "motionPreferenceClears": true,
+      "densityPreference": true,
+      "pendingSendPreservesTyping": true,
+      "firstMessageHandoff": true,
+      "noUnexpectedRendererErrors": true
+    },
+    "observed_ui_phases": [
+      "ready",
+      "waiting_model",
+      "receiving"
+    ],
+    "runtime_diagnostics": {
+      "path": "docs/v1.5-chat-packaged-runtime-issues.json",
+      "source_path": ".test-tmp/chat-desktop-1791130827237/chat-runtime-issues.json",
+      "total_entries": 14,
+      "unexpected_errors": 0,
+      "non_programming_error_entries": 14,
+      "diagnostic_collection_succeeded": true,
+      "sha256": "f64fc0a80a99f651b9af5f9926458877a04b87244cfd4f48e6e920bd9fe4c27b",
+      "classifier": "Matches final chat-smoke.cjs: window errors, built-in JavaScript error names, and programming-error message patterns. All raw rows, including expected toasts, are retained."
+    }
+  },
+  "source_browser": {
+    "passed": 25,
+    "failed": 0,
+    "log": "v1.5-browser-source.log",
+    "assertion_names": [
+      "accountCookiesIsolated",
+      "back",
+      "browserRestoredAfterPalette",
+      "browserRestoredAfterPreferences",
+      "compactBounds",
+      "compactNoOverflow",
+      "cookieRetainedAfterNavigation",
+      "downloadSaved",
+      "forward",
+      "hiddenOnLeave",
+      "invalidURLRejected",
+      "minimumHostFullyVisible",
+      "minimumWindowSize",
+      "persistentCookieAfterViewRecreate",
+      "popupInside",
+      "popupNoBridge",
+      "preferencesCoverRemoteView",
+      "remoteHasNoBridge",
+      "remoteShortcutOpensLocalPalette",
+      "scrollResetOnEnter",
+      "sessionOnDataDrive",
+      "sidebarCollapsedBounds",
+      "sidebarExpandedBounds",
+      "siteCookiesIsolated",
+      "tapnowRouteInside"
+    ],
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791131333744",
+      "packaged": false,
+      "fixtureRequests": [
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/download"
+        },
+        {
+          "site": "tapnow",
+          "path": "/login"
+        }
+      ],
+      "tapnowRouteInside": true,
+      "liveTapNow": {
+        "url": "https://app.tapnow.media/home",
+        "title": "TapNow | Your Agentic Creative Canvas",
+        "error": "",
+        "dom": {
+          "readyState": "complete",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Current display surface not available for capture"
+      },
+      "liveWeChat": {
+        "url": "",
+        "title": "",
+        "error": "",
+        "dom": {
+          "readyState": "not_committed",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Screenshot surface timeout"
+      },
+      "isolatedPreferences": {
+        "nodeIntegration": false,
+        "sandbox": true,
+        "preload": null
+      },
+      "sessionOnDataDrive": true,
+      "remoteHasNoBridge": true,
+      "collapsedBrowserLayout": {
+        "host": {
+          "x": 94.66667175292969,
+          "y": 368.5520935058594,
+          "width": 1316,
+          "height": 481.41668701171875
+        },
+        "native": {
+          "x": 95,
+          "y": 369,
+          "width": 1316,
+          "height": 481
+        },
+        "expected": {
+          "x": 95,
+          "y": 369,
+          "width": 1316,
+          "height": 481
+        },
+        "size": [
+          1446,
+          903
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "sidebarCollapsedBounds": true,
+      "expandedBrowserLayout": {
+        "host": {
+          "x": 266.66668701171875,
+          "y": 368.5520935058594,
+          "width": 1144,
+          "height": 481.41668701171875
+        },
+        "native": {
+          "x": 267,
+          "y": 369,
+          "width": 1144,
+          "height": 481
+        },
+        "expected": {
+          "x": 267,
+          "y": 369,
+          "width": 1144,
+          "height": 481
+        },
+        "size": [
+          1446,
+          903
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "sidebarExpandedBounds": true,
+      "remoteShortcutOrigin": {
+        "url": "https://browser-fixture.example/start",
+        "focused": true,
+        "element": "next"
+      },
+      "remoteShortcutOpensLocalPalette": true,
+      "browserRestoredAfterPalette": true,
+      "preferencesCoverRemoteView": true,
+      "browserRestoredAfterPreferences": true,
+      "siteCookiesIsolated": true,
+      "cookieRetainedAfterNavigation": true,
+      "back": true,
+      "forward": true,
+      "invalidURLRejected": true,
+      "downloadSaved": true,
+      "popupInside": true,
+      "popupNoBridge": true,
+      "hiddenOnLeave": true,
+      "scrollResetOnEnter": true,
+      "minimumBrowserLayout": {
+        "host": {
+          "x": 226.6666717529297,
+          "y": 352.19793701171875,
+          "width": 764,
+          "height": 278.4375
+        },
+        "native": {
+          "x": 227,
+          "y": 352,
+          "width": 764,
+          "height": 278
+        },
+        "expected": {
+          "x": 227,
+          "y": 352,
+          "width": 764,
+          "height": 278
+        },
+        "size": [
+          1026,
+          684
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "minimumWindowActualSize": [
+        1041,
+        722
+      ],
+      "minimumWindowConstraint": [
+        1040,
+        720
+      ],
+      "minimumWindowSize": true,
+      "minimumHostFullyVisible": true,
+      "compactBounds": true,
+      "compactNoOverflow": true,
+      "accountCookiesIsolated": true,
+      "persistentCookieAfterViewRecreate": true
+    }
+  },
+  "packaged_browser": {
+    "passed": 25,
+    "failed": 0,
+    "log": "v1.5-browser-packaged.log",
+    "assertion_names": [
+      "accountCookiesIsolated",
+      "back",
+      "browserRestoredAfterPalette",
+      "browserRestoredAfterPreferences",
+      "compactBounds",
+      "compactNoOverflow",
+      "cookieRetainedAfterNavigation",
+      "downloadSaved",
+      "forward",
+      "hiddenOnLeave",
+      "invalidURLRejected",
+      "minimumHostFullyVisible",
+      "minimumWindowSize",
+      "persistentCookieAfterViewRecreate",
+      "popupInside",
+      "popupNoBridge",
+      "preferencesCoverRemoteView",
+      "remoteHasNoBridge",
+      "remoteShortcutOpensLocalPalette",
+      "scrollResetOnEnter",
+      "sessionOnDataDrive",
+      "sidebarCollapsedBounds",
+      "sidebarExpandedBounds",
+      "siteCookiesIsolated",
+      "tapnowRouteInside"
+    ],
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791131440497",
+      "packaged": true,
+      "fixtureRequests": [
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/download"
+        },
+        {
+          "site": "tapnow",
+          "path": "/login"
+        }
+      ],
+      "tapnowRouteInside": true,
+      "liveTapNow": {
+        "url": "",
+        "title": "",
+        "error": "",
+        "dom": {
+          "readyState": "not_committed",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Screenshot surface timeout"
+      },
+      "liveWeChat": {
+        "url": "",
+        "title": "",
+        "error": "",
+        "dom": {
+          "readyState": "not_committed",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "UnknownVizError"
+      },
+      "isolatedPreferences": {
+        "nodeIntegration": false,
+        "sandbox": true,
+        "preload": null
+      },
+      "sessionOnDataDrive": true,
+      "remoteHasNoBridge": true,
+      "collapsedBrowserLayout": {
+        "host": {
+          "x": 94.66667175292969,
+          "y": 368.5520935058594,
+          "width": 1316,
+          "height": 481.41668701171875
+        },
+        "native": {
+          "x": 95,
+          "y": 369,
+          "width": 1316,
+          "height": 481
+        },
+        "expected": {
+          "x": 95,
+          "y": 369,
+          "width": 1316,
+          "height": 481
+        },
+        "size": [
+          1446,
+          903
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "sidebarCollapsedBounds": true,
+      "expandedBrowserLayout": {
+        "host": {
+          "x": 266.66668701171875,
+          "y": 368.5520935058594,
+          "width": 1144,
+          "height": 481.41668701171875
+        },
+        "native": {
+          "x": 267,
+          "y": 369,
+          "width": 1144,
+          "height": 481
+        },
+        "expected": {
+          "x": 267,
+          "y": 369,
+          "width": 1144,
+          "height": 481
+        },
+        "size": [
+          1446,
+          903
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "sidebarExpandedBounds": true,
+      "remoteShortcutOrigin": {
+        "url": "https://browser-fixture.example/start",
+        "focused": true,
+        "element": "next"
+      },
+      "remoteShortcutOpensLocalPalette": true,
+      "browserRestoredAfterPalette": true,
+      "preferencesCoverRemoteView": true,
+      "browserRestoredAfterPreferences": true,
+      "siteCookiesIsolated": true,
+      "cookieRetainedAfterNavigation": true,
+      "back": true,
+      "forward": true,
+      "invalidURLRejected": true,
+      "downloadSaved": true,
+      "popupInside": true,
+      "popupNoBridge": true,
+      "hiddenOnLeave": true,
+      "scrollResetOnEnter": true,
+      "minimumBrowserLayout": {
+        "host": {
+          "x": 226.6666717529297,
+          "y": 352.19793701171875,
+          "width": 764,
+          "height": 278.4375
+        },
+        "native": {
+          "x": 227,
+          "y": 352,
+          "width": 764,
+          "height": 278
+        },
+        "expected": {
+          "x": 227,
+          "y": 352,
+          "width": 764,
+          "height": 278
+        },
+        "size": [
+          1026,
+          684
+        ],
+        "aligned": true,
+        "inside": true,
+        "hostFullyVisible": true
+      },
+      "minimumWindowActualSize": [
+        1041,
+        722
+      ],
+      "minimumWindowConstraint": [
+        1040,
+        720
+      ],
+      "minimumWindowSize": true,
+      "minimumHostFullyVisible": true,
+      "compactBounds": true,
+      "compactNoOverflow": true,
+      "accountCookiesIsolated": true,
+      "persistentCookieAfterViewRecreate": true
+    }
+  },
+  "same_source_and_packaged_assertion_names": {
+    "chat": true,
+    "browser": true
+  },
+  "packaged_ui_visually_verified": true,
+  "release_source": {
+    "version": "1.5.0",
+    "asar_sha256": "5a654d2a503fd04fe9e01ac164784488fab6aa34171b4d7eafb1d8e485b9eb49",
+    "renderer_matches_source": true,
+    "packaged_version_matches_source": true
+  },
+  "release_binaries": {
+    "version": "1.5.0",
+    "zip_matches_unpacked": true,
+    "setup_payload_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.5.0-Setup.exe",
+        "bytes": 189980596,
+        "sha256": "3ae42fd099cf2be88ec911a0c75de873202c86269e5761e48299bfa7daaf2d34"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.5.0-x64.zip",
+        "bytes": 189605034,
+        "sha256": "79260ece9bb0d4cd0c43a04537bcdbfbbcb4dbbaefae85a8e850fc79056f9209"
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "path": "docs/screenshots/v1.5/browser/browser-command-palette.png",
+      "bytes": 112299,
+      "sha256": "c1897cda8a1d17cc1b1acae25f287ea5b6ac5728c41a203b84b7f57c6bd52aa6"
+    },
+    {
+      "path": "docs/screenshots/v1.5/browser/browser-compact.png",
+      "bytes": 95312,
+      "sha256": "f34d04a343a8009843e3673655e45c7dbbc04bcc767216d0d44b0bd9b543f3d0"
+    },
+    {
+      "path": "docs/screenshots/v1.5/browser/browser-display-preferences.png",
+      "bytes": 143662,
+      "sha256": "b485ee44186a0fc8b0ba5bc37ebb4bcb171734f4e6144c15cff8ce0eaf6cfdde"
+    },
+    {
+      "path": "docs/screenshots/v1.5/browser/browser-sidebar-collapsed.png",
+      "bytes": 76633,
+      "sha256": "00058d8c9cc6cbb55e00dc47cf8323d2a330834b5323947474be2e35a31e74e6"
+    },
+    {
+      "path": "docs/screenshots/v1.5/browser/browser-workspace.png",
+      "bytes": 112156,
+      "sha256": "f1a939526fdc9eacdf6a5ccfa25d70d898e825b4d2c378ce89bc31b9ab68e5ba"
+    },
+    {
+      "path": "docs/screenshots/v1.5/browser/embedded-view.png",
+      "bytes": 32079,
+      "sha256": "ac340446aa0f8339ff673a367789ba8dc50ad5c273f4a3d1b862779dec81ce1b"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-approval-list.png",
+      "bytes": 99995,
+      "sha256": "cea382026d8822b4222b71e0486ea0dbc6d2f7b38445b7b0f5a1398034b156cd"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-archived-list.png",
+      "bytes": 209908,
+      "sha256": "5e416b057de1e12fec4f749a1e7915900df123f0fa3d77e57baa8994009b1caf"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-archived-tasks.png",
+      "bytes": 176763,
+      "sha256": "837bd5eb41eb68af1c34ef883b3300a1d35289814cb0f766a9ab590b568f2faa"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-article.png",
+      "bytes": 246316,
+      "sha256": "538b5e2712fc9c54281ddb23621ee77c1bded5e3fd9cef0693dabf5070d7bdd5"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-clarification.png",
+      "bytes": 175867,
+      "sha256": "0350c877b93af082b88f8331943feff962b2dea5610f98c0833839f239b8662f"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-compact.png",
+      "bytes": 114051,
+      "sha256": "1aba084018b1cc47192ff2821d6452bf7ef45558a87833104d1d29b13fcf6f2d"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-diff.png",
+      "bytes": 216219,
+      "sha256": "5105872cb1d22edd54a3ecdb48524f5a686cdb403fb55e03f75f95bb7e166926"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-draft-decision.png",
+      "bytes": 245433,
+      "sha256": "3732d857aeb70a46fff040855cfdc02e9a7b87b474a43de8a5ea9b4a55d8d3fd"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-generating.png",
+      "bytes": 175500,
+      "sha256": "6d108dc8f6aa14c23d8ba97115c7a4790031c5cc8746f1a7f1e9c01e54ece01f"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-image-prompts.png",
+      "bytes": 228304,
+      "sha256": "1c6676730de079297d3904f47a27f0b12b8594fbbc6dbd35b5d80a5aa973ba80"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-library-entry.png",
+      "bytes": 103418,
+      "sha256": "27fae755912e14335a413eedec5e115d932ce3d55d895c591685bef4b90eae4b"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-new-conversation-draft.png",
+      "bytes": 246604,
+      "sha256": "65f125265429f4db40e1345f3472d45502437a9ac9bf42b5c4b96d00189bb1f1"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-recycle-bin.png",
+      "bytes": 209791,
+      "sha256": "e9638efad5886bced982c5412750c6f9104e318b42b82d60bf3150d1056c871b"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-review.png",
+      "bytes": 129033,
+      "sha256": "64267969a9a6d9cfe2c1fafe2a812c087e07d774a259cd996f56c8790abb2106"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-save-request.png",
+      "bytes": 246879,
+      "sha256": "08474c1eaf8a87c184d5cb84fafdd97098c76d26236b92e547b21383909026b9"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-saved-sidebar.png",
+      "bytes": 243933,
+      "sha256": "0039c7538a084927d2b9a27f8677abed44498e4fa1a75381741149b060c06c86"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-task-recycle-bin.png",
+      "bytes": 177072,
+      "sha256": "e0139c5c670e7372893ea589b103adfd1e1810dcb93bacbea96630e410bd0c76"
+    },
+    {
+      "path": "docs/screenshots/v1.5/chat-welcome.png",
+      "bytes": 175694,
+      "sha256": "33159279bd2bb2b2a43abdb681e0c3eb04c8d74050a9f13056057550c71ebdb5"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-account-switch-pending.png",
+      "bytes": 84214,
+      "sha256": "162d9034bae20dc95e86f1a02c3490329b31f461c2ac09c7da5f65bae5d33596"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-command-search.png",
+      "bytes": 262757,
+      "sha256": "073c61d1790e331e987749a06f39cf29d0e77c6d7b25bc4e85a4c2b5b1e680de"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-creative-workspace.png",
+      "bytes": 246701,
+      "sha256": "5617efef33ca38010862c8ed00c5fcdd4056b346d7e9a55c85d944bafefef158"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-deferred-poll.png",
+      "bytes": 68671,
+      "sha256": "bbb4a518a20022301b6057abbeb9933180219be52ee8c0629aca64d49bcb4745"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-display-preferences.png",
+      "bytes": 257155,
+      "sha256": "5d9b9272e5b65736a41c0ade1522e9f8bfc5bd3581043e3db63cb46b622f1efe"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-first-message-handoff.png",
+      "bytes": 176960,
+      "sha256": "b5e5db6db801c56341c9ab48baf2393864c796ef6d386de29e839d2f4adc88e5"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-input-preserved.png",
+      "bytes": 241209,
+      "sha256": "c27a755ecb71dbda7fcdc2dbdd854ad3f33bda656c84be7d09a24267183a9f32"
+    },
+    {
+      "path": "docs/screenshots/v1.5/v1.5-sidebar-collapsed.png",
+      "bytes": 209820,
+      "sha256": "fa8a9937a6cf3faae786e723dc3947d4724780f2c9edd8d370f86d56cac5e8fc"
+    }
+  ],
+  "read_only_live_website_observations": {
+    "source": {
+      "liveTapNow": {
+        "observation": {
+          "url": "https://app.tapnow.media/home",
+          "title": "TapNow | Your Agentic Creative Canvas",
+          "error": "",
+          "dom": {
+            "readyState": "complete",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "Current display surface not available for capture"
+        },
+        "visible_page_and_capture_observed": false,
+        "complete_website_experience_verified": false,
+        "counted_as_automated_feature_pass": false,
+        "scope": "只读网页访问观察；没有登录、生图或发布。DOM 可见字符为 0 或截图超时不能证明页面体验完成。"
+      },
+      "liveWeChat": {
+        "observation": {
+          "url": "",
+          "title": "",
+          "error": "",
+          "dom": {
+            "readyState": "not_committed",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "Screenshot surface timeout"
+        },
+        "visible_page_and_capture_observed": false,
+        "complete_website_experience_verified": false,
+        "counted_as_automated_feature_pass": false,
+        "scope": "只读网页访问观察；没有登录、生图或发布。DOM 可见字符为 0 或截图超时不能证明页面体验完成。"
+      }
+    },
+    "packaged": {
+      "liveTapNow": {
+        "observation": {
+          "url": "",
+          "title": "",
+          "error": "",
+          "dom": {
+            "readyState": "not_committed",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "Screenshot surface timeout"
+        },
+        "visible_page_and_capture_observed": false,
+        "complete_website_experience_verified": false,
+        "counted_as_automated_feature_pass": false,
+        "scope": "只读网页访问观察；没有登录、生图或发布。DOM 可见字符为 0 或截图超时不能证明页面体验完成。"
+      },
+      "liveWeChat": {
+        "observation": {
+          "url": "",
+          "title": "",
+          "error": "",
+          "dom": {
+            "readyState": "not_committed",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "UnknownVizError"
+        },
+        "visible_page_and_capture_observed": false,
+        "complete_website_experience_verified": false,
+        "counted_as_automated_feature_pass": false,
+        "scope": "只读网页访问观察；没有登录、生图或发布。DOM 可见字符为 0 或截图超时不能证明页面体验完成。"
+      }
+    }
+  },
+  "boundaries": {
+    "paid_model_calls_performed": false,
+    "controlled_local_http_sse_adapter_test": true,
+    "source_and_packaged_isolated_runtimes": true,
+    "actual_user_workspace_modified": false,
+    "actual_user_installation_modified": false,
+    "actual_user_records_deleted_or_archived": false,
+    "installer_executed": false,
+    "tapnow_login_or_generation_performed": false,
+    "wechat_publication_performed": false,
+    "production_website_experience_verified": false,
+    "live_sites_read_only_observed": true,
+    "G_pyshot_tmp_used": false
+  },
+  "initial_desktop_attempts": [
+    "v1.5-browser-source-dpi-failure.log",
+    "v1.5-browser-source-frame-rounding.log",
+    "v1.5-browser-source-initial-failure.log",
+    "v1.5-browser-source-mount-failure.log",
+    "v1.5-browser-source-viz-failure.log",
+    "v1.5-chat-source-clone-failure.log",
+    "v1.5-chat-source-initial-failure.log",
+    "v1.5-chat-source-navigation-poll-failure.log",
+    "v1.5-chat-source-render-timeout-failure.log",
+    "v1.5-chat-source-search-failure.log",
+    "v1.5-ui-package-path-failure.log"
+  ],
+  "notes": [
+    "Counts are read from final logs. Source and packaged runs repeat the same logical GUI assertions; they are recorded separately, not presented as distinct unique tests.",
+    "No v1.5 Python backend test count is inferred from earlier releases.",
+    "Browser `packaged` metadata and nested live-site observations are excluded from Boolean feature counts.",
+    "Progress records distinct phases; validation requires receiving plus at least one other phase, not a simulated progress percentage.",
+    "Final packaged renderer diagnostic rows are archived without filtering; collection aborts on unexpected programming errors or unavailable instrumentation.",
+    "Live TapNow/WeChat DOM visibility or screenshot timeout remains recorded as incomplete read-only observation, never as verified generation or publishing.",
+    "Visual verification is a separate explicit flag; the collector does not inspect screenshots.",
+    "Initial failed logs are retained as history and do not replace final successful logs."
+  ],
+  "reference_documents": [
+    "docs/v1.5-research.md",
+    "docs/v1.5-review.md"
+  ]
+}

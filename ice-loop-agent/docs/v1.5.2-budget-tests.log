@@ -1,0 +1,72 @@
+...EE
+======================================================================
+ERROR: test_limit_is_enforced_and_current_task_can_resume_after_increase (tests.test_model_budgets.TestModelBudgets.test_limit_is_enforced_and_current_task_can_resume_after_increase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\tests\test_model_budgets.py", line 58, in test_limit_is_enforced_and_current_task_can_resume_after_increase
+    self.s.call('prompts.generate',self.params())
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\desktop_service.py", line 211, in call
+    return Workbench(self).call(method,params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\workbench.py", line 29, in call
+    return PromptWorkbench(self.s).call(method,params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\image_prompts.py", line 93, in call
+    result=draft(engine.router,[slot],body,state.get('final_title') or state.get('working_title',''),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\image_prompts.py", line 43, in draft
+    response=generate(request) if generate else router.generate(request,job_id=job_id,max_attempts=1)
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 132, in generate
+    result = self._invoke(adapter, req, route, job_id=job_id, attempt=attempt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 174, in _invoke
+    chat = self._call(adapter, req, route, messages, job_id=job_id,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 224, in _call
+    self.store.reserve_invocation(inv, maximum)
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\domain\store.py", line 288, in reserve_invocation
+    raise ModelBudgetExceeded(f"本篇模型调用已达到上限 {maximum}，请调整预算后再继续")
+ice_agent.llm.errors.ModelBudgetExceeded: [MODEL_BUDGET_EXCEEDED] 本篇模型调用已达到上限 1，请调整预算后再继续
+
+======================================================================
+ERROR: test_real_router_legacy_zero_replans_without_changing_body_or_prompt (tests.test_model_budgets.TestModelBudgets.test_real_router_legacy_zero_replans_without_changing_body_or_prompt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\tests\test_model_budgets.py", line 47, in test_real_router_legacy_zero_replans_without_changing_body_or_prompt
+    result=self.s.call('prompts.generate',self.params())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\desktop_service.py", line 211, in call
+    return Workbench(self).call(method,params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\workbench.py", line 29, in call
+    return PromptWorkbench(self.s).call(method,params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\image_prompts.py", line 93, in call
+    result=draft(engine.router,[slot],body,state.get('final_title') or state.get('working_title',''),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\image_prompts.py", line 43, in draft
+    response=generate(request) if generate else router.generate(request,job_id=job_id,max_attempts=1)
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 148, in generate
+    raise last_error
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 132, in generate
+    result = self._invoke(adapter, req, route, job_id=job_id, attempt=attempt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 174, in _invoke
+    chat = self._call(adapter, req, route, messages, job_id=job_id,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\router.py", line 233, in _call
+    chat = adapter.chat(messages, thinking_policy=route.thinking_policy,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\adapters.py", line 117, in chat
+    return super().chat(messages,**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\llm\adapters.py", line 83, in chat
+    raise ModelError(
+ice_agent.llm.errors.ModelError: [AUTH_FAILED] 凭据未配置：环境变量 DEEPSEEK_API_KEY 为空
+
+----------------------------------------------------------------------
+Ran 5 tests in 9.968s
+
+FAILED (errors=2)

@@ -1,25 +1,28 @@
 'use strict';
 const planningState = { token:0, context:null, proposal:null, busy:false, loading:false, episodeTouched:false, autoExercise:'' };
-function planningStatus(message, error=false) { const node=document.querySelector('#planning-status'); node.textContent=message; node.classList.toggle('error',error); }
+function planningStatus(message, error=false) { const node=document.querySelector('#planning-status'); node.textContent=message; node.classList.toggle('error',error); const extra=document.querySelector('#title-selection-status');if(extra){extra.textContent=message;extra.classList.toggle('error',error);} }
 function planningButtons() {
   document.querySelector('#brief-fill').disabled = planningState.busy || planningState.loading || briefState.busy;
-  document.querySelector('#planning-propose').disabled = planningState.busy || planningState.loading || briefState.busy || !planningState.context?.next_episode;
-  newForm.querySelector('[type="submit"]').disabled = planningState.busy || planningState.loading || briefState.busy || !planningState.context?.next_episode;
+  const valid=planningState.context&&newForm.elements.episode.checkValidity();
+  document.querySelector('#planning-propose').disabled = planningState.busy || planningState.loading || briefState.busy || !valid || newForm.elements.title_mode?.value!=='ai';
+  newForm.querySelector('[type="submit"]').disabled = planningState.busy || planningState.loading || briefState.busy || !valid || (typeof outlineReady==='function'&&!outlineReady());
 }
 async function loadPlanningContext(auto=true, request=api) {
+  if(typeof outlineEpisodeTimer!=='undefined')clearTimeout(outlineEpisodeTimer);
   const token=++planningState.token, accountId=activeAccount().id, series=newForm.elements.series.value;
   planningState.context=null; planningState.proposal=null; planningState.loading=true; planningState.busy=false;
   document.querySelector('#planning-candidates').replaceChildren();
   document.querySelector('#planning-context').textContent='正在读取当前栏目的历史文章与发布进度…'; planningButtons();
   try {
-    const context=await request('planning.context',{account_id:accountId,series});
+    const context=await request('planning.context',{account_id:accountId,series,...(!auto&&newForm.elements.episode.checkValidity()?{episode:Number(newForm.elements.episode.value)}:{})});
     if (token!==planningState.token || !newDialog.open || accountId!==activeAccount().id || series!==newForm.elements.series.value) return;
     planningState.context=context;
     if (auto && !planningState.episodeTouched) newForm.elements.episode.value=context.next_episode ?? '';
     const exercise=newForm.elements.exercise_to_answer;
     if (!exercise.value || exercise.value===planningState.autoExercise) { exercise.value=context.previous_exercise.slice(0,1000); planningState.autoExercise=exercise.value; }
-    document.querySelector('#planning-context').textContent = `${series} · 已发布至第 ${context.last_published_episode} 期 → 建议第 ${context.next_episode ?? '—'} 期。${context.published_count} 篇已登记发布，${context.draft_count} 篇草稿。${context.same_episode_drafts ? ' 这一期已有草稿，可先检查是否重复创建。' : ''}${!context.last_published_episode ? ' 尚未登记发布进度，可在发布记录中补充。' : ''}`;
+    document.querySelector('#planning-context').textContent = `${series} · 已发布至第 ${context.last_published_episode} 期 → 建议第 ${context.next_episode ?? '—'} 期。本期参考此前 ${context.body_history_count??context.history?.length??0} 篇正文、该栏目全部 ${context.title_history_count??context.known_titles?.length??0} 个标题。${context.same_episode_drafts ? ' 这一期已有草稿，可先检查是否重复创建。' : ''}${!context.last_published_episode ? ' 尚未登记发布进度，可在发布记录中补充。' : ''}`;
     planningStatus(context.next_episode ? '历史已就绪。AI 拟题后，选择候选并修改下方内容，再确认开始。' : '期号已达上限，请核对发布记录。',!context.next_episode);
+    if(typeof syncTitleMode==='function'){syncTitleMode();if(newForm.elements.title_mode.value==='outline')await loadOutlineChoices();}
   } catch(error) { if(token===planningState.token) planningStatus(error.message,true); }
   finally { if(token===planningState.token) {planningState.loading=false;planningButtons();} }
 }
@@ -36,6 +39,7 @@ function renderPlanningCandidates() {
   document.querySelector('#planning-candidates').innerHTML=`<p class="planning-analysis">${esc(result.analysis)}</p><div class="planning-list">${result.candidates.map((item,index)=>`<article class="planning-card" data-plan-card="${index}"><div class="planning-card-heading"><span>${index===result.recommended ? '推荐方向' : `候选 ${index+1}`}</span><button type="button" class="button secondary small" data-plan-action="choose" data-index="${index}">采用并编辑</button></div><h3>${esc(item.title)}</h3><p>${esc(item.topic)}</p><p class="planning-reason">${esc(item.reason)}</p>${item.source_ids.length ? `<p class="planning-refs">参考：${item.source_ids.map(id=>esc(refs.get(id)?.title||id)).join(' · ')}</p>` : ''}</article>`).join('')}</div>`;
 }
 async function proposeHistory(request=api) {
+  if(newForm.elements.title_mode?.value!=='ai')return;
   if(planningState.busy || planningState.loading || briefState.busy || !planningState.context)return;
   if(!newForm.elements.episode.reportValidity())return;
   const token=++planningState.token, accountId=activeAccount().id, fields=Object.fromEntries(new FormData(newForm));

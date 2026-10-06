@@ -1,0 +1,31 @@
+{
+  "$id": "model.delta.payload",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "model.delta 事件载荷（流式增量）。",
+  "properties": {
+    "turn_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Turn Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "turn_id",
+    "attempt_id",
+    "text"
+  ],
+  "title": "ModelDeltaPayload",
+  "type": "object"
+}

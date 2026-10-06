@@ -78,9 +78,29 @@ class WorkflowEngine:
         return job_id, article_id
 
     # -------------------------------------------------------------- 运行
+    def _halted(self, job_id: str) -> bool:
+        from ..task_lifecycle import task_is_hidden
+        job = self.store.get_job(job_id)
+        return not job or job['state'] in ('paused', 'cancelled') or task_is_hidden(self.store, job_id)
+
+    def _update_if_active(self, job_id: str, *, allow_paused: bool = False, **fields: Any) -> bool:
+        from ..task_lifecycle import task_is_hidden
+        # The archive marker and worker state must be checked under one write
+        # lock; otherwise an in-flight result could overwrite the pause request.
+        with self.store.transaction():
+            job = self.store.get_job(job_id)
+            if not job or task_is_hidden(self.store, job_id) or job['state'] == 'cancelled' or (
+                    job['state'] == 'paused' and not allow_paused):
+                return False
+            self.store.update_job(job_id, **fields)
+            return True
+
     def run(self, job_id: str, *,
             auto_approver: AutoApprover | None = None,
             actor: str = "user") -> dict[str, Any]:
+        existing = self.store.get_job(job_id)
+        if existing and self.store.get_article(existing['article_id'])['spec'].get('image_only'):
+            raise ValueError('补图任务不能进入文章改写流水线，请使用图位计划和补图导出')
         token = new_id("lease")
         if not self.store.claim_job(job_id, token):
             job = self.store.get_job(job_id)
@@ -90,9 +110,11 @@ class WorkflowEngine:
         try:
             return self._run(job_id, auto_approver=auto_approver, actor=actor)
         except Exception as exc:
+            if self._halted(job_id):
+                return self.store.get_job(job_id)
             self._fail_step(job_id, self.store.get_job(job_id)["current_node"],
                             getattr(exc, "code", type(exc).__name__), str(exc))
-            self.store.update_job(job_id, state="failed", pause_reason=str(exc))
+            self._update_if_active(job_id, state="failed", pause_reason=str(exc))
             return self.store.get_job(job_id)
         finally:
             self.store.release_job(job_id, token)
@@ -109,6 +131,9 @@ class WorkflowEngine:
             raise KeyError(f"任务不存在：{job_id}")
         if job["state"] in ("completed", "cancelled"):
             return job
+        from ..task_lifecycle import task_is_hidden
+        if task_is_hidden(self.store, job_id):
+            return job
         if job["state"] == "failed" and job.get("pause_reason", "").startswith(
                 "APPROVAL_REJECTED"):
             return job
@@ -116,7 +141,7 @@ class WorkflowEngine:
         if state.get("rules_profile_snapshot"):
             self.cfg.profile = state["rules_profile_snapshot"]
         self.router.restore(job.get("model_route_snapshot") or {})
-        self.router.cancelled = lambda: self.store.get_job(job_id)["state"] in ("cancelled", "paused")
+        self.router.cancelled = lambda: self._halted(job_id)
         self.router.on_delta = lambda node, piece: self.store.append_event(
             job_id, "model.delta", {"node": node, "content": piece})
         article = self.store.get_article(job["article_id"])
@@ -124,7 +149,7 @@ class WorkflowEngine:
         # 恢复检查：存在未对账的外部操作时，先停在用户动作（§13）
         pending_ops = self.ledger.needs_reconciliation(job["article_id"])
         if pending_ops:
-            self.store.update_job(job_id, state="awaiting_user",
+            self._update_if_active(job_id, state="awaiting_user",
                                   pause_reason="存在 sending/unknown 操作，"
                                   "请先完成对账（reconcile）再继续")
             self.store.append_event(job_id, "job.paused",
@@ -133,7 +158,11 @@ class WorkflowEngine:
                                                     for o in pending_ops]})
             return self.store.get_job(job_id)
 
-        self.store.update_job(job_id, state="running", pause_reason="")
+        # CLI callers may explicitly resume a paused job. Desktop workers enter
+        # with queued state, so a later pause cannot be mistaken for that resume.
+        if not self._update_if_active(job_id, allow_paused=job['state'] == 'paused',
+                                      state="running", pause_reason=""):
+            return self.store.get_job(job_id)
         nodes = list(WORKFLOW_NODES)
         start = nodes.index(job["current_node"]) \
             if job["current_node"] in nodes else 0
@@ -142,10 +171,11 @@ class WorkflowEngine:
         _MAX_GATE_RETRIES = 5   # 防御：payload 不确定导致审核门反复重建时熔断
         while i < len(nodes):
             current = self.store.get_job(job_id)
-            if current["state"] in ("cancelled", "paused"):
+            if self._halted(job_id):
                 return current
             node = nodes[i]
-            self.store.update_job(job_id, current_node=node)
+            if not self._update_if_active(job_id, current_node=node):
+                return self.store.get_job(job_id)
             self.store.append_event(job_id, "step.started", {"node": node})
             ctx.job = self.store.get_job(job_id)
             ctx.article = self.store.get_article(job["article_id"])
@@ -163,54 +193,69 @@ class WorkflowEngine:
                 outputs = func(ctx)
             except ApprovalPause as ap:
                 self._save_state(job_id, state)
-                if auto_approver is not None:
+                if self._halted(job_id):
+                    return self.store.get_job(job_id)
+                approver=auto_approver
+                from ..automation import SCOPES, editorial_decision
+                if approver is None and state['spec'].get('production_mode')=='auto_prepare' and ap.scope in SCOPES:
+                    approver=editorial_decision
+                if approver is not None:
                     gate_retries[node] = gate_retries.get(node, 0) + 1
                     if gate_retries[node] > _MAX_GATE_RETRIES:
                         self._fail_step(
                             job_id, node, "GATE_LOOP",
                             f"审核门 {ap.scope} 连续重建超过 {_MAX_GATE_RETRIES} 次；"
                             "payload 应为确定性内容（不含易变 ID），请检查节点实现")
-                        self.store.update_job(
+                        self._update_if_active(
                             job_id, state="failed",
                             pause_reason=f"GATE_LOOP（{node}）：审核门反复重建")
                         return self.store.get_job(job_id)
-                    decision, note, choice = auto_approver(ap.scope, ap.payload)
+                    decision, note, choice = approver(ap.scope, ap.payload)
                     ok = self.decide(job_id, ap.approval_id, decision, note,
-                                     actor=f"auto:{actor}", choice=choice)
+                                     actor='auto:preparation' if auto_approver is None else f"auto:{actor}", choice=choice)
                     if ok and decision == "approve":
                         continue        # 重入节点，此次审核门放行
                     if ok and decision == "reject":
-                        self.store.update_job(
+                        self._update_if_active(
                             job_id, state="failed",
                             pause_reason=f"APPROVAL_REJECTED({ap.scope})：{note}")
                         self.store.append_event(job_id, "step.failed",
                                                 {"node": node, "code":
                                                  "APPROVAL_REJECTED"})
                         return self.store.get_job(job_id)
-                self.store.update_job(job_id, state="awaiting_approval",
+                self._update_if_active(job_id, state="awaiting_approval",
                                       pause_reason=f"等待审核（{ap.scope}）"
                                       f"：{ap.approval_id}")
                 return self.store.get_job(job_id)
             except UserActionRequired as ua:
                 self._save_state(job_id, state)
+                if self._halted(job_id):
+                    return self.store.get_job(job_id)
                 self._fail_step(job_id, node, "AWAITING_USER", str(ua))
-                self.store.update_job(job_id, state="awaiting_user",
+                self._update_if_active(job_id, state="awaiting_user",
                                       pause_reason=str(ua))
                 return self.store.get_job(job_id)
             except NodeFailed as nf:
                 self._save_state(job_id, state)
+                if self._halted(job_id):
+                    return self.store.get_job(job_id)
                 self._fail_step(job_id, node, nf.code, str(nf))
-                self.store.update_job(job_id, state="failed",
+                self._update_if_active(job_id, state="failed",
                                       pause_reason=f"{nf.code}（{node}）：{nf}")
                 return self.store.get_job(job_id)
             except Exception as exc:
                 self._save_state(job_id, state)
-                if getattr(exc, "code", "") == "CANCELLED":
+                if self._halted(job_id) or getattr(exc, "code", "") == "CANCELLED":
                     return self.store.get_job(job_id)
                 self._fail_step(job_id, node, getattr(exc, "code", type(exc).__name__), str(exc))
-                self.store.update_job(job_id, state="failed", pause_reason=str(exc))
+                self._update_if_active(job_id, state="failed", pause_reason=str(exc))
                 return self.store.get_job(job_id)
             state.pop("_exporter", None)
+            if self._halted(job_id):
+                # Retain a completed in-flight node's output, without proceeding
+                # into another node, creating an approval or exporting a package.
+                self._save_state(job_id, state)
+                return self.store.get_job(job_id)
             clean = {k: v for k, v in state.items() if not k.startswith("_")}
             with self.store.transaction():
                 self.store.save_checkpoint(job_id, clean, commit=False)
@@ -225,7 +270,10 @@ class WorkflowEngine:
             self.store.append_event(job_id, "step.completed",
                                     {"node": node, **(outputs or {})})
             i += 1
-        self.store.update_job(job_id, state="completed", pause_reason="")
+        if self._halted(job_id):
+            return self.store.get_job(job_id)
+        if not self._update_if_active(job_id, state="completed", pause_reason=""):
+            return self.store.get_job(job_id)
         self.store.append_event(job_id, "job.completed",
                                 {"article_id": job["article_id"]})
         return self.store.get_job(job_id)
@@ -289,6 +337,10 @@ class WorkflowEngine:
         from .nodes import node_final_check, node_export
 
         job = self.store.get_job(job_id)
+        if job and self.store.get_article(job['article_id'])['spec'].get('image_only'):
+            from ..supplements import finalize
+            account_id=self.store.get_article(job['article_id'])['spec']['account_id']
+            return finalize(self,self.store,job_id,account_id)
         if job is None:
             raise KeyError(f"任务不存在：{job_id}")
         if job["state"] not in ("completed",):

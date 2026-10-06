@@ -1,0 +1,20 @@
+test_active_lease_blocks_edits_and_backups (tests.test_maintenance.TestMaintenance.test_active_lease_blocks_edits_and_backups) ... ok
+test_backup_path_inside_data_is_rejected (tests.test_maintenance.TestMaintenance.test_backup_path_inside_data_is_rejected) ... ok
+test_corrupt_revision_and_cross_account_are_rejected (tests.test_maintenance.TestMaintenance.test_corrupt_revision_and_cross_account_are_rejected) ... ok
+test_corrupted_file_hash_fails_package_validation (tests.test_maintenance.TestMaintenance.test_corrupted_file_hash_fails_package_validation) ... ok
+test_export_html_obeys_external_edit_guard (tests.test_maintenance.TestMaintenance.test_export_html_obeys_external_edit_guard) ... ok
+test_html_escapes_code_and_html_and_uses_only_reviewed_images (tests.test_maintenance.TestMaintenance.test_html_escapes_code_and_html_and_uses_only_reviewed_images) ... ok
+test_html_theme_uses_frozen_brand_without_rewriting_code (tests.test_maintenance.TestMaintenance.test_html_theme_uses_frozen_brand_without_rewriting_code) ... ok
+test_missing_managed_resource_never_creates_incomplete_backup (tests.test_maintenance.TestMaintenance.test_missing_managed_resource_never_creates_incomplete_backup) ... ok
+test_restore_detects_changed_package_and_existing_directory (tests.test_maintenance.TestMaintenance.test_restore_detects_changed_package_and_existing_directory) ... ok
+test_roundtrip_rebases_resources_and_checkpoints_excludes_credentials (tests.test_maintenance.TestMaintenance.test_roundtrip_rebases_resources_and_checkpoints_excludes_credentials) ... ok
+test_save_diff_restore_preserves_before_body_and_requires_recheck (tests.test_maintenance.TestMaintenance.test_save_diff_restore_preserves_before_body_and_requires_recheck) ... ok
+test_stale_restore_rolls_back_without_losing_current (tests.test_maintenance.TestMaintenance.test_stale_restore_rolls_back_without_losing_current) ... ok
+test_title_edit_fails_final_title_check (tests.test_maintenance.TestMaintenance.test_title_edit_fails_final_title_check) ... ok
+test_unlisted_and_traversal_entries_fail_before_extraction (tests.test_maintenance.TestMaintenance.test_unlisted_and_traversal_entries_fail_before_extraction) ... ok
+test_full_article_backup_restores_assets_evidence_and_export (tests.test_maintenance_pipeline.TestMaintenancePipeline.test_full_article_backup_restores_assets_evidence_and_export) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 32.949s
+
+OK

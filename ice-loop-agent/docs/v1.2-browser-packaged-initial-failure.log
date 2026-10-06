@@ -1,0 +1,14 @@
+Error: Browser acceptance timeout
+    at waitFor (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser-smoke.cjs:4:169)
+    at async Object.run (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser-smoke.cjs:21:3)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\main.cjs:388:43) Error occurred in handler for 'ice:browser-bounds': Error: 网页区域超出窗口
+    at bounds (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser.cjs:14:42)
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser.cjs:94:12
+    at Session.<anonymous> (node:electron/js2c/browser_init:1:118964)
+    at Session.emit (node:events:514:28)
+Error occurred in handler for 'ice:browser-show': Error: 网页区域超出窗口
+    at bounds (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser.cjs:14:42)
+    at show (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\resources\app.asar\browser.cjs:73:21)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118948)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\browser-1790962269460

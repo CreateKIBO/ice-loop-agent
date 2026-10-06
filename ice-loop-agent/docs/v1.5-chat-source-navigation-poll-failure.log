@@ -1,0 +1,5 @@
+Error: creative.id==="conversation-16e7af11ec23"&&creative.data.conversation.id==="conversation-16e7af11ec23"&&Boolean(document.querySelector('#cha :: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error.
+    at js (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:8:250)
+    at async wait (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:9:53)
+    at async module.exports (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:248:3)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:388:22) G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\chat-desktop-1791128129343

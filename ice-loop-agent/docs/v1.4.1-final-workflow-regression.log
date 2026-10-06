@@ -1,0 +1,19 @@
+test_external_modification_blocks_reexport (tests.test_workflow.TestExportConflict.test_external_modification_blocks_reexport) ... ok
+test_import_and_finalize_reaches_ready (tests.test_workflow.TestReadinessLoop.test_import_and_finalize_reaches_ready) ... ok
+test_import_rejects_non_image (tests.test_workflow.TestReadinessLoop.test_import_rejects_non_image) ... ok
+test_partial_import_stays_pending (tests.test_workflow.TestReadinessLoop.test_partial_import_stays_pending) ... ok
+test_full_offline_pipeline (tests.test_workflow.TestWorkflowE2E.test_full_offline_pipeline) ... ok
+test_gate_pauses_without_auto_approve (tests.test_workflow.TestWorkflowE2E.test_gate_pauses_without_auto_approve) ... ok
+test_local_exec_requires_flag (tests.test_workflow.TestWorkflowE2E.test_local_exec_requires_flag) ... ok
+test_rejection_fails_job (tests.test_workflow.TestWorkflowE2E.test_rejection_fails_job) ... ok
+test_step_reuse_on_resume (tests.test_workflow.TestWorkflowE2E.test_step_reuse_on_resume) ... ok
+test_auto_does_not_approve_new_host_code (tests.test_automation.TestPreparation.test_auto_does_not_approve_new_host_code) ... ok
+test_auto_prepares_once_and_requires_final_human_review (tests.test_automation.TestPreparation.test_auto_prepares_once_and_requires_final_human_review) ... ok
+test_docker_auto_inputs_are_bound_to_the_isolated_execution_manifest (tests.test_automation.TestPreparation.test_docker_auto_inputs_are_bound_to_the_isolated_execution_manifest) ... ok
+test_invalid_image_plan_cache_can_be_retried (tests.test_automation.TestPreparation.test_invalid_image_plan_cache_can_be_retried) ... ok
+test_one_click_creation_analyzes_history_and_freezes_mode (tests.test_automation.TestPreparation.test_one_click_creation_analyzes_history_and_freezes_mode) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 352.264s
+
+OK

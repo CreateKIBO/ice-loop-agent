@@ -37,6 +37,10 @@ class ArticleExporter:
     def __call__(self, ctx) -> dict[str, Any]:
         state = ctx.state
         article = ctx.article
+        image_only=article.get('spec',{}).get('image_only',False)
+        if image_only:
+            from ..supplements import verify_snapshot
+            verify_snapshot(ctx.cfg,state,ctx.job['job_id'])
         final_title = state.get("final_title") or state.get("working_title", "")
         readiness = article.get("readiness", "draft")
         final_report = state.get("final_check_report") or {}
@@ -51,6 +55,9 @@ class ArticleExporter:
         if folder_no is None:
             folder_no = self.store.reserve_folder(article["article_id"], self.article_root)
         folder_name = f"{folder_no:03d}-{safe_dir_name(final_title)}"
+        from .publication import destination, check_target, export_publication
+        publishing_target, publishing_manifest = destination(ctx, self.article_root, folder_name)
+        check_target(publishing_target, publishing_manifest)
         target = ensure_dir(self.article_root / folder_name)
         code_dir = ensure_dir(target / "code")
         ensure_dir(target / "images")
@@ -86,6 +93,12 @@ class ArticleExporter:
                     figure_files[slot["figure_no"]] = f"images/{dest_name}"
 
         files["01-公众号正文.md"] = _body_doc(state, final_title, figure_files)
+        if image_only:
+            from ..supplements import render_body
+            files['01-公众号正文.md']=render_body(state['integrated_md'],self.store.article_slots(article['article_id']),figure_files)
+        from .html_preview import PREVIEW_NAME, article_html
+        files[PREVIEW_NAME] = article_html(files['01-公众号正文.md'], final_title, readiness, figure_files,
+                                         ctx.cfg.profile.get('brand',{}).get('colors'))
         files["02-发布信息与排版说明.md"] = _publish_doc(ctx, state, final_title,
                                                         series, episode)
         files["00-阅读入口.md"] = _entry_doc(ctx, state, final_title, series,
@@ -94,14 +107,20 @@ class ArticleExporter:
                         if s.get("prompt") or s.get("kind") == "cover"]
         if prompt_slots:
             files["03-配图提示词.md"] = _prompt_doc(state, prompt_slots, series)
+        if image_only:
+            from ..supplements import export_notes
+            files.update(export_notes(state,self.store.article_slots(article['article_id']),figure_files))
 
         for name, content in files.items():
             atomic_write_text(target / name, content)
-        for run_id, rec in (state.get("runs") or {}).items():
+        run_records=state.get('runs') or {}
+        duplicate_names={rec.get('filename') for rec in run_records.values() if sum(other.get('filename')==rec.get('filename') for other in run_records.values())>1}
+        for run_id, rec in run_records.items():
             src_name = rec.get("filename", f"{run_id}.py")
-            atomic_write_text(code_dir / src_name, _code_source(state, run_id))
+            destination = ensure_dir(code_dir / run_id) / src_name if image_only or src_name in duplicate_names else code_dir / src_name
+            atomic_write_text(destination, _code_source(state, run_id))
         (target / "images" / "README.md").write_text(
-            "本目录存放经审核的发布图。实截类图片由用户截图后导入；"
+            "本目录存放经审核的发布图。实截类图片可由 Agent 根据真实运行记录截图，或由用户导入；"
             "生图类按 03 文件 P 编号提示词生成后导入（ice-agent import-asset）。\n",
             encoding="utf-8")
 
@@ -109,12 +128,15 @@ class ArticleExporter:
                     "readiness": readiness,
                     "files": {str(file.relative_to(target)).replace("\\", "/"): _sha256_file(file)
                               for file in target.rglob("*") if file.is_file()
-                              and file.name != ".ice-export-manifest.json"}}
+                              and file.name not in {".ice-export-manifest.json", ".ice-publication-manifest.json"}}}
         atomic_write_text(target / ".ice-export-manifest.json",
                           json.dumps(manifest, ensure_ascii=False, indent=2))
         self.store.update_article(article["article_id"], folder_no=folder_no,
                                   folder_name=folder_name)
-        return {"folder": str(target), "files": sorted(files),
+        publishing = export_publication(ctx, target, publishing_target, publishing_manifest,
+                                        files['01-公众号正文.md'], figure_files, final_title,
+                                        series, episode, readiness)
+        return {**publishing, "folder": str(target), "files": sorted(files),
                 "readiness": readiness, "folder_no": folder_no,
                 "images": sorted(figure_files.values())}
 
@@ -289,7 +311,7 @@ def _prompt_doc(state: dict[str, Any], prompt_slots: list[dict[str, Any]],
     for s in prompt_slots:
         if s.get("kind") == "cover":
             lines += [f"## 封面（图{s['figure_no']}）", "",
-                      "```text", state.get("cover_prompt", ""), "```", ""]
+                      "```text", s.get("prompt") or state.get("cover_prompt", ""), "```", ""]
         elif s.get("prompt"):
             p = s["prompt_no"]
             lines += [f"## P{p}（图{s['figure_no']}：{s['caption']}）", "",

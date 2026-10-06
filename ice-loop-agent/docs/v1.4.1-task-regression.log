@@ -1,0 +1,38 @@
+test_account_isolation_covers_inspection_actions_and_lists (tests.test_task_lifecycle.TestTaskLifecycle.test_account_isolation_covers_inspection_actions_and_lists) ... ok
+test_archive_delete_restore_preserves_article_approvals_and_slots (tests.test_task_lifecycle.TestTaskLifecycle.test_archive_delete_restore_preserves_article_approvals_and_slots) ... ok
+test_engine_cannot_start_an_archived_task_even_via_direct_cli_entry (tests.test_task_lifecycle.TestTaskLifecycle.test_engine_cannot_start_an_archived_task_even_via_direct_cli_entry) ... ok
+test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed (tests.test_task_lifecycle.TestTaskLifecycle.test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed) ... ok
+test_invalid_filters_and_missing_tasks_do_not_change_visibility (tests.test_task_lifecycle.TestTaskLifecycle.test_invalid_filters_and_missing_tasks_do_not_change_visibility) ... ok
+test_lifecycle_survives_restart_and_restores_without_starting_work (tests.test_task_lifecycle.TestTaskLifecycle.test_lifecycle_survives_restart_and_restores_without_starting_work) ... ok
+test_only_target_queued_future_is_cancelled (tests.test_task_lifecycle.TestTaskLifecycle.test_only_target_queued_future_is_cancelled) ... ok
+test_pause_cancels_queued_job_and_preserves_other_worker_futures (tests.test_task_lifecycle.TestTaskLifecycle.test_pause_cancels_queued_job_and_preserves_other_worker_futures) ... ok
+test_repeated_actions_are_idempotent (tests.test_task_lifecycle.TestTaskLifecycle.test_repeated_actions_are_idempotent) ... ok
+test_running_delete_stops_worker_without_overwriting_pause_with_failure (tests.test_task_lifecycle.TestTaskLifecycle.test_running_delete_stops_worker_without_overwriting_pause_with_failure) ... ok
+test_conflict_cas_priority_scope (tests.test_workbench.TestWorkbench.test_conflict_cas_priority_scope) ... ok
+test_cover_exact_text_preserves_logo_pixels (tests.test_workbench.TestWorkbench.test_cover_exact_text_preserves_logo_pixels) ... ok
+test_crop_redaction_preserves_original (tests.test_workbench.TestWorkbench.test_crop_redaction_preserves_original) ... ok
+test_diagnostics_do_not_include_secret_or_body (tests.test_workbench.TestWorkbench.test_diagnostics_do_not_include_secret_or_body) ... ok
+test_git_preview_stale_guard_and_local_commit (tests.test_workbench.TestWorkbench.test_git_preview_stale_guard_and_local_commit) ... ok
+test_migration_backup_and_future_version (tests.test_workbench.TestWorkbench.test_migration_backup_and_future_version) ... ok
+test_reminders_due_and_dismissed (tests.test_workbench.TestWorkbench.test_reminders_due_and_dismissed) ... ok
+test_rich_inline_and_inert_html (tests.test_workbench.TestWorkbench.test_rich_inline_and_inert_html) ... ok
+test_rule_keys_cannot_execute_code (tests.test_workbench.TestWorkbench.test_rule_keys_cannot_execute_code) ... ok
+test_external_modification_blocks_reexport (tests.test_workflow.TestExportConflict.test_external_modification_blocks_reexport) ... ok
+test_import_and_finalize_reaches_ready (tests.test_workflow.TestReadinessLoop.test_import_and_finalize_reaches_ready) ... ok
+test_import_rejects_non_image (tests.test_workflow.TestReadinessLoop.test_import_rejects_non_image) ... ok
+test_partial_import_stays_pending (tests.test_workflow.TestReadinessLoop.test_partial_import_stays_pending) ... ok
+test_full_offline_pipeline (tests.test_workflow.TestWorkflowE2E.test_full_offline_pipeline) ... ok
+test_gate_pauses_without_auto_approve (tests.test_workflow.TestWorkflowE2E.test_gate_pauses_without_auto_approve) ... ok
+test_local_exec_requires_flag (tests.test_workflow.TestWorkflowE2E.test_local_exec_requires_flag) ... ok
+test_rejection_fails_job (tests.test_workflow.TestWorkflowE2E.test_rejection_fails_job) ... ok
+test_step_reuse_on_resume (tests.test_workflow.TestWorkflowE2E.test_step_reuse_on_resume) ... ok
+test_auto_does_not_approve_new_host_code (tests.test_automation.TestPreparation.test_auto_does_not_approve_new_host_code) ... ok
+test_auto_prepares_once_and_requires_final_human_review (tests.test_automation.TestPreparation.test_auto_prepares_once_and_requires_final_human_review) ... ok
+test_docker_auto_inputs_are_bound_to_the_isolated_execution_manifest (tests.test_automation.TestPreparation.test_docker_auto_inputs_are_bound_to_the_isolated_execution_manifest) ... ok
+test_invalid_image_plan_cache_can_be_retried (tests.test_automation.TestPreparation.test_invalid_image_plan_cache_can_be_retried) ... ok
+test_one_click_creation_analyzes_history_and_freezes_mode (tests.test_automation.TestPreparation.test_one_click_creation_analyzes_history_and_freezes_mode) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 612.919s
+
+OK

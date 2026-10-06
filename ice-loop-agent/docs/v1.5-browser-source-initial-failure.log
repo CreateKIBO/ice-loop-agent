@@ -1,0 +1,9 @@
+Error: Browser acceptance timeout
+    at waitFor (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser-smoke.cjs:4:169)
+    at async Object.run (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser-smoke.cjs:50:65)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:410:43) Error occurred in handler for 'ice:browser-show': Error: 网页区域超出窗口
+    at bounds (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser.cjs:14:42)
+    at show (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser.cjs:78:21)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118948)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\browser-1791126447931

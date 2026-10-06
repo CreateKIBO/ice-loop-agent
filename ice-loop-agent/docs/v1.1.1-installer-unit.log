@@ -1,0 +1,66 @@
+{
+  "area": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\installer-1790955291463",
+  "graceful": {
+    "exit_code": 0,
+    "session": 1,
+    "discovered": [
+      16560,
+      27732,
+      47560,
+      48284,
+      52532,
+      52932
+    ],
+    "close_requested": [
+      16560,
+      27732,
+      47560,
+      48284,
+      52532,
+      52932
+    ],
+    "force_stopped": [],
+    "window_classes": {
+      "48284": "Chrome_WidgetWin_1;Chrome_WidgetWin_0;Base_PowerMessageWindow;IME;"
+    },
+    "remaining": [],
+    "failures": []
+  },
+  "forced": {
+    "exit_code": 0,
+    "session": 1,
+    "discovered": [
+      17420,
+      24320,
+      30000,
+      37472,
+      50712,
+      50740
+    ],
+    "close_requested": [
+      17420,
+      24320,
+      30000,
+      37472,
+      50712,
+      50740
+    ],
+    "force_stopped": [
+      17420
+    ],
+    "window_classes": {
+      "17420": "Chrome_WidgetWin_1;Chrome_WidgetWin_0;Base_PowerMessageWindow;IME;",
+      "24320": "",
+      "30000": "Chrome_WidgetWin_0;IME;",
+      "37472": "",
+      "50712": "",
+      "50740": ""
+    },
+    "remaining": [],
+    "failures": []
+  },
+  "unrelated_processes_retained": true,
+  "workspace_bytes_retained": true,
+  "restore_idempotent": true,
+  "restore_conflict_preserves_data": true
+}

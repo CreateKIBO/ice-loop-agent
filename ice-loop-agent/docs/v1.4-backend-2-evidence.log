@@ -1,0 +1,14 @@
+Archived evidence from existing tool output. This is not a new test run and was not originally redirected to a log file.
+Working directory: G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent
+Command: .\.venv\Scripts\python.exe -m unittest tests.test_creative_chat.CreativeChatTests.test_retry_protects_changed_source_and_explicit_current_choice_can_continue tests.test_creative_chat.CreativeChatTests.test_v13_upgrade_backups_database_and_preserves_conversations_and_drafts -v
+Exec session: 88813
+Observed process exit code: 0
+
+Verbatim observed test results:
+test_retry_protects_changed_source_and_explicit_current_choice_can_continue (tests.test_creative_chat.CreativeChatTests.test_retry_protects_changed_source_and_explicit_current_choice_can_continue) ... ok
+test_v13_upgrade_backups_database_and_preserves_conversations_and_drafts (tests.test_creative_chat.CreativeChatTests.test_v13_upgrade_backups_database_and_preserves_conversations_and_drafts) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 22.051s
+
+OK

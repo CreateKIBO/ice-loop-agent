@@ -1,0 +1,38 @@
+Archived evidence from existing tool output. This is not a new test run and was not originally redirected to a log file.
+Working directory: G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent
+Command: .\.venv\Scripts\python.exe -m unittest tests.test_creative_chat -v
+Exec session: 38029
+Observed process exit code: 0
+The module contained 24 tests when this process loaded it. Two later tests were run separately (see v1.4-backend-2-evidence.log).
+
+Observed passing test names, in execution order:
+test_account_isolation_reject_feedback_and_immutable_manual_candidate
+test_article_entry_reuses_active_target_without_merging_titles_or_archives
+test_assets_handoff_keeps_adopted_body_prompts_and_is_idempotent
+test_clarification_failed_retry_restores_answers_and_documents_after_reopen
+test_discussion_persists_without_article_and_restart
+test_draft_conflict_before_submit_and_before_approval
+test_draft_generation_saves_only_on_confirmation_and_approval_updates_one_draft
+test_existing_job_adoption_updates_confirmed_title_and_readonly_job_clones
+test_fork_clarification_remaps_candidate_and_answers_only_new_session
+test_fork_keeps_original_transcript_and_is_scoped
+test_fork_saved_candidate_uses_saved_base_and_does_not_duplicate_draft
+test_freeform_answers_keep_pending_questions_and_mode_in_context
+test_invalid_question_structure_fails_without_candidate_or_draft
+test_nested_library_recent_five_and_all_titles
+test_old_pending_candidate_cannot_create_duplicate_draft_after_adoption
+test_progress_records_real_wait_receive_validate_and_stop
+test_questions_pause_without_candidate_and_answers_resume_same_session
+test_real_router_receives_multiturn_history_and_untrusted_documents
+test_repeated_turns_keep_one_session_and_explicit_same_title_sessions_survive
+test_saved_candidate_continues_from_current_draft_and_external_edits_are_protected
+test_saving_history_candidate_keeps_original_and_drafts_are_account_scoped
+test_second_clarification_keeps_first_answers_in_transcript_and_snapshot
+test_stop_discards_late_reply_and_can_continue
+test_submit_and_approve_are_idempotent_and_source_untouched
+
+Verbatim completion summary:
+----------------------------------------------------------------------
+Ran 24 tests in 186.287s
+
+OK

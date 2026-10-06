@@ -1,0 +1,147 @@
+{
+  "version": "1.1.1",
+  "recorded_at": "2026-10-03T00:04:37.454479+08:00",
+  "scope": "Windows安装器自动关闭Agent、保护安装目录内工作区与直接ZIP解压；文章引擎业务代码未修改",
+  "native_shutdown": {
+    "area": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\installer-1790955291463",
+    "graceful": {
+      "exit_code": 0,
+      "session": 1,
+      "discovered": [
+        16560,
+        27732,
+        47560,
+        48284,
+        52532,
+        52932
+      ],
+      "close_requested": [
+        16560,
+        27732,
+        47560,
+        48284,
+        52532,
+        52932
+      ],
+      "force_stopped": [],
+      "window_classes": {
+        "48284": "Chrome_WidgetWin_1;Chrome_WidgetWin_0;Base_PowerMessageWindow;IME;"
+      },
+      "remaining": [],
+      "failures": []
+    },
+    "forced": {
+      "exit_code": 0,
+      "session": 1,
+      "discovered": [
+        17420,
+        24320,
+        30000,
+        37472,
+        50712,
+        50740
+      ],
+      "close_requested": [
+        17420,
+        24320,
+        30000,
+        37472,
+        50712,
+        50740
+      ],
+      "force_stopped": [
+        17420
+      ],
+      "window_classes": {
+        "17420": "Chrome_WidgetWin_1;Chrome_WidgetWin_0;Base_PowerMessageWindow;IME;",
+        "24320": "",
+        "30000": "Chrome_WidgetWin_0;IME;",
+        "37472": "",
+        "50712": "",
+        "50740": ""
+      },
+      "remaining": [],
+      "failures": []
+    },
+    "unrelated_processes_retained": true,
+    "workspace_bytes_retained": true,
+    "restore_idempotent": true,
+    "restore_conflict_preserves_data": true
+  },
+  "real_nsis_installation": {
+    "area": "E:\\ICE-Installer-Validation\\run-1790956857439",
+    "silent_old_install": true,
+    "running_upgrade": true,
+    "old_main_stopped": true,
+    "workspace_original_path": "E:\\ICE-Installer-Validation\\run-1790956857439\\program\\ICE-Workspace-upgrade-test",
+    "workspace_bytes_retained": true,
+    "unrelated_processes_retained": true,
+    "restarted_with_original_database": true,
+    "bootstrap_with_original_database": true,
+    "paid_model_calls": false,
+    "installed_asar_matches_release": true,
+    "test_identity": "7419f5e9-6d04-4ef4-9c1b-d2e2c3de1581",
+    "actual_user_installation_untouched": true,
+    "test_uninstall_completed": true,
+    "fresh_install_without_workspace": true,
+    "tested_in_separate_product_guid": true,
+    "baseline": "旧关闭/卸载模板加ZIP载荷，不是用户实际旧安装原件",
+    "test_installer_changes": "仅测试注册身份、缓存名、关闭快捷方式/自动运行；使用相同安装钩子和相同应用载荷"
+  },
+  "node_tests": {
+    "passed": 29,
+    "log": "v1.1.1-node.log"
+  },
+  "package": {
+    "version": "1.1.1",
+    "zip_matches_unpacked": true,
+    "setup_payload_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.1.1-Setup.exe",
+        "bytes": 183021248,
+        "sha256": "08ddb26fff9487eb577832b968728ca83a73e34bfe4f62dd6e9c7b2f18660ff2"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.1.1-x64.zip",
+        "bytes": 182589025,
+        "sha256": "3dfbf326d1fa974520be8150cc027b0e7585332417f5529bdf70a2af5cd775cb"
+      }
+    ],
+    "source_audit": {
+      "version": "1.1.1",
+      "asar_sha256": "85a514e8db2b542d2b5cb85b692f45739abb857fc58b225d4063c8746b7ad947",
+      "renderer_matches_source": true
+    },
+    "installer_source_sha256": {
+      "stop-agent.ps1": "ab0e8c1584fb2345d3fc224c43188138d34702f6b745bbc958c47409ec2795f0",
+      "installer.nsh": "991e11b64975d78708d01be4939ff7a9646f4941679a8c98f74fb5a67376d9f7",
+      "preserve-workspaces.ps1": "9a6cfcab0abed72abf22ecc0c6094de17cad7e64080b34e5f87016d31631257b"
+    }
+  },
+  "authenticode": [
+    {
+      "file": "release/ICE-Loop-Studio-1.1.1-Setup.exe",
+      "status": "NotSigned"
+    },
+    {
+      "file": "release/win-unpacked/ICE Loop Studio.exe",
+      "status": "NotSigned"
+    }
+  ],
+  "previous_acceptance": "v1.1-验收结果.json；此次没有重跑Python全量/全部外部网站操作",
+  "failure_findings": [
+    "NSIS宏的__FILEDIR__在调用处改变，定义固定源目录后编译通过",
+    "Chromium /prefetch参数并非文件路径；读取UTF-8路径明确指定编码",
+    "进程退出时ExecutablePath短暂为空，已确认身份持续以PID和创建时间绑定",
+    "早期静默安装超过180秒；修正测试器不符合NSIS规范的/D=路径引号，最终使用ZIP直接解压，不将超时直接归因于用户安装问题"
+  ],
+  "boundaries": {
+    "actual_user_installation": "没有执行用户正式安装器；旧E盘安装、工作区、模型Key、全局工作区选择和实际注册表项保持",
+    "administrator_or_other_windows_session": "普通当前会话通过；未在另一Windows用户/管理员进程环境实际运行",
+    "paid_services": "没有登录或调用付费模型/生图/微信发布",
+    "unsaved_edits": "安装前保存正在编辑内容；结束卡住进程不会恢复尚未保存的表单"
+  }
+}

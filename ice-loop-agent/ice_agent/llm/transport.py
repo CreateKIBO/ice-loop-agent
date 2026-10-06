@@ -85,6 +85,7 @@ class ChatResult:
     raw_model: str = ""
     streamed: bool = False
     notes: list[str] = field(default_factory=list)
+    invocation_id: str = ""  # Assigned locally by RoleRouter, never by a provider.
 
     @property
     def usage_known(self) -> bool:

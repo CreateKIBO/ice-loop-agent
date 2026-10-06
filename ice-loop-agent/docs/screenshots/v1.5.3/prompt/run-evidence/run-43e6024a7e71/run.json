@@ -1,0 +1,30 @@
+{
+  "run_id": "run-43e6024a7e71",
+  "code_artifact_id": "src-1200091ef3a8",
+  "code_sha256": "7e13804c717e2ddf63ac0b7e8704cd5746675c386555bf90aaacd3d07153ada1",
+  "execution_mode": "local_reviewed",
+  "argv": [
+    "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Scripts\\python.exe",
+    "-B",
+    "for_demo.py"
+  ],
+  "runtime": {
+    "python": "3.12.13",
+    "os": "nt",
+    "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-4fbe69a7e0f1",
+    "container_image": "",
+    "ordering_semantics": "stdin/stdout/stderr separately recorded; no inferred interleaving",
+    "source_path": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\run-evidence\\run-43e6024a7e71\\for_demo.py",
+    "process_cleanup": "owned_process_tree_reaped",
+    "output_limited": "false",
+    "workspace_cleanup": "removed_owned_workspace"
+  },
+  "stdin_events": [],
+  "stdout": "第 1 次循环\r\n第 2 次循环\r\n第 3 次循环\r\n第 4 次循环\r\n第 5 次循环\r\n1 到 5 的和是 15\r\n",
+  "stderr": "",
+  "exit_code": 0,
+  "timed_out": false,
+  "started_at": "2026-10-05T23:16:47+08:00",
+  "duration_ms": 186,
+  "output_sha256": "e3f9a6802df76387070a53a9199d6a28180f8abec5d6d56b9e30d80cdf960048"
+}

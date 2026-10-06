@@ -6,22 +6,47 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>ICE Loop Studio</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="visual.css">
+  <link rel="stylesheet" href="tools.css">
+  <link rel="stylesheet" href="browser.css">
+  <link rel="stylesheet" href="vendor/shoelace-light.css">
+  <link rel="stylesheet" href="creative-chat.css">
+  <link rel="stylesheet" href="lifecycle.css">
+  <link rel="stylesheet" href="navigation-ux.css">
+  <link rel="stylesheet" href="writing-ux.css">
+  <link rel="stylesheet" href="studio-experience.css">
+  <link rel="stylesheet" href="studio-controls.css">
+  <link rel="stylesheet" href="image-viewer.css">
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
       <a class="wordmark" href="#studio" aria-label="ICE Loop 首页"><span class="brand-symbol">i<span></span></span><div><strong>ICE Loop</strong><small>CONTENT STUDIO</small></div></a>
-      <button class="new-button" data-action="new"><span>＋</span> 新建文章 <kbd>N</kbd></button>
+      <button class="new-button" data-chat-action="new" title="新建对话"><i data-lucide="plus"></i><span class="nav-text">新建对话</span><kbd>N</kbd></button>
+      <button class="sidebar-search" data-command-open title="搜索当前公众号的内容 · Ctrl K"><i data-lucide="search"></i><span class="nav-text">搜索工作空间</span><kbd>Ctrl K</kbd></button>
+      <div class="sidebar-scroll">
       <div class="nav-label">工作空间</div>
       <nav aria-label="主要导航">
-        <button class="nav-item active" data-view="studio"><span class="nav-icon">◫</span>创作工作台<span class="nav-count" id="job-count">0</span></button>
-        <button class="nav-item" data-view="library"><span class="nav-icon">▤</span>文章存稿</button>
-        <button class="nav-item" data-view="history"><span class="nav-icon">◷</span>发布记录与历史</button>
-        <button class="nav-item" data-view="drafts"><span class="nav-icon">▧</span>草稿箱</button>
-        <button class="nav-item" data-view="resources"><span class="nav-icon">▦</span>配图资源箱</button>
-        <button class="nav-item" data-view="accounts"><span class="nav-icon">◎</span>公众号与品牌</button>
-        <button class="nav-item" data-view="models"><span class="nav-icon">⌘</span>模型与设置</button>
+        <button class="nav-item active" data-view="chat" title="创作对话"><span class="nav-icon"><i data-lucide="message-square"></i></span><span class="nav-text">创作对话</span></button>
+        <button class="nav-item" data-view="editorial" title="文章审批"><span class="nav-icon"><i data-lucide="check-check"></i></span><span class="nav-text">文章审批</span><span class="nav-count" id="chat-review-count">0</span></button>
+        <button class="nav-item" data-view="studio" title="制作任务"><span class="nav-icon"><i data-lucide="list-todo"></i></span><span class="nav-text">制作任务</span><span class="nav-count" id="job-count">0</span></button>
+        <div class="nav-label nav-group-label">内容与素材</div>
+        <button class="nav-item" data-view="drafts" title="草稿箱"><span class="nav-icon"><i data-lucide="file-pen-line"></i></span><span class="nav-text">草稿箱</span></button>
+        <button class="nav-item" data-view="library" title="文章存稿"><span class="nav-icon"><i data-lucide="book-open"></i></span><span class="nav-text">文章存稿</span></button>
+        <button class="nav-item" data-view="resources" title="配图资源箱"><span class="nav-icon"><i data-lucide="image"></i></span><span class="nav-text">配图资源箱</span></button>
+        <button class="nav-item" data-view="browser" title="网页工作台"><span class="nav-icon"><i data-lucide="globe"></i></span><span class="nav-text">网页工作台</span></button>
+        <div class="nav-label nav-group-label">工作空间设置</div>
+        <button class="nav-item" data-view="accounts" title="公众号与品牌"><span class="nav-icon"><i data-lucide="circle-user-round"></i></span><span class="nav-text">公众号与品牌</span></button>
+        <button class="nav-item" data-view="models" title="模型与设置"><span class="nav-icon"><i data-lucide="settings"></i></span><span class="nav-text">模型与设置</span></button>
+        <details class="sidebar-tools"><summary>更多工具</summary>
+          <button class="nav-item" data-view="history"><span class="nav-icon">◷</span>发布记录与历史</button>
+          <button class="nav-item" data-view="outlines"><span class="nav-icon">☷</span>栏目选题大纲</button>
+          <button class="nav-item" data-view="backups"><span class="nav-icon">↗</span>备份与恢复</button>
+          <button class="nav-item" data-view="tools"><span class="nav-icon">⊞</span>规则与工具</button>
+        </details>
       </nav>
+      <details class="sidebar-draft-section sidebar-section" open><summary>最近草稿 <button class="sidebar-all" data-view="drafts">全部</button></summary><div id="sidebar-drafts"></div></details>
+      <details class="recent-conversations sidebar-section" open><summary>最近会话</summary><div id="recent-conversations"></div></details>
       <div class="sidebar-divider"></div>
       <div class="nav-label" id="series-label">栏目 <span>4 条内容线</span></div>
       <div class="series-nav">
@@ -30,10 +55,11 @@
         <button data-series="AI"><span class="series-square ai">AI</span>AI 实作实验室</button>
         <button data-series="WK"><span class="series-square wk">WK</span>工具周刊</button>
       </div>
-      <div class="sidebar-bottom"><div class="local-status"><i id="engine-indicator"></i><span id="engine-status">正在连接本地引擎</span></div><p>可执行的想象。</p><small>CONTENT STUDIO <span>v0.4</span></small></div>
+      </div>
+      <div class="sidebar-bottom"><div class="local-status"><i id="engine-indicator"></i><span id="engine-status">正在连接本地引擎</span></div><p>可执行的想象。</p><small>CONTENT STUDIO <span>v1.5.3</span></small></div>
     </aside>
     <div class="main-shell">
-      <header class="topbar"><div class="breadcrumbs">工作空间 <span>/</span> <strong id="page-name">创作工作台</strong></div><div class="topbar-right"><select id="account-switch" aria-label="切换公众号"></select><button class="button secondary small" data-action="capture-window" title="将当前程序窗口保存为 PNG">截图当前窗口</button><button class="icon-button" data-action="refresh" title="刷新任务" aria-label="刷新任务">↻</button><div class="avatar">冰</div></div></header>
+      <header class="topbar"><div class="topbar-left"><button class="chat-icon-button" data-sidebar-toggle title="折叠或展开侧栏" aria-label="折叠或展开侧栏" aria-expanded="true"><i data-lucide="panel-left-close"></i></button><div class="breadcrumbs">工作空间 <span>/</span> <strong id="page-name">创作工作台</strong></div></div><div class="topbar-right"><select id="account-switch" aria-label="切换公众号"></select><button class="button secondary small" data-action="capture-window" title="将当前程序窗口保存为 PNG">截图当前窗口</button><button class="chat-icon-button" data-studio-preferences title="显示偏好" aria-label="显示偏好"><i data-lucide="sliders-horizontal"></i></button><button class="chat-icon-button" data-action="refresh" title="刷新任务" aria-label="刷新任务"><i data-lucide="rotate-ccw"></i></button></div></header>
       <main id="workspace" tabindex="-1"><div class="loading-view"><span class="spinner"></span><h2>准备你的工作空间</h2><p>正在连接文章引擎…</p></div></main>
     </div>
   </div>
@@ -41,9 +67,12 @@
   <dialog id="new-dialog" class="modal"><form id="new-form">
     <div class="modal-head"><div><span class="eyebrow">START SOMETHING</span><h2>把想法写成一篇文章</h2></div><button type="button" class="icon-button" data-action="close-new" aria-label="关闭">×</button></div>
     <div class="planning-steps"><span class="active">01 分析历史</span><span>02 修改并确认</span><span>03 开始写作</span></div>
+    <label>本期题目来源<select name="title_mode" id="title-mode"><option value="ai">AI 分析历史拟题</option><option value="outline">从栏目大纲选择（跳过 AI 拟题）</option><option value="manual">自己拟题（跳过 AI 拟题）</option></select></label>
     <div class="form-row"><label>所属栏目<select name="series"><option value="PY">PY · Python 从 0 到 1</option><option value="JV">JV · Java 打怪升级</option><option value="AI">AI · AI 实作实验室</option><option value="WK">WK · 工具周刊</option></select></label><label>本期期号<input name="episode" type="number" value="1" min="1" max="9999" required></label></div>
     <div class="planning-context"><p id="planning-context" role="status">正在读取当前栏目的发布进度…</p><div class="button-row"><button type="button" class="button text-button small" data-plan-action="reload">恢复自动期号</button><button type="button" class="button text-button small" data-plan-action="history">管理发布记录 ↗</button></div></div>
-    <section class="history-assist" aria-label="历史选题助手"><div class="brief-assist-top"><div><strong>让下一篇接住上一篇</strong><p>结合历史标题、正文与下期预告，给你多个可修改的候选。</p></div><button type="button" id="planning-propose" class="button primary" data-plan-action="propose">分析历史并拟题 ↗</button></div><p id="planning-status" class="brief-status" role="status" aria-live="polite">可以直接拟题，也可以先在下方写一个想法。</p><div id="planning-candidates"></div></section>
+    <section class="history-assist" aria-label="历史选题助手"><div class="brief-assist-top"><div><strong>让下一篇接住上一篇</strong><p>读取本栏目前五篇正文和全部已有标题，给你可修改的候选；栏目可持续更新。</p></div><button type="button" id="planning-propose" class="button primary" data-plan-action="propose">分析历史并拟题 ↗</button></div><p id="planning-status" class="brief-status" role="status" aria-live="polite">可以直接拟题，也可以先在下方写一个想法。</p><div id="planning-candidates"></div></section>
+    <section id="outline-choice" class="brief-assist" hidden><strong>选用已安排的期题</strong><p id="outline-match-status" class="muted" role="status"></p><label>本栏目的预设题目<select id="outline-topic-choice"><option value="">请选择期题</option></select></label><div class="button-row"><button type="button" class="button secondary" id="outline-adopt">采用对应期题</button><button type="button" class="button text-button" data-outline-action="manage">管理大纲 / 导入文档 ↗</button></div></section>
+    <p id="title-selection-status" class="brief-status" role="status" hidden></p>
     <label>本期标题 / 初始想法（可编辑）<input name="topic" required maxlength="30" placeholder="留空直接让 AI 拟题，或写下你想讲的内容"></label>
     <label>本篇内容角度（可编辑）<input name="content_angle" maxlength="300" placeholder="采用候选后带入，也可以自己补充要讲的内容"></label>
     <section class="brief-assist" aria-label="AI 表单助手">
@@ -54,16 +83,37 @@
     <label>读者能带走什么<input name="core_benefit" maxlength="1000" placeholder="一句话说明这篇文章要解决的问题"></label>
     <div class="form-row"><label>上一篇练习<input name="exercise_to_answer" maxlength="1000" placeholder="供本期参考答案衔接"></label><label>下一期预告<input name="next_episode_plan" maxlength="1000" placeholder="供文末预告使用"></label></div>
     <label>参考素材<textarea name="materials_text" maxlength="12000" rows="3" placeholder="粘贴事实素材或官方文档摘要。敏感事实在核验后才能用于发布。"></textarea></label>
-    <div class="form-note"><span>◇</span>确认后按当前标题和需求写作，骨架、最终标题与配图仍会等待你审阅。</div>
+    <label>工作流<select name="production_mode"><option value="review_each">逐步审阅 · 每个编辑决策等我确认</option><option value="auto_prepare">自动准备 · 自动选定，完成后统一审阅</option></select></label>
+    <p class="muted">自动准备会分析历史、写稿、策划生图提示词并归档可用运行截图。使用Docker隔离模式可自动运行并准备示例输入；本机执行新代码前仍需审阅；TapNow生图和公众号发布由你完成。</p>
+    <div class="form-note"><span>◇</span><span id="title-mode-note">确认后按当前标题和需求写作，骨架、最终标题与配图仍会等待你审阅。</span></div>
     <div class="modal-actions"><button type="button" class="button secondary" data-action="close-new">取消</button><button type="submit" class="button primary">确认需求并开始写作 <span>↗</span></button></div>
   </form></dialog>
   <dialog id="edit-approval-dialog" class="modal wide-modal"><form id="approval-edit-form"><div class="modal-head"><div><span class="eyebrow">YOUR EDITORIAL DECISION</span><h2>编辑审核候选</h2></div><button type="button" class="icon-button" data-action="close-approval" aria-label="关闭">×</button></div><p class="muted">修改后会保存新版本，批准时以这份内容为准。</p><textarea id="approval-json" class="code-editor" rows="18" spellcheck="false" aria-label="审核候选 JSON"></textarea><div class="modal-actions"><button type="button" class="button secondary" data-action="close-approval">取消</button><button type="submit" class="button primary">保存候选</button></div></form></dialog>
   <dialog id="verify-dialog" class="modal"><form id="verify-form"><div class="modal-head"><div><span class="eyebrow">SOURCE MATTERS</span><h2>核对这条事实</h2></div><button type="button" class="icon-button" data-action="close-verify" aria-label="关闭">×</button></div><p id="verify-claim" class="claim-quote"></p><input type="hidden" name="claim_id"><label>官方来源链接<input name="url" type="url" placeholder="https://" required></label><label>你核对过的原文片段<textarea name="evidence" rows="5" minlength="10" required placeholder="填写支持此断言的原文。提交代表你已对照官方来源完成核验。"></textarea></label><div class="modal-actions"><button type="button" class="button secondary" data-action="close-verify">取消</button><button type="submit" class="button primary">记录已核验</button></div></form></dialog>
   <script src="markdown.js"></script>
+  <script src="vendor/lucide.js"></script>
+  <script src="vendor/components.js"></script>
+  <script src="vendor/motion.js"></script>
   <dialog id="resource-picker" class="modal"><form id="resource-pick-form"><div class="modal-head"><h2>选入文章图位</h2><button type="button" class="icon-button" data-pub-action="close-resource-picker" aria-label="关闭">×</button></div><label>文章任务<select name="job_id" required></select></label><label>配图位置<select name="figure_no" required></select></label><p id="resource-pick-status" class="muted" role="status">选择已经生成配图计划的文章。</p><div class="modal-actions"><button type="submit" class="button primary">选用并归档</button></div></form></dialog>
   <script src="brief.js"></script>
   <script src="publication.js"></script>
   <script src="planning.js"></script>
+  <script src="visual.js"></script>
   <script src="app.js"></script>
+  <script src="maintenance.js"></script>
+  <script src="supplements.js"></script>
+  <script src="outlines.js"></script>
+  <script src="execution.js"></script>
+  <script src="workbench.js"></script>
+  <script src="review-smoke.js"></script>
+  <script src="tools-smoke.js"></script>
+  <script src="browser.js"></script>
+  <script src="creative-chat.js"></script>
+  <script src="lifecycle.js"></script>
+  <script src="navigation-ux.js"></script>
+  <script src="writing-ux.js"></script>
+  <script src="studio-experience.js"></script>
+  <script src="studio-controls.js"></script>
+  <script src="image-viewer.js"></script>
 </body>
 </html>

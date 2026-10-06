@@ -1,0 +1,37 @@
+✔ fill blanks preserves supplied topic and user materials (0.6835ms)
+✔ replace existing requires explicit choice (0.1179ms)
+✔ late response preserves concurrent edits even in replace mode (0.1037ms)
+✔ touched fields are protected even when text was restored (0.09ms)
+✔ changing series or episode discards entire suggestion (0.6231ms)
+✔ unknown keys and blank suggestions never mutate the form (0.2118ms)
+✔ embedded sites are fixed HTTPS entry points (0.7258ms)
+✔ remote navigation cannot load local files or privileged app pages (0.2653ms)
+✔ site and publication cookies use distinct durable partitions (0.4979ms)
+✔ native view remains inside content area and below application controls (0.1778ms)
+✔ silent OS clipboard denial cannot report text copied (156.6221ms)
+✔ clipboard exceptions preserve complete rich manual fallback (155.2387ms)
+✔ text success requires matching readback with Windows newline normalization (0.7599ms)
+✔ rich success requires both HTML and plain text readback (0.471ms)
+✔ raw HTML and script inside code are escaped (1.0542ms)
+✔ untrusted links do not become navigable URLs (0.2457ms)
+✔ only managed image data can appear in preview (0.2078ms)
+✔ article headings and literal console output are preserved (0.1987ms)
+✔ history filter helpers load with the module (0.5684ms)
+✔ no filter shows every record with a plain total (1.8543ms)
+✔ series filter narrows list and shows shown/total count (0.3341ms)
+✔ unsorted filter selects records without a series (0.229ms)
+✔ empty filter result explains the series has no records yet (0.1439ms)
+✔ records keep editable fields after filtering (0.1303ms)
+✔ web capture blocks non-public destinations (0.8077ms)
+✔ cover uses complete reviewed cover prompt (0.5453ms)
+✔ real screenshot has no AI generation prompt (0.2311ms)
+✔ body image retains its own prompt (0.116ms)
+✔ resource search covers editable labels and analyzed content (0.3115ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 498.5852

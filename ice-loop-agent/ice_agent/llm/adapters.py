@@ -21,6 +21,7 @@ POLICIES = ("prefer_off", "prefer_on", "required_off", "required_on", "provider_
 
 class BaseModelAdapter:
     adapter_id = "base"
+    def default_extra_body(self):return {}
 
     def __init__(self, profile: ModelProfile, transport: OpenAIChatTransport | None = None):
         self.profile = profile
@@ -65,13 +66,13 @@ class BaseModelAdapter:
         return {}
 
     # ---------------------------------------------------------- 请求
-    def chat(self, messages: list[dict[str, str]], *,
+    def chat(self, messages: list[dict[str, Any]], *,
              thinking_policy: str = "provider_default",
              want_json: bool = False,
              stream: bool = False,
              on_delta=None, timeout: float = 120.0) -> ChatResult:
         notes = self.preflight(thinking_policy)
-        extra: dict[str, Any] = {}
+        extra: dict[str, Any] = self.default_extra_body()
         if self.thinking_capability() != 'unknown':
             extra.update(self.thinking_extra_body(thinking_policy))
         if want_json:
@@ -107,6 +108,13 @@ class DeepSeekAdapter(BaseModelAdapter):
     """DeepSeek 原厂；thinking 对象开关（官方文档快照）。"""
 
     adapter_id = "deepseek"
+
+    def chat(self, messages, **kwargs):
+        if self.profile.model_id in ('deepseek-v4-pro','deepseek-chat','deepseek-reasoner') and any(
+            isinstance(message.get('content'),list) and any(part.get('type') in ('image_url','file') for part in message['content'])
+            for message in messages):
+            raise CapabilityMismatch('DeepSeek图片输入请使用deepseek-flash；该模型不支持识图')
+        return super().chat(messages,**kwargs)
 
     def thinking_extra_body(self, thinking_policy: str) -> dict[str, Any]:
         if thinking_policy in ("required_off", "prefer_off"):
@@ -163,13 +171,23 @@ class MockAdapter(BaseModelAdapter):
         # context 由调用方放在最后一条消息的 JSON 前缀里
         context = _extract_context(messages)
         node = context.get("node", "generic")
+        if self.profile.profile_id == 'offline-chat-fixture' and node == 'creative_chat':
+            context['fixture_clarification'] = '请先问清楚资料' in messages[-1]['content']
         if want_json or context.get("structured"):
             data = self.mockgen.generate_structured(node, context)
             content = json.dumps(data, ensure_ascii=False, indent=2)
         else:
             content = self.mockgen.generate_text(node, context)
         if stream and on_delta:
+            # A deliberately named isolated fixture exercises real UI waiting,
+            # cancellation and motion; normal mock and production routes stay fast.
+            fixture_delay = self.profile.profile_id == 'offline-chat-fixture' and node == 'creative_chat'
+            if fixture_delay:
+                import time
+                time.sleep(.7)
             for i in range(0, len(content), 48):
+                if fixture_delay:
+                    time.sleep(.6)
                 on_delta(content[i:i + 48])
         return ChatResult(
             content=content, finish_reason="stop",
@@ -188,7 +206,19 @@ def _extract_context(messages: list[dict[str, str]]) -> dict[str, Any]:
         return {}
 
 
+class MiniMaxAdapter(BaseModelAdapter):
+    adapter_id='minimax'
+    def default_extra_body(self):return {'reasoning_split':True}
+    def thinking_extra_body(self,thinking_policy):
+        extra={}
+        if thinking_policy in ('prefer_off','required_off'):
+            extra['thinking']={'type':'disabled'}
+        elif thinking_policy in ('prefer_on','required_on'):
+            extra['thinking']={'type':'adaptive'}
+        return extra
+
 ADAPTERS: dict[str, type[BaseModelAdapter]] = {
+    'minimax':MiniMaxAdapter,
     "qwen": QwenAdapter,
     "deepseek": DeepSeekAdapter,
     "kimi": KimiAdapter,
