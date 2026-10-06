@@ -1,0 +1,6 @@
+G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+----------------------------------------------------------------------
+Ran 253 tests in 488.982s
+
+OK

@@ -1,0 +1,421 @@
+{
+  "version": "1.5.2",
+  "recorded_at": "2026-10-05T21:17:02.601085+08:00",
+  "python": {
+    "passed": 35,
+    "log": "v1.5.2-python-final.log"
+  },
+  "budget_final_recheck": {
+    "passed": 5,
+    "log": "v1.5.2-budget-final.log"
+  },
+  "node": {
+    "passed": 62,
+    "log": "v1.5.2-node-tests.log"
+  },
+  "native": {
+    "prompt-packaged": {
+      "passed": 29,
+      "log": "v1.5.2-prompt-packaged.log",
+      "result": {
+        "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791205840158",
+        "automaticScreenshots": true,
+        "finalReviewPending": true,
+        "cachedPromptCalls": true,
+        "editorVisible": true,
+        "coverUsesEditTemplate": true,
+        "referenceUploadOrderVisible": true,
+        "approvedReferencePreviews": true,
+        "manualPromptSaved": true,
+        "screenshotPreserved": true,
+        "styleImport": true,
+        "styleImportIdempotent": true,
+        "referencesVisible": true,
+        "deepseekOption": true,
+        "budgetAtPageTop": true,
+        "defaultBudgetSave": true,
+        "oldImageTaskIsZero": true,
+        "realOfflineBudgetReservation": true,
+        "budgetErrorRecoverable": true,
+        "exhaustionAddsNoInvocation": true,
+        "increasedBudgetResumes": true,
+        "importedDraftProtected": true,
+        "busyFeedback": true,
+        "busyFeedbackClears": true,
+        "motionPressVisible": true,
+        "explicitMotionOverridesSystem": true,
+        "motionOffStops": true,
+        "automaticForm": true,
+        "checkboxAndDialogGeometry": true,
+        "compactDialogFits": true
+      }
+    },
+    "chat-packaged": {
+      "passed": 85,
+      "log": "v1.5.2-chat-packaged.log",
+      "result": {
+        "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\chat-desktop-1791205996270",
+        "components": true,
+        "discussionNoArticle": true,
+        "history": true,
+        "sameConversation": true,
+        "uniqueRecentEntries": true,
+        "explicitBranch": true,
+        "branchCancel": true,
+        "branchConfirmed": true,
+        "draftOption": true,
+        "motionLibraryActive": true,
+        "reducedMotion": true,
+        "journeyCandidate": true,
+        "saveChoice": true,
+        "progress": true,
+        "deferSave": true,
+        "candidate": true,
+        "diff": true,
+        "unsavedProtected": true,
+        "journeyPending": true,
+        "pending": true,
+        "reviewUnsavedProtected": true,
+        "approvalEdited": true,
+        "draftEntry": true,
+        "reuseArticle": true,
+        "sharedBody": true,
+        "journeyAccepted": true,
+        "prompts": true,
+        "compact": true,
+        "isolation": true,
+        "persisted": true,
+        "newContextReset": true,
+        "saveDraft": true,
+        "journeySaved": true,
+        "saveIdempotent": true,
+        "draftSidebar": true,
+        "savedDraftContinues": true,
+        "clarificationFirst": true,
+        "clarificationReply": true,
+        "libraryEntryStable": true,
+        "archiveDirtyNotice": true,
+        "archiveCancelled": true,
+        "archiveConversation": true,
+        "restoreConversation": true,
+        "deleteConversation": true,
+        "deleteKeepsSavedDraft": true,
+        "restoreDeletedConversation": true,
+        "fastCompletionUnlocks": true,
+        "archiveTask": true,
+        "restoreTaskPaused": true,
+        "deleteTask": true,
+        "deleteTaskKeepsArticle": true,
+        "restoreDeletedTask": true,
+        "newConversationStartsDraft": true,
+        "inputRecovery": true,
+        "concurrentInputPreserved": true,
+        "submittedInputCleared": true,
+        "templatePreservesInput": true,
+        "referenceRemoval": true,
+        "messageReadingStatePreserved": true,
+        "historyReadingPreserved": true,
+        "returnToLatest": true,
+        "articleFocusMode": true,
+        "articleGuidance": true,
+        "readonlyRespected": true,
+        "commandKeyboard": true,
+        "commandSearchRecords": true,
+        "commandOpensDraft": true,
+        "commandQueuedReopen": true,
+        "commandCloseReopen": true,
+        "commandOpensConversation": true,
+        "commandOpensTask": true,
+        "commandAccountIsolation": true,
+        "inputAcrossConversations": true,
+        "inputAcrossPages": true,
+        "accountSwitchUnloadsComposer": true,
+        "accountSwitchInputIsolated": true,
+        "accountSwitchInputRecovered": true,
+        "pollDefersUntilChatMounted": true,
+        "sidebarCollapse": true,
+        "sidebarRestore": true,
+        "motionPreferenceClears": true,
+        "densityPreference": true,
+        "pendingSendPreservesTyping": true,
+        "firstMessageHandoff": true,
+        "noUnexpectedRendererErrors": true
+      }
+    },
+    "browser-packaged": {
+      "passed": 32,
+      "log": "v1.5.2-browser-packaged.log",
+      "result": {
+        "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791206131955",
+        "packaged": true,
+        "fixtureRequests": [
+          {
+            "site": "tapnow",
+            "path": "/start"
+          },
+          {
+            "site": "tapnow",
+            "path": "/next"
+          },
+          {
+            "site": "tapnow",
+            "path": "/start"
+          },
+          {
+            "site": "tapnow",
+            "path": "/next"
+          },
+          {
+            "site": "tapnow",
+            "path": "/download"
+          },
+          {
+            "site": "tapnow",
+            "path": "/login"
+          }
+        ],
+        "tapnowRouteInside": true,
+        "liveTapNow": {
+          "url": "",
+          "title": "",
+          "error": "",
+          "dom": {
+            "readyState": "not_committed",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "Screenshot surface timeout"
+        },
+        "liveWeChat": {
+          "url": "",
+          "title": "",
+          "error": "",
+          "dom": {
+            "readyState": "not_committed",
+            "visibleCharacters": 0
+          },
+          "captured": false,
+          "captureError": "Screenshot surface timeout"
+        },
+        "isolatedPreferences": {
+          "nodeIntegration": false,
+          "sandbox": true,
+          "preload": null
+        },
+        "sessionOnDataDrive": true,
+        "remoteHasNoBridge": true,
+        "collapseEnlargesWebpage": true,
+        "collapsePreferenceSaved": true,
+        "expandedViewEnlargesWebpage": true,
+        "layoutKeepsRemotePage": true,
+        "expandedViewRestores": true,
+        "chromeControlsAccessible": true,
+        "collapsedBrowserLayout": {
+          "host": {
+            "x": 94.66667175292969,
+            "y": 244.0625,
+            "width": 1316,
+            "height": 638.6041870117188
+          },
+          "native": {
+            "x": 95,
+            "y": 244,
+            "width": 1316,
+            "height": 639
+          },
+          "expected": {
+            "x": 95,
+            "y": 244,
+            "width": 1316,
+            "height": 639
+          },
+          "size": [
+            1446,
+            903
+          ],
+          "aligned": true,
+          "inside": true,
+          "hostFullyVisible": true
+        },
+        "sidebarCollapsedBounds": true,
+        "expandedBrowserLayout": {
+          "host": {
+            "x": 266.66668701171875,
+            "y": 244.0625,
+            "width": 1144,
+            "height": 638.6041870117188
+          },
+          "native": {
+            "x": 267,
+            "y": 244,
+            "width": 1144,
+            "height": 639
+          },
+          "expected": {
+            "x": 267,
+            "y": 244,
+            "width": 1144,
+            "height": 639
+          },
+          "size": [
+            1446,
+            903
+          ],
+          "aligned": true,
+          "inside": true,
+          "hostFullyVisible": true
+        },
+        "sidebarExpandedBounds": true,
+        "remoteShortcutOrigin": {
+          "url": "https://browser-fixture.example/start",
+          "focused": true,
+          "element": "next"
+        },
+        "remoteShortcutOpensLocalPalette": true,
+        "browserRestoredAfterPalette": true,
+        "preferencesCoverRemoteView": true,
+        "browserRestoredAfterPreferences": true,
+        "siteCookiesIsolated": true,
+        "cookieRetainedAfterNavigation": true,
+        "back": true,
+        "forward": true,
+        "invalidURLRejected": true,
+        "downloadSaved": true,
+        "popupInside": true,
+        "popupNoBridge": true,
+        "hiddenOnLeave": true,
+        "scrollResetOnEnter": true,
+        "minimumBrowserLayout": {
+          "host": {
+            "x": 226.6666717529297,
+            "y": 232.0625,
+            "width": 764,
+            "height": 431.2708435058594
+          },
+          "native": {
+            "x": 227,
+            "y": 232,
+            "width": 764,
+            "height": 431
+          },
+          "expected": {
+            "x": 227,
+            "y": 232,
+            "width": 764,
+            "height": 431
+          },
+          "size": [
+            1026,
+            684
+          ],
+          "aligned": true,
+          "inside": true,
+          "hostFullyVisible": true
+        },
+        "minimumWindowActualSize": [
+          1041,
+          722
+        ],
+        "minimumWindowConstraint": [
+          1040,
+          720
+        ],
+        "minimumWindowSize": true,
+        "minimumHostFullyVisible": true,
+        "compactBounds": true,
+        "compactNoOverflow": true,
+        "minimumExpandedViewVisible": true,
+        "accountCookiesIsolated": true,
+        "persistentCookieAfterViewRecreate": true
+      }
+    }
+  },
+  "approved_assets": [
+    {
+      "file": "01-头像-信号蓝.png",
+      "bundled": "avatar.png",
+      "sha256": "32799f456b7e4ef96c052f3e9757323e4782b2f587c772311b29e2f291a2c0b4",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "02-横向字标-透明底.png",
+      "bundled": "wordmark.png",
+      "sha256": "ac787c7fab4c965d124f4138e429f986b52b0689a3cb3f256ffdb508c72be156",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "03-封面-Python-001.png",
+      "bundled": "cover-py.png",
+      "sha256": "46fab49da810128abf75084f730f6c235f015d19881301919b37f61ac169cd6b",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "04-封面-Java-001.png",
+      "bundled": "cover-jv.png",
+      "sha256": "3181bef0111560bbf72b67055e35c111fb947b5869a8212f03ed668aa294e276",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "05-封面-AI-001.png",
+      "bundled": "cover-ai.png",
+      "sha256": "8408f2a76b786f911a383cb81965574ea1b07562e7cb33d12f3e8eaa23fe1011",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "06-封面-工具周刊-001.png",
+      "bundled": "cover-wk.png",
+      "sha256": "b0636cad9421534e88082d65eead3711ac3cf6d0e916e778b511eb5dc0da6807",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    },
+    {
+      "file": "07-品牌视觉总览.png",
+      "bundled": "overview.png",
+      "sha256": "dc08720ba998e82cc56614bec614b916a8c015efb92cc7aeed50f53b1df09fb5",
+      "original_bytes_match": true,
+      "frozen_engine_bytes_match": true
+    }
+  ],
+  "package_audits": {
+    "source": {
+      "version": "1.5.2",
+      "asar_sha256": "dcfdd67115e910511483963c7b26b9412b515b8f07a3676ca1dd67826cc03536",
+      "renderer_matches_source": true,
+      "packaged_version_matches_source": true
+    },
+    "binary": {
+      "version": "1.5.2",
+      "zip_matches_unpacked": true,
+      "setup_payload_matches_unpacked": true,
+      "engine_matches_latest_build": true,
+      "user_data_included": false,
+      "files": [
+        {
+          "name": "ICE-Loop-Studio-1.5.2-Setup.exe",
+          "bytes": 189949261,
+          "sha256": "92fda621f69dc327f5b7b8d6a754baac3c8188ce56e0bd1d7978944e4849240d"
+        },
+        {
+          "name": "ICE-Loop-Studio-1.5.2-x64.zip",
+          "bytes": 189573683,
+          "sha256": "947e5437968e94abbe04fed2d46f931616ee33444ae93bd68e57f2e8075798a9"
+        }
+      ]
+    }
+  },
+  "boundaries": {
+    "isolated_data": true,
+    "offline_models": true,
+    "paid_models_called": false,
+    "real_cloud_generation_tested": false,
+    "published": false,
+    "actual_upgrade_installation_executed": false
+  },
+  "screenshots": "docs\\screenshots\\v1.5.2",
+  "note": "Budget-only final recheck repeats five of the 35 Python tests. Final native acceptance uses the distributable executable; preliminary source tests found the inherited checkbox minimum height, fixed before packing. Installer entries were streamed and checked by size and SHA256 without running installation."
+}

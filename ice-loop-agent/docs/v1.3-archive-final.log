@@ -1,0 +1,24 @@
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\electron-builder.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • building        target=zip arch=x64 file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.3.0-x64.zip
+{"version":"1.3.0","asar_sha256":"a2a702b28a3441050eae7c2da70ab2629db71ba0cc255409d569c9aad318eab6","renderer_matches_source":true}
+{
+  "version": "1.3.0",
+  "zip_matches_unpacked": true,
+  "setup_payload_matches_unpacked": true,
+  "engine_matches_latest_build": true,
+  "user_data_included": false,
+  "files": [
+    {
+      "name": "ICE-Loop-Studio-1.3.0-Setup.exe",
+      "bytes": 189888772,
+      "sha256": "f97f9264fb353978ab39abfc246469cd08f9e460f4c98322b46a333e34fd16a9"
+    },
+    {
+      "name": "ICE-Loop-Studio-1.3.0-x64.zip",
+      "bytes": 189513200,
+      "sha256": "c30ce2f6b06f049c2d7ec1ff4a4cf0f2a1e263866488fc5ebe4c7b300c972ad5"
+    }
+  ]
+}

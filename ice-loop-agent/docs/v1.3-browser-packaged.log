@@ -1,0 +1,73 @@
+{
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791112491567",
+  "packaged": true,
+  "fixtureRequests": [
+    {
+      "site": "tapnow",
+      "path": "/start"
+    },
+    {
+      "site": "tapnow",
+      "path": "/next"
+    },
+    {
+      "site": "tapnow",
+      "path": "/start"
+    },
+    {
+      "site": "tapnow",
+      "path": "/next"
+    },
+    {
+      "site": "tapnow",
+      "path": "/download"
+    },
+    {
+      "site": "tapnow",
+      "path": "/login"
+    }
+  ],
+  "tapnowRouteInside": true,
+  "liveTapNow": {
+    "url": "https://app.tapnow.media/home",
+    "title": "TapNow | Your Agentic Creative Canvas",
+    "error": "",
+    "dom": {
+      "readyState": "complete",
+      "visibleCharacters": 0
+    },
+    "captured": false,
+    "captureError": "Screenshot surface timeout"
+  },
+  "liveWeChat": {
+    "url": "https://mp.weixin.qq.com/",
+    "title": "微信公众平台",
+    "error": "",
+    "dom": {
+      "readyState": "complete",
+      "visibleCharacters": 82
+    },
+    "captured": true
+  },
+  "isolatedPreferences": {
+    "nodeIntegration": false,
+    "sandbox": true,
+    "preload": null
+  },
+  "sessionOnDataDrive": true,
+  "remoteHasNoBridge": true,
+  "siteCookiesIsolated": true,
+  "cookieRetainedAfterNavigation": true,
+  "back": true,
+  "forward": true,
+  "invalidURLRejected": true,
+  "downloadSaved": true,
+  "popupInside": true,
+  "popupNoBridge": true,
+  "hiddenOnLeave": true,
+  "scrollResetOnEnter": true,
+  "compactBounds": true,
+  "compactNoOverflow": true,
+  "accountCookiesIsolated": true,
+  "persistentCookieAfterViewRecreate": true
+}

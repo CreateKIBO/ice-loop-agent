@@ -1,0 +1,384 @@
+{
+  "version": "1.2.0",
+  "recorded_at": "2026-10-03T02:16:20.883141+08:00",
+  "tapnow_home": "https://app.tapnow.media/home",
+  "scope": "Automatic editorial preparation with unified human review; account-specific visual references; editable illustration prompts; real execution screenshots; DeepSeek vision configuration; embedded browser lifecycle repair.",
+  "tests": {
+    "python_full": {
+      "passed": 253,
+      "seconds": 488.982,
+      "log": "docs/v1.2-python.log",
+      "note": "Full run before the final two new tests; later additions and changes verified in targeted runs."
+    },
+    "python_new_targeted": {
+      "passed": 31,
+      "seconds": 143.082,
+      "log": "docs/v1.2-new-regression.log"
+    },
+    "python_prompt_publication_automation": {
+      "passed": 31,
+      "seconds": 421.11,
+      "log": "docs/v1.2-final-prompt-regression.log"
+    },
+    "python_invalid_prompt_cache_retry": {
+      "passed": 1,
+      "seconds": 60.982,
+      "log": "docs/v1.2-prompt-retry.log"
+    },
+    "node": {
+      "passed": 35,
+      "seconds": 0.5693726,
+      "log": "docs/v1.2-node.log"
+    },
+    "native_packaged_desktop": {
+      "runtime": "E:\\ICE-Agent-Acceptance\\electron-1790964775787",
+      "title": "ICE Loop · 公众号创作工作台",
+      "connected": true,
+      "heading": "从一个想法，到一篇好文章。",
+      "jobs": 1,
+      "bodyWidth": 1446,
+      "viewport": 1446,
+      "previewEscaped": true,
+      "gates": [
+        "topic",
+        "outline",
+        "final_title",
+        "asset_plan"
+      ],
+      "completed": true,
+      "readiness": "assets_pending",
+      "runs": 3,
+      "exported": true,
+      "evidenceCards": 3,
+      "assetCards": 4,
+      "runCapture": {
+        "valid": true,
+        "source": "run_capture",
+        "resource": true,
+        "file": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\assets\\2d27a0859221c68b753409efe3049ec5abc1ef3fef0dce54303ae877460c7b53.png"
+      },
+      "promptReady": true,
+      "promptCopied": true,
+      "maintenance": {
+        "saved": true,
+        "diff": true,
+        "restored": true,
+        "historyUI": true,
+        "diffUI": true,
+        "htmlEntry": true,
+        "job_id": "job-0e29b8b3750c",
+        "export_folder": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\articles\\001-for 和 while：让电脑替你重复干活",
+        "backup": true,
+        "packageChecked": true,
+        "restore": true,
+        "restart": true,
+        "backup_file": "E:\\ICE-Agent-Acceptance\\desktop-backup-3e6368b6-4448-4afc-977e-1c964b34be43.zip",
+        "restored_runtime": "E:\\ICE-Agent-Acceptance\\desktop-restored-ebea43c2-952f-46aa-a85a-32aaf9b07fbe\\runtime",
+        "htmlRendered": true
+      },
+      "visionPanel": true,
+      "modelCards": 6,
+      "libraryArticles": 0,
+      "navigationStable": true,
+      "nativeScreenshot": {
+        "file": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\screenshots\\studio-1790964792739.png"
+      },
+      "resourcePipeline": {
+        "ready": true,
+        "slots": 4
+      },
+      "compact": {
+        "bodyWidth": 1026,
+        "viewport": 1026,
+        "heading": "从一个想法，到一篇好文章。"
+      },
+      "publications": {
+        "filled": true,
+        "editable": true,
+        "protectedEdit": true,
+        "noTask": true,
+        "customColumn": true,
+        "draftSaved": true,
+        "isolated": true,
+        "restored": true,
+        "accountId": "account-7e7208bc574a"
+      },
+      "planning": {
+        "nextEpisode": true,
+        "manualEpisodeProtected": true,
+        "protectedTitle": true,
+        "candidates": true,
+        "adopted": true,
+        "confirmed": true,
+        "staleIgnored": true,
+        "historyPage": true,
+        "noTask": true
+      },
+      "resources": {
+        "editable": true,
+        "searchable": true,
+        "filterWorks": true,
+        "tapnowEntry": true,
+        "cards": 1,
+        "palette": 8,
+        "measured": true,
+        "preview": true
+      },
+      "supplements": {
+        "job_id": "job-b03f054dfb1f",
+        "readonly": true,
+        "manualTapNow": true,
+        "planEdited": true,
+        "rejected": true,
+        "reaccepted": true,
+        "cleared": true,
+        "actualRun": true,
+        "screenshot": true,
+        "resourceReuse": true,
+        "noModelCalls": true,
+        "stillNeedsTextReview": true,
+        "export_folder": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\articles\\account-7e7208bc574a\\补图候选\\002-LIFE  007 补图保留原稿",
+        "source_hash": "fe29a723fbbaa83eb0e3bbf5e0da79ab51e49a0f131944d85a9f2bbbf9d2c322",
+        "screenshot_file": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\assets\\a80e906d24c70c28eb4909fc73a8d8c6440b7de3d5726a851311da5ab07da829.png",
+        "originalPreserved": true,
+        "textPreserved": true,
+        "promptExported": true,
+        "compact": true
+      },
+      "outlines": {
+        "sample": true,
+        "preview": true,
+        "editable": true,
+        "saved": true,
+        "overTen": true,
+        "issueHundred": true,
+        "confirmed": true,
+        "titleProtected": true,
+        "sourceSwitchProtected": true,
+        "noTask": true,
+        "compact": true,
+        "isolated": true,
+        "restored": true,
+        "pageCaptureReady": true,
+        "formCaptureReady": true
+      },
+      "productionTools": {
+        "conflictDetected": true,
+        "conflictResolved": true,
+        "coverUI": true,
+        "coverMetadata": true,
+        "crop": true,
+        "reminder": true,
+        "richClipboard": true,
+        "clipboardHTML": true,
+        "richContentReady": true,
+        "articleCapture": true,
+        "publicWebCapture": true,
+        "singleSlotRedo": true,
+        "diagnostics": true,
+        "toolsUI": true,
+        "compact": true
+      },
+      "publicationExport": {
+        "folder": "E:\\ICE-Agent-Acceptance\\electron-1790964775787\\articles\\发布包\\001-for 和 while：让电脑替你重复干活",
+        "twoFolders": true,
+        "markdown": true,
+        "imagesOnly": true,
+        "linksResolved": true,
+        "archiveSeparate": true,
+        "manualInstructions": true
+      }
+    },
+    "native_packaged_prompts": {
+      "runtime": "E:\\ICE-Agent-Acceptance\\prompt-native-1790964899672",
+      "automaticScreenshots": true,
+      "finalReviewPending": true,
+      "cachedPromptCalls": true,
+      "editorVisible": true,
+      "manualPromptSaved": true,
+      "screenshotPreserved": true,
+      "styleImport": true,
+      "styleImportIdempotent": true,
+      "referencesVisible": true,
+      "deepseekOption": true,
+      "automaticForm": true
+    },
+    "native_packaged_browser": {
+      "runtime": "E:\\ICE-Agent-Acceptance\\browser-1790964651476",
+      "packaged": true,
+      "fixtureRequests": [
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/download"
+        },
+        {
+          "site": "tapnow",
+          "path": "/login"
+        }
+      ],
+      "tapnowRouteInside": true,
+      "liveTapNow": {
+        "url": "https://app.tapnow.media/home",
+        "title": "TapNow | Your Agentic Creative Canvas",
+        "error": "",
+        "dom": {
+          "readyState": "complete",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Screenshot surface timeout"
+      },
+      "liveWeChat": {
+        "url": "https://mp.weixin.qq.com/",
+        "title": "mp.weixin.qq.com",
+        "error": "",
+        "dom": {
+          "readyState": "complete",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Screenshot surface timeout"
+      },
+      "isolatedPreferences": {
+        "nodeIntegration": false,
+        "sandbox": true,
+        "preload": null
+      },
+      "sessionOnDataDrive": true,
+      "remoteHasNoBridge": true,
+      "siteCookiesIsolated": true,
+      "cookieRetainedAfterNavigation": true,
+      "back": true,
+      "forward": true,
+      "invalidURLRejected": true,
+      "downloadSaved": true,
+      "popupInside": true,
+      "popupNoBridge": true,
+      "hiddenOnLeave": true,
+      "scrollResetOnEnter": true,
+      "compactBounds": true,
+      "compactNoOverflow": true,
+      "accountCookiesIsolated": true,
+      "persistentCookieAfterViewRecreate": true
+    }
+  },
+  "source_audit": {
+    "version": "1.2.0",
+    "asar_sha256": "f654743c6885b7059f56f6d5bb7055d3c211e6f09518012d07211b29fe5115cd",
+    "renderer_matches_source": true
+  },
+  "distributable_audit": {
+    "version": "1.2.0",
+    "zip_matches_unpacked": true,
+    "setup_payload_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.2.0-Setup.exe",
+        "bytes": 189744216,
+        "sha256": "c8a7161dbb43916b521e1b5f3e8910ff7eb0f3d4e625176fb769750bf7b43d2a"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.2.0-x64.zip",
+        "bytes": 189368636,
+        "sha256": "0978a9a166f2d904013094272c41fba5feeab3e6a7d2ee5504410c112e505369"
+      }
+    ]
+  },
+  "style_assets_preserved": [
+    {
+      "name": "avatar.png",
+      "bytes": 470498,
+      "sha256": "32799f456b7e4ef96c052f3e9757323e4782b2f587c772311b29e2f291a2c0b4"
+    },
+    {
+      "name": "cover-ai.png",
+      "bytes": 1205829,
+      "sha256": "8408f2a76b786f911a383cb81965574ea1b07562e7cb33d12f3e8eaa23fe1011"
+    },
+    {
+      "name": "cover-jv.png",
+      "bytes": 1142205,
+      "sha256": "3181bef0111560bbf72b67055e35c111fb947b5869a8212f03ed668aa294e276"
+    },
+    {
+      "name": "cover-py.png",
+      "bytes": 1225650,
+      "sha256": "46fab49da810128abf75084f730f6c235f015d19881301919b37f61ac169cd6b"
+    },
+    {
+      "name": "cover-wk.png",
+      "bytes": 1096223,
+      "sha256": "b0636cad9421534e88082d65eead3711ac3cf6d0e916e778b511eb5dc0da6807"
+    },
+    {
+      "name": "overview.png",
+      "bytes": 1224624,
+      "sha256": "dc08720ba998e82cc56614bec614b916a8c015efb92cc7aeed50f53b1df09fb5"
+    },
+    {
+      "name": "wordmark.png",
+      "bytes": 423111,
+      "sha256": "ac787c7fab4c965d124f4138e429f986b52b0689a3cb3f256ffdb508c72be156"
+    }
+  ],
+  "screenshots": [
+    "docs/screenshots/v1.2/desktop/desktop-accounts.png",
+    "docs/screenshots/v1.2/desktop/desktop-article.png",
+    "docs/screenshots/v1.2/desktop/desktop-assets.png",
+    "docs/screenshots/v1.2/desktop/desktop-backups.png",
+    "docs/screenshots/v1.2/desktop/desktop-compact.png",
+    "docs/screenshots/v1.2/desktop/desktop-drafts.png",
+    "docs/screenshots/v1.2/desktop/desktop-history.png",
+    "docs/screenshots/v1.2/desktop/desktop-html.png",
+    "docs/screenshots/v1.2/desktop/desktop-ice-resources.png",
+    "docs/screenshots/v1.2/desktop/desktop-models.png",
+    "docs/screenshots/v1.2/desktop/desktop-new.png",
+    "docs/screenshots/v1.2/desktop/desktop-outline-new.png",
+    "docs/screenshots/v1.2/desktop/desktop-outlines.png",
+    "docs/screenshots/v1.2/desktop/desktop-preview.png",
+    "docs/screenshots/v1.2/desktop/desktop-resources.png",
+    "docs/screenshots/v1.2/desktop/desktop-supplement-assets.png",
+    "docs/screenshots/v1.2/desktop/desktop-supplement-compact.png",
+    "docs/screenshots/v1.2/desktop/desktop-supplement-plan.png",
+    "docs/screenshots/v1.2/desktop/desktop-supplement-source.png",
+    "docs/screenshots/v1.2/desktop/desktop-tools-compact.png",
+    "docs/screenshots/v1.2/desktop/desktop-tools.png",
+    "docs/screenshots/v1.2/desktop/desktop-versions.png",
+    "docs/screenshots/v1.2/prompts/automatic-form.png",
+    "docs/screenshots/v1.2/prompts/prompt-editor.png",
+    "docs/screenshots/v1.2/prompts/style-resources.png",
+    "docs/screenshots/v1.2/browser/browser-compact.png",
+    "docs/screenshots/v1.2/browser/browser-workspace.png",
+    "docs/screenshots/v1.2/browser/embedded-view.png"
+  ],
+  "limitations": [
+    "No paid model requests. DeepSeek image payload, capability and provider probe guards were tested offline; actual account permissions and response quality were not verified.",
+    "No real TapNow/WeChat account login, image generation or publication. Live external-page observations were limited to 10 seconds; live captures timed out in the final run. Controlled native navigation/download/popup/session isolation checks passed. An earlier source run loaded the TapNow /home page with 2016 visible characters (docs/v1.2-browser-source-debug.log).",
+    "Docker was not installed in this environment. Isolated execution authorization and sample-input preparation were tested with a controlled runner, not a real Docker daemon.",
+    "Local host execution of new code still needs human review; TapNow image generation and WeChat publication are manual. Automatic real screenshots include all article run records and need final correspondence/crop review.",
+    "The v1.1.1 installer shutdown/workspace-preservation hooks are retained. Their earlier isolated NSIS upgrade acceptance was not repeated with v1.2.0. The final installer payload was extracted and matched to the verified program; the user installation/workspace was not changed.",
+    "Commercial signing is not configured."
+  ],
+  "resolved_during_acceptance": [
+    "Browser mounting now has a separate animation-frame token from bounds updates; scroll/resize cannot cancel opening the view. Scroll state is reset on entry and two renderer regression cases cover the race.",
+    "UI repacking moves existing archives aside before rebuilding, preventing electron-builder from treating a stale ZIP as current. Actual installer and ZIP payloads are hash-verified."
+  ]
+}

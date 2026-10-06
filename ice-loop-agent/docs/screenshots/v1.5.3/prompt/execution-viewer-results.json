@@ -1,0 +1,22 @@
+{
+  "missingInputBlocked": true,
+  "packagedPythonInput": true,
+  "processAndWorkspaceCleaned": true,
+  "sourceEvidencePreserved": true,
+  "rpcStillResponds": true,
+  "originalAndUnownedFilesPreserved": true,
+  "unexpectedFailureCaptureBlocked": true,
+  "expectedErrorReviewVisible": true,
+  "explicitTeachingErrorAllowed": true,
+  "rawScreenshotCopiesCleaned": true,
+  "screenshotOriginalResolution": true,
+  "viewerFitsWindow": true,
+  "wheelZooms": true,
+  "dragPans": true,
+  "actualSize": true,
+  "closeReleasesOriginal": true,
+  "resourceOriginalResolution": true,
+  "rapidReopenKeepsNewOriginal": true,
+  "navigationClosesAndReleasesOriginal": true,
+  "singleReusableViewer": true
+}

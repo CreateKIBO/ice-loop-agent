@@ -1,13 +1,29 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, safeStorage, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, safeStorage, session, clipboard, ClipboardItem } = require('electron');
+if(process.argv.includes('--credential-helper')){require('./credential-helper.cjs');return;}
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const readline = require('node:readline');
+const { randomUUID, createHash } = require('node:crypto');
+const {copyTextVerified}=require('./clipboard.cjs');
 
-const project = path.resolve(__dirname, '..');
-const runtime = process.env.ICE_DESKTOP_RUNTIME || path.join(project, '.desktop-runtime');
+const project = app.isPackaged ? path.join(process.resourcesPath,'engine-project') : path.resolve(__dirname, '..');
+const dataSelection = app.isPackaged ? path.join(app.getPath('appData'),'ICE Loop Studio','workspace-path.json') : path.join(project, '.desktop-data-path.json');
+const selectedRuntime = !process.env.ICE_DESKTOP_RUNTIME && fs.existsSync(dataSelection)
+  ? JSON.parse(fs.readFileSync(dataSelection, 'utf8')).runtime_root : null;
+const installDirectory=process.env.PORTABLE_EXECUTABLE_DIR||path.dirname(process.execPath);
+const nonSystemDrive=['G:/','D:/','E:/','F:/'].find(drive=>fs.existsSync(drive));
+const userWorkspace='ICE-Workspace-'+createHash('sha256').update(app.getPath('appData')).digest('hex').slice(0,8);
+const defaultRuntime=app.isPackaged ? (!/^c:/i.test(installDirectory)?path.join(installDirectory,userWorkspace):nonSystemDrive?path.join(nonSystemDrive,'ICE Loop Studio',userWorkspace):null) : path.join(project,'.desktop-runtime');
+if(!process.env.ICE_DESKTOP_RUNTIME&&!selectedRuntime&&!defaultRuntime){dialog.showErrorBox('工作目录不可用','请准备C盘之外的数据盘，或设置ICE_DESKTOP_RUNTIME后启动。');app.quit();process.exit(1);}
+const runtime = process.env.ICE_DESKTOP_RUNTIME || selectedRuntime || defaultRuntime;
+const firstPackagedStart=app.isPackaged&&!process.env.ICE_DESKTOP_RUNTIME&&!selectedRuntime;
+if (!path.isAbsolute(runtime) || /^c:/i.test(runtime)) throw Error('工作数据目录必须使用 C 盘之外的绝对路径');
+if(selectedRuntime&&!JSON.parse(fs.readFileSync(dataSelection,'utf8')).fresh&&(!fs.existsSync(path.join(runtime,'app.db'))||!fs.existsSync(path.join(runtime,'settings.json'))))throw Error('恢复后的工作目录不存在或不完整，请检查工作目录选择记录');
 fs.mkdirSync(runtime, { recursive: true });
+const chatLifecycle=stage=>{if(process.argv.includes('--chat-smoke'))fs.appendFileSync(path.join(runtime,'chat-lifecycle.log'),new Date().toISOString()+' '+stage+'\n');};
+chatLifecycle('main:runtime-ready');
 for (const folder of ['electron', 'electron/sessions', 'electron/crash-dumps', 'logs']) fs.mkdirSync(path.join(runtime, folder), { recursive: true });
 app.setPath('userData', path.join(runtime, 'electron'));
 app.setPath('sessionData', path.join(runtime, 'electron', 'sessions'));
@@ -17,14 +33,36 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 protocol.registerSchemesAsPrivileged([{ scheme: 'ice', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 let window;
+let embeddedBrowser;
 let python;
 let shuttingDown = false;
+let credentialWarning='';
+let smokeClipboard=null;
 let nextId = 0;
 const pending = new Map();
+if(app.isPackaged)process.env.ICE_PACKAGED='1';
+const backupReviews = new Map();
 const methods = new Set(['bootstrap', 'brief.suggest', 'jobs.list', 'jobs.create', 'jobs.get', 'jobs.resume', 'jobs.stop',
   'approvals.decide', 'approvals.edit', 'articles.save', 'articles.finalize', 'assets.select', 'assets.preview',
   'execution.approve', 'execution.inputs', 'claims.verify', 'models.save', 'models.probe', 'library.list', 'library.read']);
-for (const method of ['accounts.save','accounts.switch','accounts.export','resources.list','resources.preview','resources.analyze','resources.apply','resources.use','drafts.list','drafts.get','drafts.save','history.list','history.get','history.update','history.progress','planning.context','planning.propose','planning.confirm']) methods.add(method);
+for (const method of ['accounts.save','accounts.switch','accounts.export','resources.list','resources.preview','resources.analyze','resources.apply','resources.use','resources.update','resources.vision','resources.recommend','vision.save','vision.probe','drafts.list','drafts.get','drafts.save','history.list','history.get','history.update','history.progress','planning.context','planning.propose','planning.confirm']) methods.add(method);
+for (const method of ['articles.revisions','articles.compare','articles.restore']) methods.add(method);
+for (const method of ['supplements.from_library','supplements.plan','supplements.prepare','supplements.execute','assets.review','outlines.list','outlines.preview','outlines.save','outlines.update','outlines.match']) methods.add(method);
+for(const method of ['rules.list','rules.save','rules.resolve','rules.remove','tools.status','tools.diagnostics','reminders.list','reminders.save','reminders.dismiss','git.preview','git.apply','models.catalog','articles.semantic_review','assets.redo','resources.transform','resources.cover','capture.windows','capture.native'])methods.add(method);
+methods.add('tools.execution_settings');
+methods.add('execution.code_save');
+methods.add('execution.policy_save');
+for(const method of ['prompts.generate','prompts.save','prompts.references','resources.import_style','budgets.get','budgets.save'])methods.add(method);
+for(const method of ['chat.list','chat.create','chat.get','chat.update','chat.send','chat.stop','chat.sources','chat.candidate_save','chat.submit','chat.reviews','chat.review','chat.rebase','chat.prepare_assets'])methods.add(method);
+methods.add('chat.fork');
+methods.add('chat.save_draft');
+methods.add('chat.drafts');
+for(const method of ['chat.delete','chat.restore','jobs.archive','jobs.delete','jobs.restore'])methods.add(method);
+
+function engineCommand(){
+  if(app.isPackaged)return {file:path.join(process.resourcesPath,'engine','ice-engine.exe'),args:[]};
+  return {file:pythonExecutable(),args:['-m','ice_agent.desktop_service']};
+}
 
 function pythonExecutable() {
   const candidates = [process.env.ICE_PYTHON, path.join(project, '.venv', 'Scripts', 'python.exe')];
@@ -38,11 +76,31 @@ function request(method, params = {}) {
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(new Error('操作超时，请检查任务状态后重试')); }, 135000);
-    pending.set(id, { resolve, reject, timer });
+    pending.set(id, { resolve, reject, timer,method });
     python.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => {
       if (error) { clearTimeout(timer); pending.delete(id); reject(new Error('引擎连接中断')); }
     });
   });
+}
+
+async function captureRun(jobId,figureNo,runKeys,automatic=false){
+    const context=await request('assets.capture_context',{job_id:jobId,figure_no:figureNo,run_keys:runKeys,automatic});
+    const capture=new BrowserWindow({width:1100,height:800,show:false,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
+    let temporaryFile;
+    try{
+      await capture.loadURL('ice://app/capture.html');
+      const height=await capture.webContents.executeJavaScript('window.renderCapture('+JSON.stringify(context)+')');
+      if(height>7000)throw Error('运行内容较长，请减少截图内容后重试');
+      capture.setContentSize(1100,Math.max(400,height+20));
+      await capture.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+      const image=await capture.webContents.capturePage(),folder=path.join(runtime,'screenshots');fs.mkdirSync(folder,{recursive:true});
+      const file=path.join(folder,'execution-'+randomUUID()+'.png');temporaryFile=file;fs.writeFileSync(file,image.toPNG());
+      // Finish both durable imports before discarding the owned intermediate PNG.
+      return await request('assets.capture_finish',{job_id:jobId,figure_no:figureNo,run_keys:context.run_keys,capture_hash:context.capture_hash,file_path:file,automatic});
+    }finally{
+      try{if(!capture.isDestroyed())capture.destroy();}
+      finally{if(temporaryFile){try{fs.unlinkSync(temporaryFile);}catch(error){if(error.code!=='ENOENT')console.error('运行截图中间文件清理失败：',temporaryFile,error.message);}}}
+    }
 }
 
 function assertSender(event) {
@@ -51,24 +109,74 @@ function assertSender(event) {
   }
 }
 
-function readKeys() {
-  const file = path.join(runtime, 'credentials.json');
+async function readKeys() {
+  const file = process.argv.includes('--provider-smoke')&&process.env.ICE_SMOKE_CREDENTIALS ? process.env.ICE_SMOKE_CREDENTIALS : path.join(runtime, 'credentials.json');
   if (!fs.existsSync(file)) return {};
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭据加密不可用，已保留加密凭据，请使用环境变量配置');
-  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!safeStorage.isEncryptionAvailable()){credentialWarning='系统凭据加密不可用，已保留原凭据；请使用环境变量或修复系统凭据服务。';return {};}
+  let stored;
+  try{stored=JSON.parse(fs.readFileSync(file,'utf8'));if(!stored||typeof stored!=='object'||Array.isArray(stored))throw Error('invalid');}
+  catch{credentialWarning='模型凭据文件无法读取，原文件保留。请在模型与设置重新保存Key。';return {};}
   const keys = {};
-  for (const [provider, value] of Object.entries(stored)) keys[provider] = safeStorage.decryptString(Buffer.from(value, 'base64'));
+  for (const [provider, value] of Object.entries(stored)){
+    try{keys[provider] = safeStorage.decryptString(Buffer.from(value, 'base64'));}
+    catch{credentialWarning='部分已保存的模型凭据无法在当前工作区解密。原凭据已保留，请在模型与设置重新保存对应Key后测试连接。';}
+  }
+  if(Object.keys(keys).length<Object.keys(stored).length){
+    // Only known historical application profiles are examined; no browser profile search.
+    const appData=app.getPath('appData');
+    const candidates=['Electron','ice-loop-studio','ICE Loop Studio'].map(name=>path.join(appData,name,'Local State'));
+    for(const candidate of candidates){
+      if(!fs.existsSync(candidate))continue;
+      let master;try{master=JSON.parse(fs.readFileSync(candidate,'utf8')).os_crypt;}catch{continue;}
+      if(!master?.encrypted_key)continue;
+      const probe=path.join(runtime,'credential-migration',randomUUID());fs.mkdirSync(probe,{recursive:true});fs.writeFileSync(path.join(probe,'Local State'),JSON.stringify({os_crypt:master}));
+      const recovered=await new Promise(resolve=>{
+        const args=[...(app.isPackaged?[]:[path.join(project,'desktop')]),'--credential-helper','--helper-runtime',probe,'--cipher-file',file];
+        const child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore','pipe','pipe']});let raw='';let settled=false;
+        const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);resolve(value);};
+        const timer=setTimeout(()=>{child.kill();finish({});},10000);child.stderr.resume();
+        child.stdout.on('data',data=>{raw+=data;if(raw.length>20000){child.kill();finish({});}});
+        child.on('error',()=>finish({}));child.on('exit',()=>{try{finish(JSON.parse(raw.trim()).keys||{});}catch{finish({});}});
+      });
+      for(const provider of Object.keys(stored))if(typeof recovered[provider]==='string'&&recovered[provider].length<=4096)keys[provider]=recovered[provider];
+      if(Object.keys(keys).length===Object.keys(stored).length){
+        if(!process.argv.includes('--provider-smoke')){
+          const backup=file+'.before-v1.0';if(!fs.existsSync(backup))fs.copyFileSync(file,backup);
+          const migrated={};for(const [provider,key] of Object.entries(keys))migrated[provider]=safeStorage.encryptString(key).toString('base64');
+          const temporary=file+'.tmp';fs.writeFileSync(temporary,JSON.stringify(migrated));fs.renameSync(temporary,file);
+        }
+        credentialWarning='已兼容读取旧版本凭据；原加密文件保留，模型连接状态仍以实际测试为准。';break;
+      }
+    }
+  }
   return keys;
 }
 
+async function verifyRestoredSidecar(restoredRuntime) {
+  return new Promise((resolve,reject)=>{
+    const command=engineCommand();const child=spawn(command.file,[...command.args,'--project-root',project,'--runtime-root',restoredRuntime],
+      {cwd:project,windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONUTF8:'1',...(app.isPackaged?{ICE_TEACHING_PYTHON:path.join(process.resourcesPath,'teaching-python','python.exe')}: {})}});
+    const results=new Map();const timer=setTimeout(()=>{child.kill();reject(Error('恢复后的引擎启动超时'));},30000);
+    child.stderr.resume();
+    readline.createInterface({input:child.stdout}).on('line',line=>{
+      try{const response=JSON.parse(line);if(response.error)throw Error(response.error.message);results.set(response.id,response.result);}
+      catch(error){child.kill();clearTimeout(timer);reject(error);}
+    });
+    child.on('error',error=>{clearTimeout(timer);reject(error);});
+    child.on('exit',code=>{clearTimeout(timer);if(code!==0||!results.has(1)||!results.has(2))reject(Error('恢复引擎启动失败'));else resolve(results.get(1).runtime_root===restoredRuntime&&results.get(1).accounts.length===2&&results.get(2).length>0);});
+    child.stdin.end(JSON.stringify({id:1,method:'bootstrap'})+'\n'+JSON.stringify({id:2,method:'resources.list'})+'\n');
+  });
+}
+
 async function startEngine() {
-  const executable = pythonExecutable();
+  chatLifecycle('engine:starting');
+  const command=engineCommand();const executable = command.file;
   if (!executable) throw new Error('找不到 Python 3.12+。请运行项目的安装脚本，或设置 ICE_PYTHON 指向解释器。');
-  const args = ['-m', 'ice_agent.desktop_service', '--project-root', project, '--runtime-root', runtime];
-  if (process.argv.includes('--smoke')) args.push('--article-root', path.join(runtime, 'articles'));
+  const args = [...command.args, '--project-root', project, '--runtime-root', runtime];
+  if (process.argv.includes('--smoke')||process.argv.includes('--browser-smoke')) args.push('--article-root', path.join(runtime, 'articles'));
   python = spawn(executable, args, {
     cwd: project, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1',TEMP:path.join(runtime,'staging'),TMP:path.join(runtime,'staging'),...(app.isPackaged?{ICE_TEACHING_PYTHON:path.join(process.resourcesPath,'teaching-python','python.exe')}: {}) }
   });
   readline.createInterface({ input: python.stdout }).on('line', line => {
     try {
@@ -76,7 +184,14 @@ async function startEngine() {
       const entry = pending.get(response.id);
       if (!entry) return;
       clearTimeout(entry.timer); pending.delete(response.id);
-      if (response.error) entry.reject(new Error(response.error.message)); else entry.resolve(response.result);
+      if (response.error) {
+        const error = new Error(response.error.message);
+        // v2 稳定错误码随 Error 透传给 renderer（M1-09）；旧页面只读 message，不受影响。
+        error.code = response.error.code || 'INTERNAL';
+        error.recoverable = Boolean(response.error.recoverable);
+        error.action = response.error.action || null;
+        entry.reject(error);
+      } else entry.resolve(entry.method==='bootstrap'?{...response.result,credential_warning:credentialWarning}:response.result);
     } catch { /* A protocol error must never become renderer HTML. */ }
   });
   python.stderr.on('data', data => {
@@ -88,12 +203,94 @@ async function startEngine() {
     if (!shuttingDown && window && !window.isDestroyed()) window.webContents.send('ice:engine-exit');
   };
   python.on('exit', exited); python.on('error', exited);
-  const keys = readKeys();
+  const keys = await readKeys();
   if (Object.keys(keys).length) await request('secrets.set', { keys });
   await request('bootstrap');
+  chatLifecycle('engine:ready');
 }
 
 function registerIPC() {
+  ipcMain.handle('ice:import-creative-document',async(event,accountId)=>{
+    assertSender(event);
+    const selected=await dialog.showOpenDialog(window,{title:'引用文档（仅用于当前对话）',properties:['openFile'],filters:[{name:'文档',extensions:['md','txt','docx']}]});
+    if(selected.canceled)return null;
+    return request('outlines.read',{file_path:selected.filePaths[0],account_id:accountId});
+  });
+  embeddedBrowser=require('./browser.cjs').installBrowser({window:()=>window,assertSender,request,runtime});
+  require('./tools.cjs').installTools({window:()=>window,assertSender,request,runtime});
+  ipcMain.handle('ice:import-outline',async(event,accountId)=>{
+    assertSender(event);
+    const selected=await dialog.showOpenDialog(window,{title:'读取栏目选题大纲（预览后才保存）',properties:['openFile'],filters:[{name:'选题大纲',extensions:['md','txt','docx']}]});
+    if(selected.canceled)return null;
+    return request('outlines.read',{file_path:selected.filePaths[0],account_id:accountId});
+  });
+  ipcMain.handle('ice:choose-workspace',async event=>{
+    assertSender(event);const result=await dialog.showOpenDialog(window,{title:'选择新工作区所在文件夹（C盘之外，重启后切换）',properties:['openDirectory','createDirectory']});
+    if(result.canceled)return null;
+    if(/^c:/i.test(result.filePaths[0]))throw Error('请选择C盘之外的数据目录');
+    const destination=path.join(result.filePaths[0],'ICE-Workspace-'+Date.now());fs.mkdirSync(destination,{recursive:true});
+    fs.mkdirSync(path.dirname(dataSelection),{recursive:true});fs.writeFileSync(dataSelection,JSON.stringify({runtime_root:destination,fresh:true},null,2));
+    return {runtime_root:destination,restart_required:true};
+  });
+  ipcMain.handle('ice:import-article',async(event,accountId)=>{
+    assertSender(event);
+    const result=await dialog.showOpenDialog(window,{title:'导入已有文章，创建只读补图任务',properties:['openFile'],filters:[{name:'Markdown文章',extensions:['md']}]});
+    if(result.canceled)return null;
+    return request('supplements.create',{file_path:result.filePaths[0],account_id:accountId});
+  });
+  ipcMain.handle('ice:create-backup', async event => {
+    assertSender(event);
+    const result = await dialog.showSaveDialog(window, {title:'保存工作台备份',
+      defaultPath:path.join(project,'backups','ice-workspace-'+new Date().toISOString().slice(0,10)+'.zip'),
+      filters:[{name:'工作台备份',extensions:['zip']}]});
+    if (result.canceled) return null;
+    return request('backup.create',{file_path:result.filePath});
+  });
+  ipcMain.handle('ice:inspect-backup', async event => {
+    assertSender(event);
+    const result = await dialog.showOpenDialog(window,{title:'预览工作台备份',properties:['openFile'],filters:[{name:'工作台备份',extensions:['zip']}]});
+    if (result.canceled) return null;
+    const summary = await request('backup.inspect',{file_path:result.filePaths[0]});
+    const token = randomUUID(); backupReviews.clear();
+    backupReviews.set(token,{file:result.filePaths[0],hash:summary.package_hash});
+    return {...summary,token};
+  });
+  ipcMain.handle('ice:restore-backup', async (event,token) => {
+    assertSender(event);
+    const review = backupReviews.get(token);
+    if(!review) throw Error('请先选择并预览备份包');
+    const result = await dialog.showOpenDialog(window,{title:'选择恢复目录的父文件夹（会新建工作目录）',properties:['openDirectory','createDirectory']});
+    if(result.canceled)return null;
+    const destination = path.join(result.filePaths[0],'ice-restored-'+Date.now()+'-'+randomUUID().slice(0,8));
+    const restored = await request('backup.restore',{file_path:review.file,destination,package_hash:review.hash});
+    const temporary = dataSelection+'.tmp';
+    fs.mkdirSync(path.dirname(dataSelection),{recursive:true});fs.writeFileSync(temporary,JSON.stringify({runtime_root:restored.runtime_root},null,2));
+    fs.renameSync(temporary,dataSelection); backupReviews.clear();
+    return {...restored,restart_required:true};
+  });
+  ipcMain.handle('ice:open-html', async (event,jobId) => {
+    assertSender(event);
+    const data = await request('jobs.get',{job_id:jobId});
+    if(!data.export.folder)throw Error('请先复检并导出文章包');
+    if(data.article.readiness==='review_pending')throw Error('正文已修改，请先复检并导出，再打开当前 HTML 预览');
+    const file = path.join(data.export.folder,'04-阅读与排版预览.html');
+    const manifestFile = path.join(data.export.folder,'.ice-export-manifest.json');
+    if(!fs.existsSync(file)||!fs.existsSync(manifestFile))throw Error('请重新导出，以生成 HTML 预览');
+    const manifest = JSON.parse(fs.readFileSync(manifestFile,'utf8'));
+    const hash = require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    if(manifest.files['04-阅读与排版预览.html']!==hash)throw Error('预览文件被外部修改，请检查文章包');
+    const error = await shell.openPath(file);if(error)throw Error(error);
+    return {ok:true};
+  });
+  ipcMain.handle('ice:copy-text',async(event,text)=>{
+    assertSender(event);
+    if(typeof text!=='string'||!text.trim()||text.length>30000)throw Error('请先选择有效提示词');
+    return copyTextVerified(clipboard,text);
+  });
+  ipcMain.handle('ice:capture-run',async(event,jobId,figureNo,runKeys)=>{
+    assertSender(event);
+    return captureRun(jobId,figureNo,runKeys);
+  });
   ipcMain.handle('ice:capture-window', async event => {
     assertSender(event);
     const folder = path.join(runtime, 'screenshots');
@@ -103,17 +300,19 @@ function registerIPC() {
     fs.writeFileSync(file, screenshot.toPNG());
     return { file };
   });
-  ipcMain.handle('ice:request', (event, method, params) => {
+  ipcMain.handle('ice:request', async (event, method, params) => {
     assertSender(event);
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > 500000) throw new Error('无效请求');
-    return request(method, params);
+    const result=await request(method, params);
+    if(['accounts.switch','accounts.save','accounts.import'].includes(method))embeddedBrowser.reset();
+    return result;
   });
   ipcMain.handle('ice:import-image', async (event, jobId, figureNo) => {
     assertSender(event);
     const choice = await dialog.showOpenDialog(window, { title: `导入图 ${figureNo}`, properties: ['openFile'],
       filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] });
     if (choice.canceled) return null;
-    return request('assets.import', { job_id: jobId, figure_no: figureNo, file_path: choice.filePaths[0] });
+    return request('assets.import', { job_id: jobId, figure_no: figureNo, file_path: choice.filePaths[0], archive_resource:true });
   });
   ipcMain.handle('ice:import-publication', async event => {
     assertSender(event);
@@ -155,10 +354,13 @@ function registerIPC() {
   });
   ipcMain.handle('ice:save-key', async (event, provider, key) => {
     assertSender(event);
-    if (!['qwen', 'deepseek', 'kimi', 'bigmodel', 'ark'].includes(provider) || typeof key !== 'string' || key.length > 4096) throw new Error('凭据无效');
+    if (!['qwen', 'deepseek', 'kimi', 'bigmodel', 'ark','minimax'].includes(provider) || typeof key !== 'string' || key.length > 4096) throw new Error('凭据无效');
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭据加密不可用，请改用环境变量配置');
     const file = path.join(runtime, 'credentials.json');
-    const stored = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    let stored={};if(fs.existsSync(file)){
+      try{stored=JSON.parse(fs.readFileSync(file,'utf8'));if(!stored||typeof stored!=='object'||Array.isArray(stored))throw Error('invalid');}
+      catch{const backup=file+'.before-v1.0';if(!fs.existsSync(backup))fs.copyFileSync(file,backup);stored={};}
+    }
     if (key) stored[provider] = safeStorage.encryptString(key).toString('base64'); else delete stored[provider];
     const temporary = file + '.tmp';
     fs.writeFileSync(temporary, JSON.stringify(stored)); fs.renameSync(temporary, file);
@@ -168,33 +370,78 @@ function registerIPC() {
   ipcMain.handle('ice:open-folder', async (event, jobId) => {
     assertSender(event);
     const data = await request('jobs.get', { job_id: jobId });
-    const folder = data.export.folder;
-    if (!folder || !fs.existsSync(folder)) throw new Error('文章尚未导出');
+    const folder = data.export.publishing_folder;
+    if (!folder || !fs.existsSync(folder)) throw new Error('请先复检与导出，生成文本/图片发布包');
     const error = await shell.openPath(folder);
     if (error) throw new Error(error);
     return { ok: true };
   });
-  ipcMain.handle('ice:tapnow', event => {
+  ipcMain.handle('ice:tapnow', async event => {
     assertSender(event);
-    const browser = new BrowserWindow({ width: 1280, height: 860, title: 'TapNow · ICE Loop',
-      webPreferences: { partition: 'persist:tapnow', nodeIntegration: false, contextIsolation: true, sandbox: true } });
-    browser.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    browser.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-    browser.loadURL('https://app.tapnow.media');
-    return { ok: true };
+    return embeddedBrowser.route('tapnow');
   });
 }
 
 async function createWindow() {
+  chatLifecycle('window:creating');
   window = new BrowserWindow({ width: 1460, height: 940, minWidth: 1040, minHeight: 720,
     title: 'ICE Loop Studio', backgroundColor: '#F3F2ED', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true,
-      backgroundThrottling: !process.argv.includes('--smoke') } });
+      backgroundThrottling: !process.argv.includes('--smoke')&&!process.argv.includes('--browser-smoke')&&!process.argv.includes('--chat-smoke')&&!process.argv.includes('--prompt-smoke') } });
+  chatLifecycle('window:created');
+  if(process.argv.includes('--chat-smoke')){window.webContents.on('did-start-loading',()=>chatLifecycle('window:loading'));window.webContents.on('did-finish-load',()=>chatLifecycle('window:loaded'));window.webContents.on('did-fail-load',(_event,code,description)=>chatLifecycle('window:load-failed '+code+' '+description));window.webContents.on('render-process-gone',(_event,details)=>chatLifecycle('renderer:gone '+details.reason));}
+  if(process.argv.includes('--prompt-smoke'))window.webContents.once('did-finish-load',()=>setTimeout(async()=>{
+    try{await require('./prompt-smoke.cjs')({window,request,captureRun,runtime});}
+    catch(error){fs.writeFileSync(path.join(runtime,'prompt-smoke-error.txt'),error.stack||error.message);}
+    app.quit();
+  },1600));
   window.setMenuBarVisibility(false);
+  if(process.argv.includes('--chat-smoke'))window.webContents.once('did-finish-load',()=>setTimeout(async()=>{
+    try{const result=await require('./chat-smoke.cjs')({window,request,runtime});fs.writeFileSync(path.join(runtime,'chat-result.json'),JSON.stringify(result,null,2));}
+    catch(error){fs.writeFileSync(path.join(runtime,'chat-error.txt'),error.stack||error.message);}finally{app.quit();}
+  },1200));
+  window.on('resize',()=>embeddedBrowser.resize());
+  window.on('closed',()=>embeddedBrowser.reset());
+  if(credentialWarning)window.webContents.once('did-finish-load',()=>{window.webContents.executeJavaScript('toast('+JSON.stringify(credentialWarning)+')').catch(()=>{});});
+  if(process.argv.includes('--review-smoke')){
+    window.webContents.once('did-finish-load',()=>setTimeout(async()=>{
+      try{
+        const fixture=JSON.parse(fs.readFileSync(path.join(runtime,'review-fixture.json'),'utf8'));
+        const result=await window.webContents.executeJavaScript('window.__ICE_REVIEW_SMOKE__('+JSON.stringify(fixture.job_id)+')');
+        await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+        fs.writeFileSync(path.join(runtime,'review-proof.png'),(await window.webContents.capturePage()).toPNG());
+        fs.writeFileSync(path.join(runtime,'review-result.json'),JSON.stringify(result,null,2));
+      }catch(error){fs.writeFileSync(path.join(runtime,'review-error.txt'),error.stack||error.message);}finally{app.quit();}
+    },1800));
+  }
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('ice://app/')) event.preventDefault(); });
-  window.once('ready-to-show', () => { if (!process.argv.includes('--smoke')) window.show(); });
-  await window.loadURL('ice://app/index.html');
+  window.webContents.on('will-navigate', (event, legacyURL) => { if (!(event.url||legacyURL||'').startsWith('ice://app/')) event.preventDefault(); });
+  window.once('ready-to-show', () => { if (!process.argv.includes('--smoke')&&!process.argv.includes('--review-smoke')&&!process.argv.includes('--browser-smoke')&&!process.argv.includes('--chat-smoke')) window.show(); });
+  // feature flag：--new-ui 且产物存在时加载 v2.0 工作台；默认仍进旧页面。
+  const newUiReady = process.argv.includes('--new-ui') && fs.existsSync(path.join(__dirname, 'ui', 'dist', 'index.html'));
+  if (process.argv.includes('--ui-smoke')) {
+    let smokeSettled = false;
+    const settle = async outcome => {
+      if (smokeSettled) return; smokeSettled = true;
+      try { fs.writeFileSync(path.join(runtime, 'ui-smoke-result.json'), JSON.stringify(outcome, null, 2)); }
+      catch (error) { fs.writeFileSync(path.join(runtime, 'ui-smoke-error.txt'), error.stack || error.message); }
+      finally { app.quit(); }
+    };
+    window.webContents.on('did-fail-load', (_e, code, description, url) => {
+      settle({ ok: false, stage: 'did-fail-load', code, description, url });
+    });
+    window.webContents.once('did-finish-load', () => setTimeout(async () => {
+      try {
+        const info = await window.webContents.executeJavaScript('({title:document.title,rootChildren:document.getElementById("root")?document.getElementById("root").children.length:-1,rootText:document.getElementById("root")?document.getElementById("root").innerText.slice(0,200):""})');
+        await settle({ ok: info.rootChildren > 0, ...info, url: window.webContents.getURL() });
+      } catch (error) { await settle({ ok: false, stage: 'execute', error: error.message }); }
+    }, 1500));
+    setTimeout(() => settle({ ok: false, stage: 'timeout', url: window.webContents.getURL() }), 30000);
+  }
+  await window.loadURL(newUiReady || process.argv.includes('--ui-smoke') ? 'ice://app/ui/index.html' : 'ice://app/index.html');
+  if(process.argv.includes('--browser-smoke')){
+    setTimeout(async()=>{try{const result=await require('./browser-smoke.cjs').run({window,controller:embeddedBrowser,request,runtime});fs.writeFileSync(path.join(runtime,'browser-result.json'),JSON.stringify(result,null,2));}catch(error){fs.writeFileSync(path.join(runtime,'browser-error.txt'),error.stack||error.message);}finally{app.quit();}},1200);
+  }
   if (process.argv.includes('--smoke')) {
     setTimeout(async () => {
       try {
@@ -206,11 +453,13 @@ async function createWindow() {
         result.nativeScreenshot = await window.webContents.executeJavaScript('window.ice.captureWindow()');
         const image = await window.webContents.capturePage();
         fs.writeFileSync(path.join(runtime, 'desktop-preview.png'), image.toPNG());
-        for (const view of ['models','article']) {
+        for (const view of ['models','article','assets','resources','versions','backups']) {
           await window.webContents.executeJavaScript('window.__ICE_CAPTURE_VIEW__(' + JSON.stringify(view) + ')');
+          if(view==='resources')result.resourcePipeline=await window.webContents.executeJavaScript('({ready:document.querySelector("#visual-pipeline").dataset.state==="ready",slots:document.querySelectorAll("#visual-pipeline .visual-slot").length})');
           await new Promise(resolve => setTimeout(resolve, 150));
+          await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
           const capture = await window.webContents.capturePage();
-          fs.writeFileSync(path.join(runtime, 'desktop-' + view + '.png'), capture.toPNG());
+          fs.writeFileSync(path.join(runtime, 'desktop-' + (view==='resources'?'ice-resources':view) + '.png'), capture.toPNG());
         }
         window.setSize(1040, 800);
         await window.webContents.executeJavaScript('window.__ICE_CAPTURE_VIEW__("studio")');
@@ -223,6 +472,23 @@ async function createWindow() {
         result.planning = await window.webContents.executeJavaScript('window.__ICE_PLANNING_SMOKE__()');
         await request('resources.import', {file_path:result.nativeScreenshot.file});
         result.resources = await window.webContents.executeJavaScript('window.__ICE_RESOURCE_SMOKE__()');
+        const backupFile=path.join(path.dirname(runtime),'desktop-backup-'+randomUUID()+'.zip');
+        const backup=await request('backup.create',{file_path:backupFile});
+        const inspected=await request('backup.inspect',{file_path:backupFile});
+        const restored=await request('backup.restore',{file_path:backupFile,destination:path.join(path.dirname(runtime),'desktop-restored-'+randomUUID()),package_hash:inspected.package_hash});
+        result.maintenance.backup=backup.files>0&&backup.accounts.length===2;
+        result.maintenance.packageChecked=backup.package_hash===inspected.package_hash;
+        result.maintenance.restore=fs.existsSync(path.join(restored.runtime_root,'app.db'));
+        result.maintenance.restart=await verifyRestoredSidecar(restored.runtime_root);
+        result.maintenance.backup_file=backupFile;result.maintenance.restored_runtime=restored.runtime_root;
+        const preview=path.join(result.maintenance.export_folder,'04-阅读与排版预览.html');
+        const previewWindow=new BrowserWindow({show:false,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true}});
+        try{
+          await previewWindow.loadFile(preview);
+          result.maintenance.htmlRendered=await previewWindow.webContents.executeJavaScript('Boolean(document.querySelector("main h1"))&&Boolean(document.querySelector("figure img"))&&document.querySelectorAll("pre code").length>=3');
+          await previewWindow.webContents.executeJavaScript('Promise.all(Array.from(document.images).map(image=>image.decode()))');
+          fs.writeFileSync(path.join(runtime,'desktop-html.png'),(await previewWindow.webContents.capturePage()).toPNG());
+        }finally{previewWindow.destroy();}
         for (const view of ['accounts','drafts','resources','history','new']) {
           await window.webContents.executeJavaScript('window.__ICE_CAPTURE_VIEW__(' + JSON.stringify(view) + ')');
           await new Promise(resolve=>setTimeout(resolve,250));
@@ -231,34 +497,131 @@ async function createWindow() {
           await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
           const capture = await window.webContents.capturePage(); fs.writeFileSync(path.join(runtime,'desktop-'+view+'.png'),capture.toPNG());
         }
+        const bootstrap=await request('bootstrap',{});
+        const libraryRoot=path.join(runtime,'supplement-library'),sourceFolder='007-已有文章补图验收';
+        const inputFolder=path.join(libraryRoot,sourceFolder);fs.mkdirSync(path.join(inputFolder,'images'),{recursive:true});
+        fs.copyFileSync(result.nativeScreenshot.file,path.join(inputFolder,'images','old.png'));
+        const body=['# '+bootstrap.account.columns[0].code+' / 007 补图保留原稿','',
+          '这是需要保持原样的正文。','','![图1：封面](images/old.png)','','## 一、真实示例','',
+          '```python','message = input("输入内容：")','print(message)','```','',
+          '![图2：运行截图](待配图：截图｜Agent)','','## 写在最后','','原来的结尾保持不变。',''].join('\r\n');
+        const sourceFile=path.join(inputFolder,'01-公众号正文.md'),raw=Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(body)]);
+        fs.writeFileSync(sourceFile,raw);
+        const configured=await request('accounts.save',{account:{...bootstrap.account,library_root:libraryRoot}});
+        await window.webContents.executeJavaScript('useBootstrap('+JSON.stringify(configured)+')');
+        result.supplements=await window.webContents.executeJavaScript('window.__ICE_SUPPLEMENT_SMOKE__('+JSON.stringify(sourceFolder)+')');
+        result.supplements.originalPreserved=fs.readFileSync(sourceFile).equals(raw)&&createHash('sha256').update(raw).digest('hex')===result.supplements.source_hash;
+        const supplemented=fs.readFileSync(path.join(result.supplements.export_folder,'01-公众号正文.md'),'utf8');
+        result.supplements.textPreserved=supplemented.includes(body.split('\r\n')[0])&&supplemented.includes('原来的结尾保持不变。\r\n')&&supplemented.includes('message = input("输入内容：")\r\nprint(message)\r\n');
+        result.supplements.promptExported=fs.readFileSync(path.join(result.supplements.export_folder,'03-配图提示词.md'),'utf8').includes('edited cover');
+        for(const view of ['assets','plan','source']){
+          await window.webContents.executeJavaScript(view==='plan'?'openSupplementPlan(ui.currentJob)':view==='source'?'ui.tab="article";ui.mode="edit";renderDetail()':'ui.tab="assets";renderDetail()');
+          await new Promise(resolve=>setTimeout(resolve,200));
+          await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+          fs.writeFileSync(path.join(runtime,'desktop-supplement-'+view+'.png'),(await window.webContents.capturePage()).toPNG());
+          if(view==='plan')await window.webContents.executeJavaScript('document.querySelector("#supplement-plan").close()');
+        }
+        window.setSize(1040,800);
+        await window.webContents.executeJavaScript('ui.tab="assets";ui.mode="preview";renderDetail()');
+        await new Promise(resolve=>setTimeout(resolve,250));
+        result.supplements.compact=await window.webContents.executeJavaScript('document.body.scrollWidth===innerWidth');
+        fs.writeFileSync(path.join(runtime,'desktop-supplement-compact.png'),(await window.webContents.capturePage()).toPNG());
+        result.outlines=await window.webContents.executeJavaScript('window.__ICE_OUTLINE_SMOKE__()');
+        await window.webContents.executeJavaScript('newDialog.close();changeView("outlines");renderOutlines()');
+        await new Promise(resolve=>setTimeout(resolve,350));
+        result.outlines.pageCaptureReady=await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(!newDialog.open&&document.querySelectorAll(".outline-saved-row").length===26))))');
+        fs.writeFileSync(path.join(runtime,'desktop-outlines.png'),(await window.webContents.capturePage()).toPNG());
+        window.setSize(1460,1000);
+        await window.webContents.executeJavaScript('openNewArticle({reset:true}).then(async()=>{newForm.elements.title_mode.value="outline";syncTitleMode();await loadOutlineChoices();document.querySelector("#outline-topic-choice").value=outlineState.available.find(row=>row.episode===11).topic_id;await adoptOutline();newDialog.scrollTop=0;})');
+        await new Promise(resolve=>setTimeout(resolve,350));
+        result.outlines.formCaptureReady=await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(newDialog.open&&newForm.elements.episode.value==="11"&&newForm.elements.topic.value==="审阅后修改的第十一期"&&outlineReady()))))');
+        fs.writeFileSync(path.join(runtime,'desktop-outline-new.png'),(await window.webContents.capturePage()).toPNG());
+        result.productionTools=await window.webContents.executeJavaScript('window.__ICE_TOOLS_SMOKE__()');
+        await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+        fs.writeFileSync(path.join(runtime,'desktop-tools.png'),(await window.webContents.capturePage()).toPNG());
+        window.setSize(1040,800);
+        await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
+        result.productionTools.compact=await window.webContents.executeJavaScript('document.body.scrollWidth===innerWidth');
+        fs.writeFileSync(path.join(runtime,'desktop-tools-compact.png'),(await window.webContents.capturePage()).toPNG());
+        const publicationJob=await request('jobs.get',{job_id:result.maintenance.job_id});
+        const publicationFolder=publicationJob.export.publishing_folder;
+        const publishingBody=fs.readFileSync(path.join(publicationFolder,'文本','01-公众号正文.md'),'utf8');
+        const publishingInfo=fs.readFileSync(path.join(publicationFolder,'文本','02-发布信息.txt'),'utf8');
+        const publishingImages=fs.readdirSync(path.join(publicationFolder,'图片'));
+        const references=[...publishingBody.matchAll(/^!\[[^\]\r\n]*\]\(\.\.\/图片\/([^\)\r\n]+)\)/gm)];
+        result.publicationExport={folder:publicationFolder,twoFolders:JSON.stringify(fs.readdirSync(publicationFolder).sort())===JSON.stringify(['图片','文本'].sort()),
+          markdown:publishingBody.startsWith('# '),imagesOnly:publishingImages.length>0&&publishingImages.every(name=>/\.(png|jpe?g|webp)$/i.test(name)),
+          linksResolved:references.length>0&&references.every(match=>fs.existsSync(path.join(publicationFolder,'图片',match[1]))),
+          archiveSeparate:publicationFolder!==publicationJob.export.folder,manualInstructions:publishingInfo.includes('手动发布')&&publishingInfo.includes('草稿')};
         fs.writeFileSync(path.join(runtime, 'desktop-smoke.json'), JSON.stringify(result, null, 2));
         app.quit();
-      } catch (error) { fs.writeFileSync(path.join(runtime, 'desktop-smoke-error.txt'), error.message); app.quit(); }
+      } catch (error) { fs.writeFileSync(path.join(runtime, 'desktop-smoke-error.txt'), error.stack||error.message); app.quit(); }
     }, 1800);
   }
 }
 
 app.whenReady().then(async () => {
+  if(process.argv.includes('--smoke')){
+    smokeClipboard=[];
+    for(const item of await clipboard.read()){
+      if(!item.types.length)continue;
+      const payload={};for(const type of item.types)payload[type]=await item.getType(type);
+      smokeClipboard.push(new ClipboardItem(payload));
+    }
+  }
+  if(firstPackagedStart){
+    fs.mkdirSync(path.dirname(dataSelection),{recursive:true});
+    fs.writeFileSync(dataSelection,JSON.stringify({runtime_root:runtime},null,2));
+  }
   protocol.handle('ice', request => {
     const url = new URL(request.url);
     if (url.hostname !== 'app') return new Response('not found', { status: 404 });
-    const root = path.join(__dirname, 'renderer');
-    const file = path.resolve(root, '.' + decodeURIComponent(url.pathname));
+    const pathname = decodeURIComponent(url.pathname);
+    // 新版工作台（v2.0）挂载在 /ui/ 前缀，产物来自 desktop/ui/dist；
+    // 其余路径仍走旧 renderer，过渡期两套页面并存（ADR-001）。
+    const uiPrefix = '/ui/';
+    let root, file;
+    if (pathname.startsWith(uiPrefix)) {
+      root = path.join(__dirname, 'ui', 'dist');
+      file = path.resolve(root, '.' + pathname.slice(uiPrefix.length - 1));
+    } else {
+      root = path.join(__dirname, 'renderer');
+      file = path.resolve(root, '.' + pathname);
+    }
     if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) return new Response('not found', { status: 404 });
     return net.fetch(pathToFileURL(file).href);
   });
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   registerIPC();
-  try { await startEngine(); await createWindow(); }
+  try {
+    await startEngine();
+    if(process.argv.includes('--provider-smoke')){
+      const profiles=(await request('bootstrap')).settings.profiles;const results=[];
+      for(const profile of profiles){
+        if(!profile.has_key){results.push({provider:profile.provider,status:'not_configured'});continue;}
+        try{results.push({...await request('tools.provider_check',{provider:profile.provider}),status:'passed'});}
+        catch(error){results.push({provider:profile.provider,status:'failed',error:error.message});}
+      }
+      fs.writeFileSync(path.join(runtime,'provider-smoke.json'),JSON.stringify({credential_warning:credentialWarning,results},null,2));app.quit();return;
+    }
+    await createWindow();
+    const {PreparationQueue}=require('./automation.cjs');
+    const preparationQueue=new PreparationQueue(request,captureRun);
+    const preparationTimer=setInterval(()=>{if(!shuttingDown&&!process.argv.includes('--prompt-smoke'))preparationQueue.tick().catch(()=>{});},5000);
+    preparationTimer.unref();
+    app.once('before-quit',()=>clearInterval(preparationTimer));
+  }
   catch (error) {
-    if (process.argv.includes('--smoke')) fs.writeFileSync(path.join(runtime, 'desktop-smoke-error.txt'), error.message);
+    if (process.argv.includes('--smoke')||process.argv.includes('--review-smoke')||process.argv.includes('--provider-smoke')||process.argv.includes('--ui-smoke')) fs.writeFileSync(path.join(runtime, process.argv.includes('--provider-smoke')?'provider-error.txt':process.argv.includes('--review-smoke')?'review-error.txt':process.argv.includes('--ui-smoke')?'ui-smoke-error.txt':'desktop-smoke-error.txt'), error.message);
     else dialog.showErrorBox('ICE Loop 启动失败', error.message);
     app.quit();
   }
 });
 app.on('window-all-closed', () => app.quit());
 app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
-app.on('before-quit', () => {
+app.on('before-quit', event => {
+  if(smokeClipboard){event.preventDefault();const saved=smokeClipboard;smokeClipboard=null;clipboard.write(saved).catch(()=>{}).finally(()=>app.quit());return;}
   shuttingDown = true;
+  embeddedBrowser?.reset();
   if (python && !python.killed) { python.stdin.end(); setTimeout(() => python.kill(), 1000).unref(); }
 });

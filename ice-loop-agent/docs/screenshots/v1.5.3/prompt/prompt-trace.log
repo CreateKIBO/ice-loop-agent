@@ -1,0 +1,265 @@
+2026-10-05T15:17:11.437Z boot:start
+2026-10-05T15:17:11.455Z js:start bootReady
+2026-10-05T15:17:11.466Z js:done
+2026-10-05T15:17:11.475Z boot:done
+2026-10-05T15:17:15.533Z capture:done
+2026-10-05T15:17:17.770Z style:done
+2026-10-05T15:17:17.790Z js:start openJob("job-ac7f74849c0f")
+2026-10-05T15:17:18.164Z js:done
+2026-10-05T15:17:18.188Z js:start openPromptEditor("job-ac7f74849c0f",1)
+2026-10-05T15:17:19.963Z js:done
+2026-10-05T15:17:19.972Z editor:done
+2026-10-05T15:17:19.981Z js:start document.querySelector("#prompt-editor").open&&Boolean(document.querySelector("[data-prompt-generate]"))
+2026-10-05T15:17:19.990Z js:done
+2026-10-05T15:17:19.999Z js:start document.querySelector(".prompt-references").innerText.includes("图片 1")&&document.querySelector(".prompt-references").innerText.includes("图片
+2026-10-05T15:17:20.008Z js:done
+2026-10-05T15:17:20.018Z js:start [...document.querySelectorAll(".prompt-references img")].length===2&&[...document.querySelectorAll(".prompt-references img")].every(img=>img
+2026-10-05T15:17:20.027Z js:done
+2026-10-05T15:17:20.393Z js:start document.querySelector("#prompt-editor textarea[name=prompt]").value="Use case: manual reviewed cover. Keep approved ICE Loop identity uncha
+2026-10-05T15:17:20.404Z js:done
+2026-10-05T15:17:20.414Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T15:17:20.443Z js:done
+2026-10-05T15:17:20.576Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T15:17:20.596Z js:done
+2026-10-05T15:17:20.730Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T15:17:20.751Z js:done
+2026-10-05T15:17:21.669Z js:start changeView("resources");renderResources()
+2026-10-05T15:17:23.280Z js:done
+2026-10-05T15:17:23.659Z js:start document.querySelectorAll("[data-resource]").length>=7&&workspace.textContent.includes("风格参考")
+2026-10-05T15:17:23.671Z js:done
+2026-10-05T15:17:23.680Z js:start changeView("models");renderModels()
+2026-10-05T15:17:23.696Z js:done
+2026-10-05T15:17:23.705Z js:start Boolean(document.querySelector("#vision-form option[value=deepseek]"))
+2026-10-05T15:17:23.715Z js:done
+2026-10-05T15:17:23.724Z js:start document.querySelector("#global-model-budget").getBoundingClientRect().top<document.querySelector(".model-grid").getBoundingClientRect().top
+2026-10-05T15:17:23.734Z js:done
+2026-10-05T15:17:24.092Z js:start document.querySelector("#default-budget-form input[name=max_image_model_calls]").value=8;document.querySelector("#default-budget-form").requ
+2026-10-05T15:17:24.102Z js:done
+2026-10-05T15:17:24.129Z js:start document.querySelector("#default-budget-form [role=status]").textContent.startsWith("已保存")
+2026-10-05T15:17:24.153Z js:done
+2026-10-05T15:17:24.270Z js:start document.querySelector("#default-budget-form [role=status]").textContent.startsWith("已保存")
+2026-10-05T15:17:24.279Z js:done
+2026-10-05T15:17:24.289Z budget:defaults-saved
+2026-10-05T15:17:24.407Z js:start openJob("job-4f34a1d801fa")
+2026-10-05T15:17:24.506Z js:done
+2026-10-05T15:17:24.515Z js:start openPromptEditor("job-4f34a1d801fa",1)
+2026-10-05T15:17:28.176Z js:done
+2026-10-05T15:17:28.185Z js:start document.querySelector("[data-prompt-generate]").click()
+2026-10-05T15:17:28.213Z js:done
+2026-10-05T15:17:28.238Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:28.254Z js:done
+2026-10-05T15:17:28.367Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:28.382Z js:done
+2026-10-05T15:17:28.506Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:28.534Z js:done
+2026-10-05T15:17:28.645Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:28.654Z js:done
+2026-10-05T15:17:28.748Z budget:first-generation
+2026-10-05T15:17:28.757Z js:start window.iceControls.openBudget("job-4f34a1d801fa")
+2026-10-05T15:17:28.859Z js:done
+2026-10-05T15:17:29.222Z js:start document.querySelector("#current-budget-form input").value=1;document.querySelector("#current-budget-form").requestSubmit(document.querySele
+2026-10-05T15:17:29.233Z js:done
+2026-10-05T15:17:29.245Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T15:17:29.272Z js:done
+2026-10-05T15:17:29.405Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T15:17:29.414Z js:done
+2026-10-05T15:17:29.424Z js:start document.querySelector("#model-budget-dialog").close();document.querySelector("[data-prompt-generate]").click()
+2026-10-05T15:17:29.434Z js:done
+2026-10-05T15:17:29.447Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("预算已
+2026-10-05T15:17:29.473Z js:done
+2026-10-05T15:17:29.606Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("预算已
+2026-10-05T15:17:29.623Z js:done
+2026-10-05T15:17:29.637Z js:start Boolean(document.querySelector("#prompt-editor [data-budget-open]"))&&document.querySelector("#prompt-editor textarea").value.startsWith("Ed
+2026-10-05T15:17:29.652Z js:done
+2026-10-05T15:17:29.860Z budget:exhaustion
+2026-10-05T15:17:30.239Z js:start window.iceControls.openBudget("job-4f34a1d801fa")
+2026-10-05T15:17:30.343Z js:done
+2026-10-05T15:17:30.353Z budget:reopened
+2026-10-05T15:17:30.362Z js:start document.querySelector("#current-budget-form input").value=2;document.querySelector("#current-budget-form").requestSubmit(document.querySele
+2026-10-05T15:17:30.371Z js:done
+2026-10-05T15:17:30.384Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T15:17:30.410Z js:done
+2026-10-05T15:17:30.538Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T15:17:30.548Z js:done
+2026-10-05T15:17:30.557Z budget:raised
+2026-10-05T15:17:30.566Z js:start document.querySelector("#model-budget-dialog").close();document.querySelector("[data-prompt-generate]").click()
+2026-10-05T15:17:30.577Z js:done
+2026-10-05T15:17:30.589Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:30.615Z js:done
+2026-10-05T15:17:30.739Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:30.767Z js:done
+2026-10-05T15:17:30.893Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T15:17:30.903Z js:done
+2026-10-05T15:17:30.997Z budget:regenerated
+2026-10-05T15:17:31.098Z js:start document.querySelector("#prompt-editor").close()
+2026-10-05T15:17:31.107Z js:done
+2026-10-05T15:17:31.117Z js:start window.iceMotion.setPreference("on");window._controlProbe=document.createElement("button");_controlProbe.className="button secondary";_contr
+2026-10-05T15:17:31.128Z js:done
+2026-10-05T15:17:31.137Z js:start window.iceControls.pendingCount===1&&_controlProbe.getAttribute("aria-busy")==="true"&&Boolean(_controlProbe.querySelector(".control-spinner
+2026-10-05T15:17:31.148Z js:done
+2026-10-05T15:17:31.501Z js:start _probeResolve()
+2026-10-05T15:17:31.512Z js:done
+2026-10-05T15:17:31.521Z js:start window.iceControls.pendingCount===0&&!_controlProbe.disabled
+2026-10-05T15:17:31.531Z js:done
+2026-10-05T15:17:31.541Z js:start !_controlProbe.hasAttribute("aria-busy")&&getComputedStyle(document.querySelector("#control-activity")).display==="none"
+2026-10-05T15:17:31.551Z js:done
+2026-10-05T15:17:31.922Z js:start (()=>{const r=_controlProbe.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()
+2026-10-05T15:17:31.939Z js:done
+2026-10-05T15:17:32.140Z js:start getComputedStyle(_controlProbe).transform!=="none"&&window.iceMotion.gestureCount>0
+2026-10-05T15:17:32.149Z js:done
+2026-10-05T15:17:32.218Z js:start window.iceMotion.setPreference("system");window._systemReduced=window.iceMotion.reduced();window.iceMotion.setPreference("on");_systemReduce
+2026-10-05T15:17:32.228Z js:done
+2026-10-05T15:17:32.238Z js:start window.iceMotion.setPreference("off")
+2026-10-05T15:17:32.248Z js:done
+2026-10-05T15:17:32.257Z js:start window.iceMotion.reduced()&&window.iceMotion.activeCount===0
+2026-10-05T15:17:32.267Z js:done
+2026-10-05T15:17:32.276Z js:start _controlProbe.remove();window.iceMotion.setPreference("on")
+2026-10-05T15:17:32.286Z js:done
+2026-10-05T15:17:32.295Z js:start openNewArticle({reset:true}).then(()=>{newForm.elements.production_mode.value="auto_prepare";syncTitleMode();})
+2026-10-05T15:17:32.519Z js:done
+2026-10-05T15:17:32.529Z js:start newForm.elements.production_mode.value==="auto_prepare"&&!newForm.elements.topic.required
+2026-10-05T15:17:32.538Z js:done
+2026-10-05T15:17:32.548Z js:start document.querySelector("#brief-replace").getBoundingClientRect().width===16
+2026-10-05T15:17:32.558Z js:done
+2026-10-05T15:17:32.671Z js:start document.querySelector("#brief-replace").getBoundingClientRect().width===16
+2026-10-05T15:17:32.681Z js:done
+2026-10-05T15:17:32.690Z js:start (()=>{const c=document.querySelector("#brief-replace"),d=newForm.closest("dialog"),r=c.getBoundingClientRect(),b=d.getBoundingClientRect();r
+2026-10-05T15:17:32.700Z js:done
+2026-10-05T15:17:33.419Z js:start (()=>{const r=newForm.closest("dialog").getBoundingClientRect(),c=document.querySelector("#brief-replace").getBoundingClientRect();return r.
+2026-10-05T15:17:33.429Z js:done
+2026-10-05T15:17:34.206Z js:start newDialog.close()
+2026-10-05T15:17:34.216Z js:done
+2026-10-05T15:17:34.245Z js:start openJob("job-20b7eb020b43")
+2026-10-05T15:17:34.417Z js:done
+2026-10-05T15:17:34.445Z js:start openSupplementExecution("job-20b7eb020b43")
+2026-10-05T15:17:34.642Z js:done
+2026-10-05T15:17:34.741Z js:start (()=>{const form=document.querySelector("#supplement-execution-form");form.elements.stdin.value="18";form.requestSubmit(form.querySelector("
+2026-10-05T15:17:34.751Z js:done
+2026-10-05T15:17:34.763Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:34.789Z js:done
+2026-10-05T15:17:34.901Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:34.921Z js:done
+2026-10-05T15:17:35.025Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:35.035Z js:done
+2026-10-05T15:17:35.045Z js:start (()=>{const f=document.querySelector("#supplement-run-confirm");f.elements.reviewed.checked=true;f.requestSubmit(f.querySelector("[type=subm
+2026-10-05T15:17:35.055Z js:done
+2026-10-05T15:17:35.068Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.094Z js:done
+2026-10-05T15:17:35.212Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.227Z js:done
+2026-10-05T15:17:35.367Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.376Z js:done
+2026-10-05T15:17:35.477Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.493Z js:done
+2026-10-05T15:17:35.600Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.618Z js:done
+2026-10-05T15:17:35.726Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.742Z js:done
+2026-10-05T15:17:35.833Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:35.845Z js:done
+2026-10-05T15:17:38.373Z js:start openSupplementExecution("job-20b7eb020b43")
+2026-10-05T15:17:38.489Z js:done
+2026-10-05T15:17:38.517Z js:start (()=>{const f=document.querySelector("#supplement-execution-form");f.elements.code_index.value="1";f.elements.expect_failure.checked=true;f.
+2026-10-05T15:17:38.542Z js:done
+2026-10-05T15:17:38.559Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:38.572Z js:done
+2026-10-05T15:17:38.681Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:38.703Z js:done
+2026-10-05T15:17:38.805Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:38.821Z js:done
+2026-10-05T15:17:38.946Z js:start Boolean(document.querySelector("#supplement-run-confirm"))
+2026-10-05T15:17:38.955Z js:done
+2026-10-05T15:17:38.964Z js:start document.querySelector("#supplement-execution-review").textContent.includes("教学报错素材")
+2026-10-05T15:17:38.973Z js:done
+2026-10-05T15:17:38.983Z js:start (()=>{const f=document.querySelector("#supplement-run-confirm");f.elements.reviewed.checked=true;f.requestSubmit(f.querySelector("[type=subm
+2026-10-05T15:17:38.993Z js:done
+2026-10-05T15:17:39.005Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.036Z js:done
+2026-10-05T15:17:39.148Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.176Z js:done
+2026-10-05T15:17:39.290Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.299Z js:done
+2026-10-05T15:17:39.398Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.418Z js:done
+2026-10-05T15:17:39.538Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.554Z js:done
+2026-10-05T15:17:39.663Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.674Z js:done
+2026-10-05T15:17:39.768Z js:start !document.querySelector("#supplement-execution").open
+2026-10-05T15:17:39.778Z js:done
+2026-10-05T15:17:41.002Z js:start openJob("job-20b7eb020b43").then(()=>{ui.tab="assets";renderDetail();})
+2026-10-05T15:17:41.210Z js:done
+2026-10-05T15:17:41.238Z js:start Boolean(document.querySelector(".asset-visual img")?.naturalWidth)
+2026-10-05T15:17:41.259Z js:done
+2026-10-05T15:17:41.365Z js:start Boolean(document.querySelector(".asset-visual img")?.naturalWidth)
+2026-10-05T15:17:41.393Z js:done
+2026-10-05T15:17:41.506Z js:start Boolean(document.querySelector(".asset-visual img")?.naturalWidth)
+2026-10-05T15:17:41.517Z js:done
+2026-10-05T15:17:41.617Z js:start Boolean(document.querySelector(".asset-visual img")?.naturalWidth)
+2026-10-05T15:17:41.625Z js:done
+2026-10-05T15:17:41.641Z js:start document.querySelector(".asset-visual img").naturalWidth
+2026-10-05T15:17:41.667Z js:done
+2026-10-05T15:17:41.676Z js:start document.querySelector(".asset-visual img").click()
+2026-10-05T15:17:41.691Z js:done
+2026-10-05T15:17:41.719Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:41.741Z js:done
+2026-10-05T15:17:41.851Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:41.861Z js:done
+2026-10-05T15:17:41.962Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:41.978Z js:done
+2026-10-05T15:17:42.070Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:42.092Z js:done
+2026-10-05T15:17:42.101Z js:start document.querySelector("#image-viewer img").naturalWidth
+2026-10-05T15:17:42.110Z js:done
+2026-10-05T15:17:42.120Z js:start (()=>{const r=document.querySelector("#image-viewer").getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=inn
+2026-10-05T15:17:42.129Z js:done
+2026-10-05T15:17:42.138Z js:start document.querySelector("[data-image-percent]").textContent
+2026-10-05T15:17:42.147Z js:done
+2026-10-05T15:17:42.156Z js:start (()=>{const r=document.querySelector(".image-viewer-viewport").getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+
+2026-10-05T15:17:42.165Z js:done
+2026-10-05T15:17:42.174Z js:start document.querySelector("[data-image-percent]").textContent!=="57%"
+2026-10-05T15:17:42.184Z js:done
+2026-10-05T15:17:42.194Z js:start document.querySelector("[data-image-percent]").textContent
+2026-10-05T15:17:42.203Z js:done
+2026-10-05T15:17:42.212Z js:start document.querySelector("#image-viewer img").style.transform
+2026-10-05T15:17:42.221Z js:done
+2026-10-05T15:17:42.333Z js:start document.querySelector("#image-viewer img").style.transform
+2026-10-05T15:17:42.343Z js:done
+2026-10-05T15:17:42.352Z js:start document.querySelector("[data-image-command=actual]").click()
+2026-10-05T15:17:42.362Z js:done
+2026-10-05T15:17:42.371Z js:start document.querySelector("[data-image-percent]").textContent==="100%"
+2026-10-05T15:17:42.380Z js:done
+2026-10-05T15:17:42.448Z js:start document.querySelector("[data-image-command=fit]").click()
+2026-10-05T15:17:42.459Z js:done
+2026-10-05T15:17:42.517Z js:start !document.querySelector("#image-viewer").open
+2026-10-05T15:17:42.527Z js:done
+2026-10-05T15:17:42.536Z js:start !document.querySelector("#image-viewer img").hasAttribute("src")
+2026-10-05T15:17:42.545Z js:done
+2026-10-05T15:17:42.554Z js:start !document.querySelector("#image-viewer img").hasAttribute("src")
+2026-10-05T15:17:42.564Z js:done
+2026-10-05T15:17:42.573Z js:start changeView("resources");renderResources()
+2026-10-05T15:17:44.313Z js:done
+2026-10-05T15:17:44.322Z js:start Boolean(document.querySelector("[data-resource-image]")?.naturalWidth)
+2026-10-05T15:17:44.350Z js:done
+2026-10-05T15:17:44.494Z js:start document.querySelector("[data-resource-image=\"resource-437a9753d4f8\"]").click()
+2026-10-05T15:17:44.508Z js:done
+2026-10-05T15:17:44.517Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:44.544Z js:done
+2026-10-05T15:17:44.656Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:44.665Z js:done
+2026-10-05T15:17:44.674Z js:start document.querySelector("#image-viewer img").naturalWidth
+2026-10-05T15:17:44.684Z js:done
+2026-10-05T15:17:44.693Z js:start document.querySelector("#image-viewer").close();document.querySelector("[data-resource-image=\"resource-437a9753d4f8\"]").click()
+2026-10-05T15:17:44.703Z js:done
+2026-10-05T15:17:44.715Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:44.741Z js:done
+2026-10-05T15:17:44.858Z js:start document.querySelector("#image-viewer").open&&document.querySelector("#image-viewer img").naturalWidth>0
+2026-10-05T15:17:44.867Z js:done
+2026-10-05T15:17:44.876Z js:start document.querySelector("#image-viewer img").naturalWidth
+2026-10-05T15:17:44.886Z js:done
+2026-10-05T15:17:44.895Z js:start changeView("studio")
+2026-10-05T15:17:44.906Z js:done
+2026-10-05T15:17:44.916Z js:start !document.querySelector("#image-viewer").open&&!document.querySelector("#image-viewer img").hasAttribute("src")
+2026-10-05T15:17:44.926Z js:done
+2026-10-05T15:17:44.935Z js:start document.querySelectorAll("#image-viewer").length===1&&!document.querySelector("#image-viewer img").hasAttribute("src")&&Object.keys(ui.imag
+2026-10-05T15:17:44.944Z js:done

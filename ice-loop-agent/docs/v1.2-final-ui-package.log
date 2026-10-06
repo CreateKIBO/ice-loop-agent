@@ -1,0 +1,32 @@
+Curated app files: 33
+ASAR written
+UI and PE integrity refreshed: G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked
+Removed generated Python cache directories: 0
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\electron-builder.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • building        target=zip arch=x64 file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.2.0-x64.zip
+  • building        target=nsis file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.2.0-Setup.exe archs=x64 oneClick=false perMachine=false
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.2.0-Setup.exe
+{"version":"1.2.0","asar_sha256":"f654743c6885b7059f56f6d5bb7055d3c211e6f09518012d07211b29fe5115cd","renderer_matches_source":true}
+{
+  "version": "1.2.0",
+  "zip_matches_unpacked": true,
+  "setup_payload_matches_unpacked": true,
+  "engine_matches_latest_build": true,
+  "user_data_included": false,
+  "files": [
+    {
+      "name": "ICE-Loop-Studio-1.2.0-Setup.exe",
+      "bytes": 189744216,
+      "sha256": "c8a7161dbb43916b521e1b5f3e8910ff7eb0f3d4e625176fb769750bf7b43d2a"
+    },
+    {
+      "name": "ICE-Loop-Studio-1.2.0-x64.zip",
+      "bytes": 189368636,
+      "sha256": "0978a9a166f2d904013094272c41fba5feeab3e6a7d2ee5504410c112e505369"
+    }
+  ]
+}

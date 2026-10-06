@@ -1,0 +1,6 @@
+test_expected_error_requires_bound_review_and_can_be_captured (tests.test_supplements.TestSupplements.test_expected_error_requires_bound_review_and_can_be_captured) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 25.533s
+
+OK

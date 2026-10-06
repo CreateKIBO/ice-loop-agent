@@ -1,0 +1,30 @@
+{
+  "run_id": "run-2dcc16541a36",
+  "code_artifact_id": "src-43ab252873cd",
+  "code_sha256": "f3eb332ce4fdbd45648087bc0e69ab8b80a7b65993947d347774a9feb73a4537",
+  "execution_mode": "local_reviewed",
+  "argv": [
+    "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Scripts\\python.exe",
+    "-B",
+    "multiplication_table.py"
+  ],
+  "runtime": {
+    "python": "3.12.13",
+    "os": "nt",
+    "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-491cecb5279d",
+    "container_image": "",
+    "ordering_semantics": "stdin/stdout/stderr separately recorded; no inferred interleaving",
+    "source_path": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\run-evidence\\run-2dcc16541a36\\multiplication_table.py",
+    "process_cleanup": "owned_process_tree_reaped",
+    "output_limited": "false",
+    "workspace_cleanup": "removed_owned_workspace"
+  },
+  "stdin_events": [],
+  "stdout": "1×1=1\t\r\n1×2=2\t2×2=4\t\r\n1×3=3\t2×3=6\t3×3=9\t\r\n1×4=4\t2×4=8\t3×4=12\t4×4=16\t\r\n1×5=5\t2×5=10\t3×5=15\t4×5=20\t5×5=25\t\r\n1×6=6\t2×6=12\t3×6=18\t4×6=24\t5×6=30\t6×6=36\t\r\n1×7=7\t2×7=14\t3×7=21\t4×7=28\t5×7=35\t6×7=42\t7×7=49\t\r\n1×8=8\t2×8=16\t3×8=24\t4×8=32\t5×8=40\t6×8=48\t7×8=56\t8×8=64\t\r\n1×9=9\t2×9=18\t3×9=27\t4×9=36\t5×9=45\t6×9=54\t7×9=63\t8×9=72\t9×9=81\t\r\n",
+  "stderr": "",
+  "exit_code": 0,
+  "timed_out": false,
+  "started_at": "2026-10-05T23:16:48+08:00",
+  "duration_ms": 188,
+  "output_sha256": "a8ef950e398077578e44801af709971e3f37b73b4419d12f683a31a176e9ae94"
+}

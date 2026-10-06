@@ -1,0 +1,141 @@
+{
+  "version": "1.0.0",
+  "recorded_at": "2026-10-02T17:05:55.446805+08:00",
+  "scope": "Windows x64 本地功能、隔离数据的桌面流程与打包产物验收；外部服务单列",
+  "review_loop_fix": {
+    "passed": true,
+    "input": "小冰",
+    "actual_stdout": "你好，小冰",
+    "distinctInputPrompt": true,
+    "approvalRetained": true,
+    "actualOutput": true,
+    "advanced": true,
+    "run_id": "run-65882f67adf3"
+  },
+  "tests": {
+    "python_full": {
+      "passed": 238,
+      "seconds": 727.169,
+      "log": "v1.0-python-full.log",
+      "note": "unittest 汇总次数，包含继承测试；不是独立业务场景数量或覆盖率"
+    },
+    "node": {
+      "passed": 25,
+      "log": "v1.0-node.log"
+    },
+    "final_assets": {
+      "passed": 47,
+      "seconds": 299.042,
+      "log": "v1.0-assets-final.log"
+    },
+    "final_slot_cas": {
+      "passed": 1,
+      "seconds": 62.375,
+      "log": "v1.0-slot-cas.log"
+    },
+    "native_capture_and_edit": {
+      "passed": 2,
+      "log": "v1.0-native-and-source-edit.log"
+    },
+    "isolated_local_git": {
+      "passed": 1,
+      "log": "v1.0-git-local.log"
+    },
+    "packaged_desktop": {
+      "passed": true,
+      "log": "v1.0-packaged-desktop.log",
+      "details": "desktop-v1.0-validation.json",
+      "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\independent-v1",
+      "path": "SystemRoot/System32 only",
+      "development_python_node_required": false,
+      "real_python_runs": 3,
+      "review_gates": [
+        "topic",
+        "outline",
+        "final_title",
+        "asset_plan"
+      ],
+      "original_supplement_bytes_preserved": true,
+      "outline_issue_100": true,
+      "backup_restore_restart": true,
+      "public_web_capture": true
+    }
+  },
+  "clipboard": {
+    "system_write_succeeded": false,
+    "manual_prompt_fallback_passed": true,
+    "manual_rich_content_fallback_passed": true,
+    "native_probe_error": 5,
+    "native_probe_error_name": "Access denied",
+    "electron_probe": {
+      "htmlHas": false,
+      "textMatched": false,
+      "types": [
+        []
+      ],
+      "htmlLength": 0,
+      "htmlValid": false,
+      "plainWriteMatched": false,
+      "electronVersion": "44.5.1"
+    },
+    "note": "未改变系统权限；手动入口通过不代表系统剪贴板写入成功，正常桌面微信粘贴仍需验收"
+  },
+  "package": {
+    "version": "1.0.0",
+    "zip_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.0.0-Setup.exe",
+        "bytes": 136845737,
+        "sha256": "524a9917026b5d7c7377e3f1cfef8351d8913198bba9ad6bc04591e30d41d8eb"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.0.0-x64.zip",
+        "bytes": 182634285,
+        "sha256": "b9c9ca94503b34c6bdd87d9b0513a1ace2b2ea2b34e200941a44380a4a3f39a0"
+      }
+    ],
+    "source_audit": {
+      "version": "1.0.0",
+      "asar_sha256": "adc3a82956fc523368e5ca68bd11d22ff4dcdc424d4a1dae3ba0fb6de98a27b2",
+      "renderer_matches_source": true
+    },
+    "authenticode": [
+      {
+        "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\release\\ICE-Loop-Studio-1.0.0-Setup.exe",
+        "status": "NotSigned"
+      },
+      {
+        "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\release\\win-unpacked\\ICE Loop Studio.exe",
+        "status": "NotSigned"
+      }
+    ],
+    "independent_tested_application_files_match_final_unpacked": true,
+    "independent_matching_file_count": 837,
+    "installer_helpers_not_executed": [
+      {
+        "file": "resources/elevate.exe",
+        "sha256": "9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37",
+        "note": "NSIS 打包步骤附加的安装辅助程序，桌面免安装流程未调用"
+      }
+    ],
+    "installer_wizard_run": false,
+    "note": "测试的是同内容独立目录程序；没有替用户安装或修改注册表"
+  },
+  "external_acceptance": {
+    "paid_text_and_vision_models": "未成功实测；旧 Key 在当前环境不可解密，需在应用内重新保存并连接测试",
+    "tapnow_generation": "按用户选择手动网站生成；入口/提示词/导入归档已验证，未消费额度",
+    "docker_runtime": "本机未安装；适配参数、缺环境明确失败与清理合同有测试，未实际运行容器",
+    "wechat_paste_publish": "未实测后台粘贴或发布；程序不自动发布",
+    "git_remote_push": "未执行；仅隔离本地仓库实际预览/提交",
+    "another_machine_or_os_user": "未具备环境；当前机器独立目录不替代跨机器验收",
+    "gpu_or_protected_native_windows": "不能保证所有窗口可捕获；不支持时拒绝并允许手动导入"
+  },
+  "screenshots": {
+    "folder": "screenshots/v1.0",
+    "count": 23
+  },
+  "user_data": "原始公众号文章、实际任务、加密 Key 未在测试中修改；安装包不含用户工作区"
+}

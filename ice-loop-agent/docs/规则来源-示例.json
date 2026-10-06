@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "title_max_chars": 30,
+    "words_range": [1200, 2600],
+    "code_blocks": [0, 3],
+    "code_block_max_lines": 20,
+    "required_ending_heading": "写在最后",
+    "banned_brand_words": ["全网最强", "小白闭眼冲"]
+  }
+}

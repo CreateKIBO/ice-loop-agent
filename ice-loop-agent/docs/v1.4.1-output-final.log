@@ -1,0 +1,13 @@
+test_complete_markdown_never_parses_json_inside_code_as_article (tests.test_creative_output.CreativeOutputTests.test_complete_markdown_never_parses_json_inside_code_as_article) ... ok
+test_fenced_json_keeps_backticks_inside_article_and_ignores_suffix (tests.test_creative_output.CreativeOutputTests.test_fenced_json_keeps_backticks_inside_article_and_ignores_suffix) ... ok
+test_json_body_starting_section_preserves_section_heading (tests.test_creative_output.CreativeOutputTests.test_json_body_starting_section_preserves_section_heading) ... ok
+test_json_body_without_heading_uses_explicit_title (tests.test_creative_output.CreativeOutputTests.test_json_body_without_heading_uses_explicit_title) ... ok
+test_markdown_h2_title_is_promoted (tests.test_creative_output.CreativeOutputTests.test_markdown_h2_title_is_promoted) ... ok
+test_markdown_wrapper_and_repeated_h1_are_normalized_outside_code (tests.test_creative_output.CreativeOutputTests.test_markdown_wrapper_and_repeated_h1_are_normalized_outside_code) ... ok
+test_plain_discussion_and_empty_json_are_not_drafts (tests.test_creative_output.CreativeOutputTests.test_plain_discussion_and_empty_json_are_not_drafts) ... ok
+test_questions_can_omit_empty_editorial_fields (tests.test_creative_output.CreativeOutputTests.test_questions_can_omit_empty_editorial_fields) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.002s
+
+OK

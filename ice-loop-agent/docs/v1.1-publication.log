@@ -1,0 +1,11 @@
+test_external_edit_rejected_without_loss (tests.test_publication_export.TestPublicationExport.test_external_edit_rejected_without_loss) ... ok
+test_image_looking_text_in_tilde_and_long_backtick_code_unchanged (tests.test_publication_export.TestPublicationExport.test_image_looking_text_in_tilde_and_long_backtick_code_unchanged) ... ok
+test_reexport_removes_old_unselected_images (tests.test_publication_export.TestPublicationExport.test_reexport_removes_old_unselected_images) ... ok
+test_restore_to_different_root_reexport (tests.test_publication_export.TestPublicationExport.test_restore_to_different_root_reexport) ... ok
+test_two_folders_valid_links_no_code_html_metadata (tests.test_publication_export.TestPublicationExport.test_two_folders_valid_links_no_code_html_metadata) ... ok
+test_untracked_folder_not_overwritten (tests.test_publication_export.TestPublicationExport.test_untracked_folder_not_overwritten) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.078s
+
+OK

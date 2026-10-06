@@ -1,0 +1,28 @@
+✔ fill blanks preserves supplied topic and user materials (1.0384ms)
+✔ replace existing requires explicit choice (0.1814ms)
+✔ late response preserves concurrent edits even in replace mode (0.1428ms)
+✔ touched fields are protected even when text was restored (0.1136ms)
+✔ changing series or episode discards entire suggestion (0.9529ms)
+✔ unknown keys and blank suggestions never mutate the form (0.3264ms)
+✔ raw HTML and script inside code are escaped (2.195ms)
+✔ untrusted links do not become navigable URLs (0.4978ms)
+✔ only managed image data can appear in preview (0.3875ms)
+✔ article headings and literal console output are preserved (0.392ms)
+✔ history filter helpers load with the module (0.7584ms)
+✔ no filter shows every record with a plain total (1.6936ms)
+✔ series filter narrows list and shows shown/total count (0.2865ms)
+✔ unsorted filter selects records without a series (0.876ms)
+✔ empty filter result explains the series has no records yet (0.1823ms)
+✔ records keep editable fields after filtering (0.1612ms)
+✔ cover uses complete reviewed cover prompt (0.9238ms)
+✔ real screenshot has no AI generation prompt (0.1508ms)
+✔ body image retains its own prompt (0.0978ms)
+✔ resource search covers editable labels and analyzed content (0.2255ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 294.6124

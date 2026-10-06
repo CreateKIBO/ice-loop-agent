@@ -1,0 +1,10 @@
+test_account_stale_and_running_guards (tests.test_model_budgets.TestModelBudgets.test_account_stale_and_running_guards) ... ok
+test_defaults_are_visible_validated_and_do_not_rewrite_existing_limits (tests.test_model_budgets.TestModelBudgets.test_defaults_are_visible_validated_and_do_not_rewrite_existing_limits) ... ok
+test_image_budget_cannot_enable_writer_or_normal_zero_budget (tests.test_model_budgets.TestModelBudgets.test_image_budget_cannot_enable_writer_or_normal_zero_budget) ... ok
+test_limit_is_enforced_and_current_task_can_resume_after_increase (tests.test_model_budgets.TestModelBudgets.test_limit_is_enforced_and_current_task_can_resume_after_increase) ... ok
+test_real_router_legacy_zero_replans_without_changing_body_or_prompt (tests.test_model_budgets.TestModelBudgets.test_real_router_legacy_zero_replans_without_changing_body_or_prompt) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 37.090s
+
+OK

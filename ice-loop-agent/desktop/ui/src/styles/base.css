@@ -1,0 +1,26 @@
+/* 基础样式与排版（M2-02）。重置保持最小；焦点环统一由 tokens 提供。 */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: var(--ice-font-ui);
+  font-size: var(--ice-font-size-md);
+  color: var(--ice-text);
+  background: var(--ice-warm-white);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); border-radius: var(--ice-radius-sm); }
+code, pre { font-family: var(--ice-font-mono); }
+::selection { background: rgba(36, 72, 219, 0.18); }
+
+/* 滚动条（桌面紧凑） */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--ice-border-strong); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 屏幕阅读器专用 */
+.ice-sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  clip: rect(0 0 0 0); overflow: hidden; white-space: nowrap;
+}

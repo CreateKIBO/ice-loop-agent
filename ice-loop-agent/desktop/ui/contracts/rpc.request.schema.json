@@ -1,0 +1,37 @@
+{
+  "$id": "rpc.request",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "JSON Lines 请求行。v1 客户端发 {\"id\",\"method\",\"params\"}，兼容。",
+  "properties": {
+    "id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "请求关联 ID；通知类可为空",
+      "title": "Id"
+    },
+    "method": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Method",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": true,
+      "title": "Params",
+      "type": "object"
+    }
+  },
+  "required": [
+    "method"
+  ],
+  "title": "RpcRequest",
+  "type": "object"
+}

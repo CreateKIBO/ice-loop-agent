@@ -1,0 +1,341 @@
+{
+  "version": "1.3.0",
+  "recorded_at": "2026-10-04T19:23:01.311100+08:00",
+  "python": {
+    "passed_unique_related_tests": 74,
+    "logs": [
+      "v1.3-python-regression.log",
+      "v1.3-chat-final.log",
+      "v1.3-article-regression.log"
+    ],
+    "groups": {
+      "creative_chat": 11,
+      "history_planning": 12,
+      "router": 13,
+      "publication_supplements_workbench": 38
+    }
+  },
+  "node": {
+    "passed": 35,
+    "failed": 0,
+    "log": "v1.3-node.log"
+  },
+  "packaged_chat": {
+    "passed": 17,
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\chat-desktop-1791112151044",
+      "components": true,
+      "discussionNoArticle": true,
+      "history": true,
+      "candidate": true,
+      "diff": true,
+      "unsavedProtected": true,
+      "pending": true,
+      "reviewUnsavedProtected": true,
+      "approvalEdited": true,
+      "draftEntry": true,
+      "sharedBody": true,
+      "prompts": true,
+      "compact": true,
+      "isolation": true,
+      "persisted": true,
+      "newContextReset": true,
+      "libraryEntryStable": true
+    }
+  },
+  "packaged_original_workflow": {
+    "driver_passed": true,
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018",
+      "title": "ICE Loop · 公众号创作工作台",
+      "connected": true,
+      "heading": "让想法，在对话中成稿。",
+      "jobs": 1,
+      "bodyWidth": 1446,
+      "viewport": 1446,
+      "previewEscaped": true,
+      "gates": [
+        "topic",
+        "outline",
+        "final_title",
+        "asset_plan"
+      ],
+      "completed": true,
+      "readiness": "assets_pending",
+      "runs": 3,
+      "exported": true,
+      "evidenceCards": 3,
+      "assetCards": 4,
+      "runCapture": {
+        "valid": true,
+        "source": "run_capture",
+        "resource": true,
+        "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\assets\\5853613c3a9ec08593d8bae8cbe8040db04d41ba39457e021a881c120464fcbe.png"
+      },
+      "promptReady": true,
+      "promptCopied": true,
+      "maintenance": {
+        "saved": true,
+        "diff": true,
+        "restored": true,
+        "historyUI": true,
+        "diffUI": true,
+        "htmlEntry": true,
+        "job_id": "job-c43eb2e0881d",
+        "export_folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\articles\\001-for 和 while：让电脑替你重复干活",
+        "backup": true,
+        "packageChecked": true,
+        "restore": true,
+        "restart": true,
+        "backup_file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-backup-7200cb51-2c55-47b6-86d2-95f3d57e2e45.zip",
+        "restored_runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-restored-78e19b19-741f-4a0c-86d2-43b4c9e2d384\\runtime",
+        "htmlRendered": true
+      },
+      "visionPanel": true,
+      "modelCards": 6,
+      "libraryArticles": 0,
+      "navigationStable": true,
+      "nativeScreenshot": {
+        "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\screenshots\\studio-1791112350387.png"
+      },
+      "resourcePipeline": {
+        "ready": true,
+        "slots": 4
+      },
+      "compact": {
+        "bodyWidth": 1026,
+        "viewport": 1026,
+        "heading": "从一个想法，到一篇好文章。"
+      },
+      "publications": {
+        "filled": true,
+        "editable": true,
+        "protectedEdit": true,
+        "noTask": true,
+        "customColumn": true,
+        "draftSaved": true,
+        "isolated": true,
+        "restored": true,
+        "accountId": "account-00e1994407fb"
+      },
+      "planning": {
+        "nextEpisode": true,
+        "manualEpisodeProtected": true,
+        "protectedTitle": true,
+        "candidates": true,
+        "adopted": true,
+        "confirmed": true,
+        "staleIgnored": true,
+        "historyPage": true,
+        "noTask": true
+      },
+      "resources": {
+        "editable": true,
+        "searchable": true,
+        "filterWorks": true,
+        "tapnowEntry": true,
+        "cards": 1,
+        "palette": 6,
+        "measured": true,
+        "preview": true
+      },
+      "supplements": {
+        "job_id": "job-18401bf3cbfc",
+        "readonly": true,
+        "manualTapNow": true,
+        "planEdited": true,
+        "rejected": true,
+        "reaccepted": true,
+        "cleared": true,
+        "actualRun": true,
+        "screenshot": true,
+        "resourceReuse": true,
+        "noModelCalls": true,
+        "stillNeedsTextReview": true,
+        "export_folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\articles\\account-00e1994407fb\\补图候选\\002-LIFE  007 补图保留原稿",
+        "source_hash": "fe29a723fbbaa83eb0e3bbf5e0da79ab51e49a0f131944d85a9f2bbbf9d2c322",
+        "screenshot_file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\assets\\a3a05a7a65046cacf25ada51877552642ff55e56b00310d39247716680593a65.png",
+        "originalPreserved": true,
+        "textPreserved": true,
+        "promptExported": true,
+        "compact": true
+      },
+      "outlines": {
+        "sample": true,
+        "preview": true,
+        "editable": true,
+        "saved": true,
+        "overTen": true,
+        "issueHundred": true,
+        "confirmed": true,
+        "titleProtected": true,
+        "sourceSwitchProtected": true,
+        "noTask": true,
+        "compact": true,
+        "isolated": true,
+        "restored": true,
+        "pageCaptureReady": true,
+        "formCaptureReady": true
+      },
+      "productionTools": {
+        "conflictDetected": true,
+        "conflictResolved": true,
+        "coverUI": true,
+        "coverMetadata": true,
+        "crop": true,
+        "reminder": true,
+        "richClipboard": true,
+        "clipboardHTML": true,
+        "richContentReady": true,
+        "articleCapture": true,
+        "publicWebCapture": true,
+        "singleSlotRedo": true,
+        "diagnostics": true,
+        "toolsUI": true,
+        "compact": true
+      },
+      "publicationExport": {
+        "folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1791112330018\\articles\\发布包\\001-for 和 while：让电脑替你重复干活",
+        "twoFolders": true,
+        "markdown": true,
+        "imagesOnly": true,
+        "linksResolved": true,
+        "archiveSeparate": true,
+        "manualInstructions": true
+      }
+    }
+  },
+  "packaged_browser": {
+    "driver_passed": true,
+    "result": {
+      "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\browser-1791112491567",
+      "packaged": true,
+      "fixtureRequests": [
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/start"
+        },
+        {
+          "site": "tapnow",
+          "path": "/next"
+        },
+        {
+          "site": "tapnow",
+          "path": "/download"
+        },
+        {
+          "site": "tapnow",
+          "path": "/login"
+        }
+      ],
+      "tapnowRouteInside": true,
+      "liveTapNow": {
+        "url": "https://app.tapnow.media/home",
+        "title": "TapNow | Your Agentic Creative Canvas",
+        "error": "",
+        "dom": {
+          "readyState": "complete",
+          "visibleCharacters": 0
+        },
+        "captured": false,
+        "captureError": "Screenshot surface timeout"
+      },
+      "liveWeChat": {
+        "url": "https://mp.weixin.qq.com/",
+        "title": "微信公众平台",
+        "error": "",
+        "dom": {
+          "readyState": "complete",
+          "visibleCharacters": 82
+        },
+        "captured": true
+      },
+      "isolatedPreferences": {
+        "nodeIntegration": false,
+        "sandbox": true,
+        "preload": null
+      },
+      "sessionOnDataDrive": true,
+      "remoteHasNoBridge": true,
+      "siteCookiesIsolated": true,
+      "cookieRetainedAfterNavigation": true,
+      "back": true,
+      "forward": true,
+      "invalidURLRejected": true,
+      "downloadSaved": true,
+      "popupInside": true,
+      "popupNoBridge": true,
+      "hiddenOnLeave": true,
+      "scrollResetOnEnter": true,
+      "compactBounds": true,
+      "compactNoOverflow": true,
+      "accountCookiesIsolated": true,
+      "persistentCookieAfterViewRecreate": true
+    }
+  },
+  "tapnow_live_observation": {
+    "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\tapnow-live-1791112820908",
+    "url": "https://app.tapnow.media/home",
+    "readOnly": true,
+    "page": {
+      "url": "https://app.tapnow.media/home",
+      "title": "TapNow｜你的智能体创意画布",
+      "readyState": "interactive",
+      "visibleCharacters": 2035,
+      "canvasCount": 1
+    },
+    "center": "<div class=\"flex w-full items-center justify-between gap-3\"><div class=\"flex min-w-0 items-center gap-2\"><div class=\"relative flex items-center\"><input type=\"file\" accept=\"image/png,image/jpg,image/jpeg,image/webp,image/heic,image/heif,video/mp4\" multiple=\"\" class=\"hidden\"><input type=\"file\" accept=\".md,.markdown,text/markdown,text/x-markdown\" class=\"hidden\"><input type=\"file\" class=\"hidden\" webkitdirectory=\"\" directory=\"\"><button type=\"button\" aria-label=\"添加\" class=\"flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white/10 p-0 text-foreground transition-all hover:bg-white/15\" id=\"radix-:rk:\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\" data-slot=\"dropdown-menu-trigger\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" view",
+    "screenshot": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\tapnow-live-1791112820908\\live-tapnow.png",
+    "rendered": true
+  },
+  "tapnow_homepage_visually_verified": true,
+  "release_source": {
+    "version": "1.3.0",
+    "asar_sha256": "a2a702b28a3441050eae7c2da70ab2629db71ba0cc255409d569c9aad318eab6",
+    "renderer_matches_source": true
+  },
+  "release_binaries": {
+    "version": "1.3.0",
+    "zip_matches_unpacked": true,
+    "setup_payload_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.3.0-Setup.exe",
+        "bytes": 189888772,
+        "sha256": "f97f9264fb353978ab39abfc246469cd08f9e460f4c98322b46a333e34fd16a9"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.3.0-x64.zip",
+        "bytes": 189513200,
+        "sha256": "c30ce2f6b06f049c2d7ec1ff4a4cf0f2a1e263866488fc5ebe4c7b300c972ad5"
+      }
+    ]
+  },
+  "boundaries": {
+    "paid_model_calls_performed": false,
+    "model_integration_used_isolated_offline_fixtures": true,
+    "tapnow_login_or_generation_performed": false,
+    "wechat_login_or_publication_performed": false,
+    "actual_user_installation_or_workspace_modified": false,
+    "installer_shutdown_restore_logic_reused_from_prior_verified_version": true,
+    "installed_into_actual_user_directory_this_turn": false,
+    "temporary_G_pyshot_tmp_used": false
+  },
+  "notes": [
+    "源码阶段的并发打包等待超时不作为通过记录；最终程序17项工作台及完整制作流程复验通过。",
+    "已修复存稿入口重复插入造成的刷新循环，空闲对话降低目录刷新频率。",
+    "Windows多层ASAR路径校验改用原生分隔符；ZIP缓存复用被内容校验发现后重新生成。",
+    "第三方网站的DOM/title观察与视觉验证分开记录，登录、生图及正式发布仍由用户完成。",
+    "仅旧生成测试构建移至E盘归档保留，正式文章、资源及实际安装工作区未迁移或删除。"
+  ]
+}

@@ -1,0 +1,9 @@
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\electron-builder.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • building        target=zip arch=x64 file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.0.0-x64.zip
+  • building        target=nsis file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.0.0-Setup.exe archs=x64 oneClick=false perMachine=false
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.0.0-Setup.exe
+  • building block map  blockMapFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.0.0-Setup.exe.blockmap

@@ -1,0 +1,104 @@
+Local components bundled.
+8639 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.8
+8639 INFO: Python: 3.12.13
+8720 INFO: Platform: Windows-11-10.0.26200-SP0
+8720 INFO: Python environment: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.venv
+8789 INFO: wrote build\ice-engine.spec
+20861 INFO: Module search paths (PYTHONPATH):
+['G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\python312.zip',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\DLLs',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none\\Lib',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.tools\\python\\cpython-3.12.13-windows-x86_64-none',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\win32',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\pythonwin',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\build',
+ 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent']
+81138 INFO: Appending 'datas' from .spec
+88997 INFO: checking Analysis
+88997 INFO: Building Analysis because Analysis-00.toc is non existent
+88998 INFO: Looking for Python shared library...
+89027 INFO: Using Python shared library: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.tools\python\cpython-3.12.13-windows-x86_64-none\python312.dll
+89027 INFO: Running Analysis Analysis-00.toc
+89027 INFO: Target bytecode optimization level: 0
+89027 INFO: Initializing module dependency graph...
+89201 INFO: Initializing module graph hook caches...
+108361 INFO: Analyzing modules for base_library.zip ...
+228665 INFO: Processing standard module hook 'hook-encodings.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+251918 INFO: Processing standard module hook 'hook-math.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+255697 INFO: Processing standard module hook 'hook-heapq.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+259522 INFO: Processing standard module hook 'hook-pickle.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+263564 INFO: Caching module dependency graph...
+263642 INFO: Analyzing G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\build\engine_entry.py
+263880 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+264086 INFO: Processing standard module hook 'hook-xml.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+264384 INFO: Processing standard module hook 'hook-_ctypes.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+264484 INFO: Processing standard module hook 'hook-sqlite3.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+265670 INFO: Processing standard module hook 'hook-platform.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+269605 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+269704 INFO: Processing standard module hook 'hook-PIL.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+269839 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+272483 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+273109 INFO: Processing standard module hook 'hook-difflib.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+273316 INFO: Processing module hooks (post-graph stage)...
+278312 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+278462 INFO: Performing binary vs. data reclassification (9 entries)
+278481 INFO: Looking for ctypes DLLs
+278491 INFO: Analyzing run-time hooks ...
+278492 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+278498 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+278504 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'G:\\05-��Ȥ��Ŀ\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+278516 INFO: Creating base_library.zip...
+284628 INFO: Looking for dynamic libraries
+285673 INFO: Extra DLL search directories (AddDllDirectory): []
+285673 INFO: Extra DLL search directories (PATH): []
+290832 INFO: Warnings written to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\warn-ice-engine.txt
+290876 INFO: Graph cross-reference written to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\xref-ice-engine.html
+292721 INFO: checking PYZ
+292721 INFO: Building PYZ because PYZ-00.toc is non existent
+292721 INFO: Building PYZ (ZlibArchive) G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\PYZ-00.pyz
+302974 INFO: Building PYZ (ZlibArchive) G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\PYZ-00.pyz completed successfully.
+303069 INFO: checking PKG
+303098 INFO: Building PKG because PKG-00.toc is non existent
+303099 INFO: Building PKG (CArchive) ice-engine.pkg
+304991 INFO: Building PKG (CArchive) ice-engine.pkg completed successfully.
+305016 INFO: Bootloader G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+305016 INFO: checking EXE
+305020 INFO: Building EXE because EXE-00.toc is non existent
+305020 INFO: Building EXE from EXE-00.toc
+305031 INFO: Copying bootloader EXE to G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\pyinstaller\ice-engine\ice-engine.exe
+305184 INFO: Copying icon to EXE
+305297 INFO: Copying 0 resources to EXE
+305297 INFO: Embedding manifest in EXE
+305408 INFO: Appending PKG archive to EXE
+308243 INFO: Fixing EXE headers
+313744 INFO: Building EXE from EXE-00.toc completed successfully.
+314627 INFO: checking COLLECT
+314628 INFO: Building COLLECT because COLLECT-00.toc is non existent
+314634 INFO: Removing dir G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\dist\ice-engine
+317655 INFO: Building COLLECT COLLECT-00.toc
+359112 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+359279 INFO: Build complete! The results are available in: G:\05-��Ȥ��Ŀ\gonzhonhao\wechat_agent\ice-loop-agent\dist
+Release resources prepared: G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\dist
+Removed generated Python cache directories: 0
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\electron-builder.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • executing @electron/rebuild  electronVersion=44.5.1 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.5.1 appOutDir=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked
+  • custom electronDist provided but no zip found; assuming unpacked electron directory.  electronDist=node_modules\electron\dist expectedFile=electron-v44.5.1-win32-x64.zip
+  • copying Electron  source=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\node_modules\electron\dist destination=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked
+(node:35560) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\win-unpacked\ICE Loop Studio.exe
+  • building        target=zip arch=x64 file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.1-x64.zip
+  • building        target=nsis file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.1-Setup.exe archs=x64 oneClick=false perMachine=false
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\__uninstaller-nsis-ice-loop-studio.exe
+  • signing with signtool.exe  path=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\release\ICE-Loop-Studio-1.5.1-Setup.exe
+Packaged source is stale: main.cjs

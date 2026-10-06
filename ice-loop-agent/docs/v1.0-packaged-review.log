@@ -1,0 +1,9 @@
+{
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\review-packaged-v1",
+  "packaged": true,
+  "distinctInputPrompt": true,
+  "approvalRetained": true,
+  "actualOutput": true,
+  "advanced": true,
+  "run_id": "run-65882f67adf3"
+}

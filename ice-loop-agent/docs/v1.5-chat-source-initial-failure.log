@@ -1,0 +1,4 @@
+Error: window.iceMotion.reduced()&&window.iceMotion.activeCount===0&&document.querySelector("#chat-progress .progress-pulse.running").getAnimations :: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error.
+    at js (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:8:250)
+    at async module.exports (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\chat-smoke.cjs:63:26)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:388:22) G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\chat-desktop-1791125915717

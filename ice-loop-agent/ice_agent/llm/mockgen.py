@@ -111,6 +111,26 @@ def canon_code(series: str, episode: int) -> list[dict[str, str]]:
 
 
 def generate_structured(node: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    if node == 'creative_chat':
+        clarification = ctx.get('clarification') or {}
+        if ctx.get('mode') == 'draft' and ctx.get('fixture_clarification') and not (clarification.get('answers') or clarification.get('freeform_answer')):
+            return {'reply': '缺少关键资料，先确认后再写。', 'title': '', 'body': '', 'prompts': [],
+                    'questions': [{'id': 'audience', 'question': '这篇文章面向什么水平的读者？',
+                                   'options': ['零基础在校学生', '已有编程经验的读者']},
+                                  {'id': 'example', 'question': '你希望使用哪一种案例？',
+                                   'options': ['九九乘法表', '倒计时']}]}
+        target = ctx.get('candidate_article') or ctx.get('target_article') or {}
+        title = target.get('title') or 'for 和 while：让电脑替你重复干活'
+        body = target.get('body') or ('# ' + title + '\n\n每次都写一遍同样的操作，会让代码变长。循环让重复变得清楚。\n\n'
+            '## 一、先确定要重复什么\n\n从九九乘法表开始，把行与列分别交给循环。\n\n'
+            '![图1：循环封面](待配图：生图｜用户在TapNow生成)\n\n'
+            '## 写在最后\n\n这里只是隔离测试候选稿，实际事实与配图仍需核验。')
+        return {'reply': '这是离线测试候选：已整理标题、开头和配图提示词，等待同步审批。',
+                'title': title, 'body': body, 'prompts': ['Use case: editorial cover for a beginner programming article; 16:9 canvas; signal blue #2448DB, ink black #15191F, warm white #F3F2ED; text exactly "for & while"; an orderly multiplication grid on the right and spacious title area on the left; flat editorial vector style; no 3D, gradients, shadows, product logos or watermark.']}
+    if node=='image_prompts':
+        return {'figures':[{'figure_no':s['figure_no'],
+            'layout':'Use a restrained editorial grid. Place the main concept at the left and its result at the right, connected by one clear arrow. Keep the supplied identity unchanged and leave wide margins.',
+            'exact_text':[s['caption']]} for s in ctx['figures']]}
     fn = {
         "topic": _topic_payload,
         "research": _research_payload,
@@ -144,6 +164,8 @@ def _abstract_payload(ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def generate_text(node: str, ctx: dict[str, Any]) -> str:
+    if node == 'creative_chat':
+        return '可以接着上一篇的条件判断讨论循环。先明确重复次数，再比较 for 与 while 的使用场景。\n\n候选题目：\n\n1. for 和 while：让电脑替你重复干活\n2. 九九乘法表为什么需要两层循环\n3. 把重复的操作交给程序\n\n这是离线测试回复，实际创作使用已配置模型。'
     if node == "draft":
         return _draft_markdown(ctx)
     # 审稿修订类文本节点：Mock 场景下正文本已合规，回显原文表示「无需改动」

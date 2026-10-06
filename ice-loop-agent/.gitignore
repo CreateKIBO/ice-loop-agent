@@ -16,3 +16,7 @@ desktop/node_modules/
 desktop/dist/
 desktop/.npm-cache/
 desktop/.electron-cache/
+release/
+dist/
+docs/*.zip
+**/node_modules/

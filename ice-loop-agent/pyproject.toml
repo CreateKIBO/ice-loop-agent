@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ice-agent"
-version = "0.4.0"
+version = "1.5.3"
 description = "ICE Loop 公众号文章生产 Agent 引擎（写作流水线/国内模型适配/规则引擎/操作账本）"
 requires-python = ">=3.12"
-dependencies = ["Pillow>=10,<13"]
+dependencies = ["Pillow>=10,<13", "pydantic>=2.13,<3"]
 
 [project.optional-dependencies]
 server = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]

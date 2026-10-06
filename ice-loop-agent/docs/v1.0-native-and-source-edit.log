@@ -1,0 +1,7 @@
+test_real_selected_window_and_stale_target (tests.test_native_capture.TestActualNativeCapture.test_real_selected_window_and_stale_target) ... ok
+test_edit_clears_permission_runs_new_source (tests.test_v1_contracts.TestCodeEdit.test_edit_clears_permission_runs_new_source) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.450s
+
+OK

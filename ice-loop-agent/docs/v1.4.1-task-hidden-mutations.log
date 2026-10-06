@@ -1,0 +1,6 @@
+test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed (tests.test_task_lifecycle.TestTaskLifecycle.test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 23.041s
+
+OK

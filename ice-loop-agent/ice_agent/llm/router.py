@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
@@ -17,7 +18,7 @@ from typing import Any, Callable
 from ..domain.store import Store
 from ..domain.types import ModelProfile, new_id, sha256_text, sha256_json
 from .adapters import extract_json_block, make_adapter
-from .errors import ModelError, SchemaInvalidError, IncompleteResponseError
+from .errors import ModelError, SchemaInvalidError, IncompleteResponseError, CapabilityMismatch
 from .transport import OpenAIChatTransport
 
 ROLES = ("planner", "researcher", "writer", "reviewer",
@@ -41,6 +42,8 @@ class LLMRequest:
     stream: bool = False
     system: str = ""
     timeout: float = 120.0
+    images: list[str] = field(default_factory=list)  # Managed, bounded image Data URIs.
+    history: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -113,6 +116,8 @@ class RoleRouter:
                 continue
             adapter = make_adapter(profile, self.transport)
             try:
+                if req.images and adapter.capabilities().get("vision") not in ("documented", "verified"):
+                    raise CapabilityMismatch(f"{profile.model_id} 尚未确认支持图片输入，请先测试视觉模型")
                 # 硬约束 preflight：能力不满足直接跳过该候选（§9.9）
                 notes = adapter.preflight(route.thinking_policy)
             except ModelError as e:
@@ -145,9 +150,13 @@ class RoleRouter:
 
     # -------------------------------------------------------------- 内部
     def _invoke(self, adapter, req: LLMRequest, route: RouteConfig, *, job_id=None, attempt=1) -> LLMResponse:
-        messages: list[dict[str, str]] = []
+        messages: list[dict[str, Any]] = []
         if req.system:
             messages.append({"role": "system", "content": req.system})
+        for message in req.history:
+            if message.get('role') not in ('user', 'assistant') or not isinstance(message.get('content'), str):
+                raise ValueError('对话历史格式无效')
+            messages.append({'role': message['role'], 'content': message['content']})
         user_content = req.prompt
         if req.schema is not None:
             user_content += (
@@ -159,7 +168,7 @@ class RoleRouter:
         else:
             user_content += ("\n\n<context>" + json.dumps(
                 {**req.context, "node": req.node}, ensure_ascii=False) + "</context>")
-        messages.append({"role": "user", "content": user_content})
+        messages.append({"role": "user", "content": image_message(user_content, req.images)})
 
         want_json = req.schema is not None
         chat = self._call(adapter, req, route, messages, job_id=job_id,
@@ -170,7 +179,30 @@ class RoleRouter:
                            usage=chat.usage or {"usage": "usage_unknown"},
                            finish_reason=chat.finish_reason)
         if want_json:
-            resp.data = self._validate_structured(adapter, req, chat.content, route, job_id)
+            try:
+                if req.node == 'creative_chat' and req.context.get('mode') in ('draft', 'edit', 'images'):
+                    from .creative_output import normalize_creative_output
+                    try:
+                        data, recovery_notes = normalize_creative_output(chat.content)
+                        errors = validate_simple_schema(data, req.schema)
+                    except SchemaInvalidError:
+                        errors = ['无法直接恢复创作正文']
+                    if not errors:
+                        resp.data = data
+                        resp.notes.extend(recovery_notes)
+                    else:
+                        resp.data = self._validate_structured(adapter, req, chat.content, route, job_id)
+                else:
+                    resp.data = self._validate_structured(adapter, req, chat.content, route, job_id)
+            except ModelError as exc:
+                # HTTP success is not an editorial success. Tie schema failure
+                # to the exact invocation rather than the latest row from a
+                # concurrently running conversation.
+                invocation_id = getattr(chat, 'invocation_id', None)
+                if self.store and invocation_id:
+                    self.store.finish_invocation(invocation_id, exc.code, chat.usage or {'usage': 'usage_unknown'},
+                                                 chat.finish_reason, str(exc)[:300])
+                raise
         return resp
 
     def _call(self, adapter, req, route, messages, *, job_id=None, attempt=1,
@@ -185,6 +217,10 @@ class RoleRouter:
         if self.store:
             job = self.store.get_job(job_id) if job_id else None
             maximum = int(job["limits"].get("max_model_calls", 20)) if job else None
+            if job and job['workflow'] == 'supplement_images_v1':
+                if req.node != 'image_prompts':
+                    raise ModelError('IMAGE_ONLY_SCOPE', '补图任务只允许拟写配图提示词，原正文保持只读')
+                maximum = int(job['limits'].get('max_image_model_calls', 12))
             self.store.reserve_invocation(inv, maximum)
 
         def delta(piece):
@@ -197,6 +233,7 @@ class RoleRouter:
             chat = adapter.chat(messages, thinking_policy=route.thinking_policy,
                                 want_json=want_json, stream=stream, on_delta=delta,
                                 timeout=req.timeout)
+            chat.invocation_id = inv['invocation_id']
             if self.cancelled and self.cancelled():
                 raise ModelError("CANCELLED", "任务已停止，未采纳本次候选")
             if chat.finish_reason not in ("stop",):
@@ -236,14 +273,24 @@ class RoleRouter:
 
     def _repair_once(self, adapter, req: LLMRequest, route: RouteConfig,
                      original: str, errors: list[str] | None = None, *, job_id=None) -> dict:
+        # Editorial documents must not lose their tail during format repair.
+        # Most compatible models' complete Markdown is recovered locally first.
+        original_for_repair = original if req.node == 'creative_chat' else original[:8000]
+        if len(original_for_repair) > 180000:
+            raise SchemaInvalidError('创作回复超过修复上限，请缩小写作范围后重试。')
         repair_prompt = (
             "下面的输出" + ("不是合法 JSON" if errors is None else
                           "不符合契约：" + "；".join(errors[:5])) +
             "。请只输出修正后的 JSON 对象，不要改其中的数字、代码与既定字段值。\n\n"
-            + original[:8000] + "\n目标契约：" + json.dumps(req.schema, ensure_ascii=False))
+            + original_for_repair + "\n目标契约：" + json.dumps(req.schema, ensure_ascii=False))
+        messages = ([{"role":"system","content":req.system}] if req.system else [])
+        messages.append({"role":"user","content":image_message(repair_prompt,req.images)})
         chat = self._call(adapter, req, route,
-                          [{"role": "user", "content": repair_prompt}],
+                          messages,
                           job_id=job_id, want_json=True, attempt=2)
+        if req.node == 'creative_chat' and req.context.get('mode') in ('draft', 'edit', 'images'):
+            from .creative_output import normalize_creative_output
+            return normalize_creative_output(chat.content)[0]
         return extract_json_block(chat.content)
 
     def _record(self, job_id, req, profile, *, attempt, status, usage=None,
@@ -269,6 +316,25 @@ class RoleRouter:
             self.store.add_invocation(inv)
         if self.invocation_hook is not None:
             self.invocation_hook(inv)
+
+
+def image_message(text: str, images: list[str]) -> str | list[dict[str, Any]]:
+    """Keep normal text requests unchanged; only permit bounded local image data."""
+    if not images:
+        return text
+    if not isinstance(images,list) or len(images)>4:
+        raise ValueError("一次最多输入4张图片")
+    parts = [{"type":"text","text":text}]
+    for value in images:
+        if not isinstance(value,str) or len(value)>3_000_000 or not value.startswith(("data:image/png;base64,","data:image/jpeg;base64,","data:image/webp;base64,")):
+            raise ValueError("图片输入需为不超过3MB的本地图片Data URI")
+        try:
+            if not base64.b64decode(value.split(',',1)[1],validate=True):
+                raise ValueError()
+        except (ValueError,TypeError):
+            raise ValueError("图片Base64编码无效") from None
+        parts.append({"type":"image_url","image_url":{"url":value}})
+    return parts
 
 
 def result_usage(chat_result) -> dict[str, Any]:

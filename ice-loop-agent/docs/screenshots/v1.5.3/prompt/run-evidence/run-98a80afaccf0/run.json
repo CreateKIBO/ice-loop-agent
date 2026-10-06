@@ -1,0 +1,33 @@
+{
+  "run_id": "run-98a80afaccf0",
+  "code_artifact_id": "src-811c6a0d1994",
+  "code_sha256": "c7ed5c3eb331d23c6dd29a1040e4bcd00e03856d4d3abc406c185d355cf4f817",
+  "execution_mode": "local_reviewed",
+  "argv": [
+    "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.venv\\Scripts\\python.exe",
+    "-B",
+    "guess_while.py"
+  ],
+  "runtime": {
+    "python": "3.12.13",
+    "os": "nt",
+    "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-26b3788ea776",
+    "container_image": "",
+    "ordering_semantics": "stdin/stdout/stderr separately recorded; no inferred interleaving",
+    "source_path": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\run-evidence\\run-98a80afaccf0\\guess_while.py",
+    "process_cleanup": "owned_process_tree_reaped",
+    "output_limited": "false",
+    "workspace_cleanup": "removed_owned_workspace"
+  },
+  "stdin_events": [
+    "3\n",
+    "7\n"
+  ],
+  "stdout": "猜一个 1-10 的整数：再试一次\r\n猜一个 1-10 的整数：猜对了\r\n",
+  "stderr": "",
+  "exit_code": 0,
+  "timed_out": false,
+  "started_at": "2026-10-05T23:16:48+08:00",
+  "duration_ms": 172,
+  "output_sha256": "daad010c4aa8c709c26ef0b5c5950032ebf3eb690892a8da8a5ff6bb8bfb30cd"
+}

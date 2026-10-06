@@ -1,0 +1,32 @@
+{
+  "run_id": "run-5b6c778ff676",
+  "code_artifact_id": "src-b8acc5023927",
+  "code_sha256": "ddb562a915b1ac68895b36a20843f5955c50d8499af9ec0c18e820890e001aed",
+  "execution_mode": "local_reviewed",
+  "argv": [
+    "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\release\\win-unpacked\\resources\\teaching-python\\python.exe",
+    "-B",
+    "snippet_1.py"
+  ],
+  "runtime": {
+    "python": "3.12.13",
+    "os": "nt",
+    "cwd": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\staging\\run-ce1f3f1973e6",
+    "container_image": "",
+    "ordering_semantics": "stdin/stdout/stderr separately recorded; no inferred interleaving",
+    "source_path": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\prompt-native-1791213399528\\run-evidence\\run-5b6c778ff676\\snippet_1.py",
+    "process_cleanup": "owned_process_tree_reaped",
+    "output_limited": "false",
+    "workspace_cleanup": "removed_owned_workspace"
+  },
+  "stdin_events": [
+    "20\n"
+  ],
+  "stdout": "请输入年龄：明年 21\r\n",
+  "stderr": "",
+  "exit_code": 0,
+  "timed_out": false,
+  "started_at": "2026-10-05T23:17:36+08:00",
+  "duration_ms": 155,
+  "output_sha256": "ba2c685f5cf4b55940cbfa8d2026a53e31b3ea70aebf66c9bb79dbf26b404b51"
+}

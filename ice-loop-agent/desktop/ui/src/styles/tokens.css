@@ -1,0 +1,84 @@
+/* ICE Loop Studio v2.0 设计 tokens（M2-02）。
+   界面主题与公众号品牌配色分开：这里只是应用 UI 主题；文章预览/提示词
+   用对应公众号 StylePack，不注入全局。 */
+:root {
+  /* 品牌色（界面主题，延续 v1.5 设计系统） */
+  --ice-signal-blue: #2448DB;
+  --ice-signal-blue-hover: #1D3BC0;
+  --ice-signal-blue-pressed: #16309E;
+  --ice-ink: #15191F;
+  --ice-warm-white: #F3F2ED;
+
+  /* 中性色阶 */
+  --ice-surface: #FFFFFF;
+  --ice-surface-muted: #F7F6F2;
+  --ice-surface-sunken: #EDEBE4;
+  --ice-border: #D8D5CC;
+  --ice-border-strong: #B8B4A8;
+  --ice-text: #1A1E24;
+  --ice-text-secondary: #5A6069;
+  --ice-text-disabled: #9AA0A8;
+
+  /* 状态色 */
+  --ice-success: #1F7A4D;
+  --ice-success-bg: #E6F4EC;
+  --ice-warning: #9A6700;
+  --ice-warning-bg: #FFF3D6;
+  --ice-danger: #C23B33;
+  --ice-danger-hover: #A93229;
+  --ice-danger-bg: #FBEAE9;
+  --ice-info-bg: #E9EEFC;
+
+  /* 间距（4px 网格） */
+  --ice-space-1: 4px;
+  --ice-space-2: 8px;
+  --ice-space-3: 12px;
+  --ice-space-4: 16px;
+  --ice-space-5: 24px;
+  --ice-space-6: 32px;
+  --ice-space-7: 48px;
+
+  /* 圆角 */
+  --ice-radius-sm: 4px;
+  --ice-radius-md: 6px;
+  --ice-radius-lg: 10px;
+
+  /* 控件 */
+  --ice-control-height: 32px;
+  --ice-control-height-lg: 38px;
+  --ice-focus-ring: 0 0 0 2px var(--ice-surface), 0 0 0 4px var(--ice-signal-blue);
+
+  /* 字体 */
+  --ice-font-ui: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --ice-font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+  --ice-font-size-sm: 12px;
+  --ice-font-size-md: 13px;
+  --ice-font-size-lg: 15px;
+
+  /* 动效（120–260ms 起始参数；减弱动效时由 reduce-motion 覆盖为 0） */
+  --ice-motion-fast: 130ms;
+  --ice-motion-panel: 220ms;
+  --ice-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* z-index 层级（弹层经 Radix portal，均低于原生 WebContentsView 让位逻辑） */
+  --ice-z-dropdown: 100;
+  --ice-z-dialog: 200;
+  --ice-z-toast: 300;
+
+  /* 密度（紧凑模式由 [data-density=compact] 覆盖） */
+  --ice-row-gap: var(--ice-space-2);
+}
+
+[data-density="compact"] {
+  --ice-control-height: 28px;
+  --ice-row-gap: var(--ice-space-1);
+}
+
+/* 减弱动效：跟随系统与用户设置双通道（M2-08） */
+@media (prefers-reduced-motion: reduce) {
+  :root { --ice-motion-fast: 0ms; --ice-motion-panel: 0ms; }
+}
+[data-reduce-motion="true"] {
+  --ice-motion-fast: 0ms;
+  --ice-motion-panel: 0ms;
+}

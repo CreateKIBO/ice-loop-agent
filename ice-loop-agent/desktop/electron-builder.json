@@ -1,0 +1,65 @@
+{
+  "appId": "media.iceloop.studio",
+  "productName": "ICE Loop Studio",
+  "directories": {
+    "output": "../release"
+  },
+  "files": [
+    "main.cjs",
+    "preload.cjs",
+    "tools.cjs",
+    "clipboard.cjs",
+    "credential-helper.cjs",
+    "browser.cjs",
+    "browser-smoke.cjs",
+    "renderer/**/*",
+    "package.json",
+    "automation.cjs",
+    "prompt-smoke.cjs",
+    "chat-smoke.cjs",
+    "tests/writing-ux-ui.cjs",
+    "tests/execution-viewer-ui.cjs"
+  ],
+  "extraResources": [
+    {
+      "from": "../dist/ice-engine",
+      "to": "engine",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "../dist/teaching-python",
+      "to": "teaching-python",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "../dist/engine-project",
+      "to": "engine-project",
+      "filter": [
+        "**/*"
+      ]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis",
+      "zip"
+    ],
+    "signAndEditExecutable": false,
+    "artifactName": "ICE-Loop-Studio-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "useZip": true,
+    "differentialPackage": false,
+    "include": "installer/installer.nsh",
+    "artifactName": "ICE-Loop-Studio-${version}-Setup.${ext}"
+  }
+}

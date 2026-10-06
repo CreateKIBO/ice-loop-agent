@@ -1,0 +1,106 @@
+{
+  "version": "0.5.0",
+  "date": "2026-10-02",
+  "python_full_regression": {
+    "passed": 139,
+    "seconds": 180.952,
+    "failed": 0
+  },
+  "python_final_visual_suite": {
+    "failed": 0,
+    "passed": 15
+  },
+  "python_distinct_cases_covered": 140,
+  "node": {
+    "failed": 0,
+    "passed": 20
+  },
+  "compilation_and_syntax": "passed",
+  "paid_model_calls": 0,
+  "real_visual_model_quality_verified": false,
+  "tapnow_live_login_generation_verified": false,
+  "tapnow_mcp_implemented": false,
+  "native_electron": {
+    "title": "ICE Loop · 公众号创作工作台",
+    "connected": true,
+    "heading": "从一个想法，到一篇好文章。",
+    "jobs": 1,
+    "bodyWidth": 1446,
+    "viewport": 1446,
+    "previewEscaped": true,
+    "gates": [
+      "topic",
+      "outline",
+      "final_title",
+      "asset_plan"
+    ],
+    "completed": true,
+    "readiness": "assets_pending",
+    "runs": 3,
+    "exported": true,
+    "evidenceCards": 3,
+    "assetCards": 4,
+    "runCapture": {
+      "valid": true,
+      "source": "run_capture",
+      "resource": true,
+      "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790876537233\\assets\\6d7ef77633b5bbb88f36a2439bae065575a5de3c36c83fef2c5eac7f8e93f405.png"
+    },
+    "promptReady": true,
+    "promptCopied": true,
+    "visionPanel": true,
+    "modelCards": 5,
+    "libraryArticles": 10,
+    "navigationStable": true,
+    "nativeScreenshot": {
+      "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790876537233\\screenshots\\studio-1790876555786.png"
+    },
+    "resourcePipeline": {
+      "ready": true,
+      "slots": 4
+    },
+    "compact": {
+      "bodyWidth": 1026,
+      "viewport": 1026,
+      "heading": "从一个想法，到一篇好文章。"
+    },
+    "publications": {
+      "filled": true,
+      "editable": true,
+      "protectedEdit": true,
+      "noTask": true,
+      "customColumn": true,
+      "draftSaved": true,
+      "isolated": true,
+      "restored": true,
+      "accountId": "account-4c6431d3d3d4"
+    },
+    "planning": {
+      "nextEpisode": true,
+      "manualEpisodeProtected": true,
+      "protectedTitle": true,
+      "candidates": true,
+      "adopted": true,
+      "confirmed": true,
+      "staleIgnored": true,
+      "historyPage": true,
+      "noTask": true
+    },
+    "resources": {
+      "editable": true,
+      "searchable": true,
+      "filterWorks": true,
+      "tapnowEntry": true,
+      "cards": 1,
+      "palette": 8,
+      "measured": true,
+      "preview": true
+    }
+  },
+  "screenshots": "docs/screenshots/v0.5",
+  "notes": [
+    "TapNow follows final user choice: copy prompt, open website, generate manually, import image.",
+    "PNG execution capture came from actual native capturePage and real local execution.",
+    "Full regression preceded the final manual image archive edge case; final visual suite verified this change."
+  ]
+}

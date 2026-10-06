@@ -1,0 +1,17 @@
+test_account_isolation_covers_inspection_actions_and_lists (tests.test_task_lifecycle.TestTaskLifecycle.test_account_isolation_covers_inspection_actions_and_lists) ... ok
+test_archive_delete_restore_preserves_article_approvals_and_slots (tests.test_task_lifecycle.TestTaskLifecycle.test_archive_delete_restore_preserves_article_approvals_and_slots) ... ok
+test_delete_during_code_verification_retains_first_run_and_skips_second (tests.test_task_lifecycle.TestTaskLifecycle.test_delete_during_code_verification_retains_first_run_and_skips_second) ... ok
+test_engine_cannot_start_an_archived_task_even_via_direct_cli_entry (tests.test_task_lifecycle.TestTaskLifecycle.test_engine_cannot_start_an_archived_task_even_via_direct_cli_entry) ... ok
+test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed (tests.test_task_lifecycle.TestTaskLifecycle.test_hidden_task_mutations_are_blocked_but_read_inspection_is_allowed) ... ok
+test_invalid_filters_and_missing_tasks_do_not_change_visibility (tests.test_task_lifecycle.TestTaskLifecycle.test_invalid_filters_and_missing_tasks_do_not_change_visibility) ... ok
+test_lifecycle_survives_restart_and_restores_without_starting_work (tests.test_task_lifecycle.TestTaskLifecycle.test_lifecycle_survives_restart_and_restores_without_starting_work) ... ok
+test_missing_output_marker_has_a_useful_error_instead_of_name_error (tests.test_task_lifecycle.TestTaskLifecycle.test_missing_output_marker_has_a_useful_error_instead_of_name_error) ... ok
+test_only_target_queued_future_is_cancelled (tests.test_task_lifecycle.TestTaskLifecycle.test_only_target_queued_future_is_cancelled) ... ok
+test_pause_cancels_queued_job_and_preserves_other_worker_futures (tests.test_task_lifecycle.TestTaskLifecycle.test_pause_cancels_queued_job_and_preserves_other_worker_futures) ... ok
+test_repeated_actions_are_idempotent (tests.test_task_lifecycle.TestTaskLifecycle.test_repeated_actions_are_idempotent) ... ok
+test_running_delete_stops_worker_without_overwriting_pause_with_failure (tests.test_task_lifecycle.TestTaskLifecycle.test_running_delete_stops_worker_without_overwriting_pause_with_failure) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 295.434s
+
+OK

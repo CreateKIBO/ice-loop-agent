@@ -1,0 +1,21 @@
+AssertionError [ERR_ASSERTION]: minimumWindowSize
+
+false !== true
+
+    at Object.run (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser-smoke.cjs:159:584)
+    at async Timeout._onTimeout (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:410:43)  Error: 请输入有效的 HTTPS 网页地址
+    at G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\browser.cjs:111:62
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Session.<anonymous> (node:electron/js2c/browser_init:1:118948)
+Error occurred in handler for 'ice:request': Error: 公众号已切换，请刷新任务列表
+    at Interface.<anonymous> (G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\main.cjs:182:40)
+    at Interface.emit (node:events:514:28)
+    at [_onLine] [as _onLine] (node:internal/readline/interface:474:12)
+    at [_normalWrite] [as _normalWrite] (node:internal/readline/interface:669:18)
+    at Socket.ondata (node:internal/readline/interface:268:23)
+    at Socket.emit (node:events:514:28)
+    at addChunk (node:internal/streams/readable:568:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:519:3)
+    at Readable.push (node:internal/streams/readable:399:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+ G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\browser-1791127093113

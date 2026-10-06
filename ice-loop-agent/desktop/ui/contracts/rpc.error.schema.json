@@ -1,0 +1,80 @@
+{
+  "$id": "rpc.error",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ErrorCode": {
+      "description": "稳定错误码（M1-09）。display message 可变，code 是合同。",
+      "enum": [
+        "VALIDATION_ERROR",
+        "NOT_FOUND",
+        "ACCOUNT_MISMATCH",
+        "REVISION_CONFLICT",
+        "BUDGET_EXCEEDED",
+        "PERMISSION_DENIED",
+        "CANCELLED",
+        "NETWORK",
+        "PROVIDER_ERROR",
+        "CAPABILITY_MISMATCH",
+        "IDEMPOTENCY_CONFLICT",
+        "STATE_CONFLICT",
+        "INTERNAL"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "$ref": "#/$defs/ErrorCode"
+    },
+    "message": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "recoverable": {
+      "default": false,
+      "title": "Recoverable",
+      "type": "boolean"
+    },
+    "action": {
+      "anyOf": [
+        {
+          "enum": [
+            "retry",
+            "adjust_input",
+            "resolve_conflict",
+            "check_budget",
+            "contact_support"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "RpcErrorBody",
+  "type": "object"
+}

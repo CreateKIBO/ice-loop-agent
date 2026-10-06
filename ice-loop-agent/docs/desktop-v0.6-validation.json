@@ -1,0 +1,107 @@
+{
+  "verification": {
+    "app_version": "0.6.0",
+    "date": "2026-10-02",
+    "python_full_regression": {"passed":154,"seconds":159.338,"log":"v0.6-python-regression.log"},
+    "python_final_maintenance": {"passed":15,"seconds":32.949,"log":"v0.6-maintenance-final.log","note":"最后新增托管资源缺失不得保存不完整备份用例，并加强备份包内文件与数据库引用校验。覆盖总计155项独立Python用例。"},
+    "node_tests_passed":20,
+    "python_compile":"passed",
+    "javascript_syntax":"passed",
+    "paid_models_called":false,
+    "tapnow_generation_submitted":false,
+    "native_dialogs_automated":false,
+    "clean_machine_installer_verified":false
+  },
+  "title": "ICE Loop · 公众号创作工作台",
+  "connected": true,
+  "heading": "从一个想法，到一篇好文章。",
+  "jobs": 1,
+  "bodyWidth": 1446,
+  "viewport": 1446,
+  "previewEscaped": true,
+  "gates": [
+    "topic",
+    "outline",
+    "final_title",
+    "asset_plan"
+  ],
+  "completed": true,
+  "readiness": "assets_pending",
+  "runs": 3,
+  "exported": true,
+  "evidenceCards": 3,
+  "assetCards": 4,
+  "runCapture": {
+    "valid": true,
+    "source": "run_capture",
+    "resource": true,
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790878894896\\assets\\9b7f121d62a0f8766ebc386ee97b9142964dc33d4149d3330ba0a7525e81292c.png"
+  },
+  "promptReady": true,
+  "promptCopied": true,
+  "maintenance": {
+    "saved": true,
+    "diff": true,
+    "restored": true,
+    "historyUI": true,
+    "diffUI": true,
+    "htmlEntry": true,
+    "job_id": "job-ca305bcaaf05",
+    "export_folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790878894896\\articles\\001-for 和 while：让电脑替你重复干活",
+    "backup": true,
+    "packageChecked": true,
+    "restore": true,
+    "restart": true,
+    "backup_file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-backup-63f6479a-8074-4f05-b591-700348535075.zip",
+    "restored_runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\desktop-restored-1ee73636-a9df-4e76-bbb8-838fcb07cf43\\runtime",
+    "htmlRendered": true
+  },
+  "visionPanel": true,
+  "modelCards": 5,
+  "libraryArticles": 10,
+  "navigationStable": true,
+  "nativeScreenshot": {
+    "file": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790878894896\\screenshots\\studio-1790878918313.png"
+  },
+  "resourcePipeline": {
+    "ready": true,
+    "slots": 4
+  },
+  "compact": {
+    "bodyWidth": 1026,
+    "viewport": 1026,
+    "heading": "从一个想法，到一篇好文章。"
+  },
+  "publications": {
+    "filled": true,
+    "editable": true,
+    "protectedEdit": true,
+    "noTask": true,
+    "customColumn": true,
+    "draftSaved": true,
+    "isolated": true,
+    "restored": true,
+    "accountId": "account-5ee6ac6d6d51"
+  },
+  "planning": {
+    "nextEpisode": true,
+    "manualEpisodeProtected": true,
+    "protectedTitle": true,
+    "candidates": true,
+    "adopted": true,
+    "confirmed": true,
+    "staleIgnored": true,
+    "historyPage": true,
+    "noTask": true
+  },
+  "resources": {
+    "editable": true,
+    "searchable": true,
+    "filterWorks": true,
+    "tapnowEntry": true,
+    "cards": 1,
+    "palette": 8,
+    "measured": true,
+    "preview": true
+  }
+}

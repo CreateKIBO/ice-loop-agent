@@ -1,0 +1,125 @@
+2026-10-05T13:11:53.908Z boot:start
+2026-10-05T13:11:53.925Z js:start bootReady
+2026-10-05T13:11:53.936Z js:done
+2026-10-05T13:11:53.945Z boot:done
+2026-10-05T13:11:57.480Z capture:done
+2026-10-05T13:12:02.095Z style:done
+2026-10-05T13:12:02.117Z js:start openJob("job-8e0142a0d22f")
+2026-10-05T13:12:02.464Z js:done
+2026-10-05T13:12:02.500Z js:start openPromptEditor("job-8e0142a0d22f",1)
+2026-10-05T13:12:04.264Z js:done
+2026-10-05T13:12:04.273Z editor:done
+2026-10-05T13:12:04.282Z js:start document.querySelector("#prompt-editor").open&&Boolean(document.querySelector("[data-prompt-generate]"))
+2026-10-05T13:12:04.291Z js:done
+2026-10-05T13:12:04.300Z js:start document.querySelector(".prompt-references").innerText.includes("图片 1")&&document.querySelector(".prompt-references").innerText.includes("图片
+2026-10-05T13:12:04.309Z js:done
+2026-10-05T13:12:04.318Z js:start [...document.querySelectorAll(".prompt-references img")].length===2&&[...document.querySelectorAll(".prompt-references img")].every(img=>img
+2026-10-05T13:12:04.327Z js:done
+2026-10-05T13:12:04.701Z js:start document.querySelector("#prompt-editor textarea[name=prompt]").value="Use case: manual reviewed cover. Keep approved ICE Loop identity uncha
+2026-10-05T13:12:04.711Z js:done
+2026-10-05T13:12:04.721Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T13:12:04.743Z js:done
+2026-10-05T13:12:04.875Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T13:12:04.887Z js:done
+2026-10-05T13:12:05.018Z js:start !document.querySelector("#prompt-editor").open
+2026-10-05T13:12:05.033Z js:done
+2026-10-05T13:12:05.619Z js:start changeView("resources");renderResources()
+2026-10-05T13:12:07.233Z js:done
+2026-10-05T13:12:07.623Z js:start document.querySelectorAll("[data-resource]").length>=7&&workspace.textContent.includes("风格参考")
+2026-10-05T13:12:07.635Z js:done
+2026-10-05T13:12:07.645Z js:start changeView("models");renderModels()
+2026-10-05T13:12:07.662Z js:done
+2026-10-05T13:12:07.671Z js:start Boolean(document.querySelector("#vision-form option[value=deepseek]"))
+2026-10-05T13:12:07.686Z js:done
+2026-10-05T13:12:07.710Z js:start document.querySelector("#global-model-budget").getBoundingClientRect().top<document.querySelector(".model-grid").getBoundingClientRect().top
+2026-10-05T13:12:07.732Z js:done
+2026-10-05T13:12:08.098Z js:start document.querySelector("#default-budget-form input[name=max_image_model_calls]").value=8;document.querySelector("#default-budget-form").requ
+2026-10-05T13:12:08.108Z js:done
+2026-10-05T13:12:08.141Z js:start document.querySelector("#default-budget-form [role=status]").textContent.startsWith("已保存")
+2026-10-05T13:12:08.166Z js:done
+2026-10-05T13:12:08.290Z js:start document.querySelector("#default-budget-form [role=status]").textContent.startsWith("已保存")
+2026-10-05T13:12:08.300Z js:done
+2026-10-05T13:12:08.309Z budget:defaults-saved
+2026-10-05T13:12:08.388Z js:start openJob("job-23c5835a62d9")
+2026-10-05T13:12:08.471Z js:done
+2026-10-05T13:12:08.480Z js:start openPromptEditor("job-23c5835a62d9",1)
+2026-10-05T13:12:09.014Z js:done
+2026-10-05T13:12:09.024Z js:start document.querySelector("[data-prompt-generate]").click()
+2026-10-05T13:12:09.035Z js:done
+2026-10-05T13:12:09.060Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T13:12:09.081Z js:done
+2026-10-05T13:12:09.203Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T13:12:09.214Z js:done
+2026-10-05T13:12:09.329Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T13:12:09.339Z js:done
+2026-10-05T13:12:09.411Z budget:first-generation
+2026-10-05T13:12:09.420Z js:start window.iceControls.openBudget("job-23c5835a62d9")
+2026-10-05T13:12:09.495Z js:done
+2026-10-05T13:12:09.871Z js:start document.querySelector("#current-budget-form input").value=1;document.querySelector("#current-budget-form").requestSubmit(document.querySele
+2026-10-05T13:12:09.882Z js:done
+2026-10-05T13:12:09.892Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T13:12:09.918Z js:done
+2026-10-05T13:12:10.035Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T13:12:10.064Z js:done
+2026-10-05T13:12:10.193Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T13:12:10.203Z js:done
+2026-10-05T13:12:10.212Z js:start document.querySelector("#model-budget-dialog").close();document.querySelector("[data-prompt-generate]").click()
+2026-10-05T13:12:10.223Z js:done
+2026-10-05T13:12:10.233Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("预算已
+2026-10-05T13:12:10.255Z js:done
+2026-10-05T13:12:10.380Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("预算已
+2026-10-05T13:12:10.405Z js:done
+2026-10-05T13:12:10.414Z js:start Boolean(document.querySelector("#prompt-editor [data-budget-open]"))&&document.querySelector("#prompt-editor textarea").value.startsWith("Ed
+2026-10-05T13:12:10.423Z js:done
+2026-10-05T13:12:10.496Z budget:exhaustion
+2026-10-05T13:12:10.867Z js:start window.iceControls.openBudget("job-23c5835a62d9")
+2026-10-05T13:12:10.950Z js:done
+2026-10-05T13:12:10.959Z budget:reopened
+2026-10-05T13:12:10.969Z js:start document.querySelector("#current-budget-form input").value=2;document.querySelector("#current-budget-form").requestSubmit(document.querySele
+2026-10-05T13:12:10.978Z js:done
+2026-10-05T13:12:10.989Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T13:12:11.011Z js:done
+2026-10-05T13:12:11.132Z js:start document.querySelector("#current-budget-form [role=status]").textContent.includes("已保存")
+2026-10-05T13:12:11.141Z js:done
+2026-10-05T13:12:11.151Z budget:raised
+2026-10-05T13:12:11.160Z js:start document.querySelector("#model-budget-dialog").close();document.querySelector("[data-prompt-generate]").click()
+2026-10-05T13:12:11.170Z js:done
+2026-10-05T13:12:11.180Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T13:12:11.203Z js:done
+2026-10-05T13:12:11.328Z js:start !document.querySelector("[data-prompt-generate]").disabled&&document.querySelector("#prompt-editor [role=status]").textContent.includes("候选来
+2026-10-05T13:12:11.338Z js:done
+2026-10-05T13:12:11.470Z budget:regenerated
+2026-10-05T13:12:11.549Z js:start document.querySelector("#prompt-editor").close()
+2026-10-05T13:12:11.559Z js:done
+2026-10-05T13:12:11.569Z js:start window.iceMotion.setPreference("on");window._controlProbe=document.createElement("button");_controlProbe.className="button secondary";_contr
+2026-10-05T13:12:11.580Z js:done
+2026-10-05T13:12:11.590Z js:start window.iceControls.pendingCount===1&&_controlProbe.getAttribute("aria-busy")==="true"&&Boolean(_controlProbe.querySelector(".control-spinner
+2026-10-05T13:12:11.599Z js:done
+2026-10-05T13:12:11.967Z js:start _probeResolve()
+2026-10-05T13:12:11.977Z js:done
+2026-10-05T13:12:11.986Z js:start window.iceControls.pendingCount===0&&!_controlProbe.disabled
+2026-10-05T13:12:11.996Z js:done
+2026-10-05T13:12:12.005Z js:start !_controlProbe.hasAttribute("aria-busy")&&getComputedStyle(document.querySelector("#control-activity")).display==="none"
+2026-10-05T13:12:12.015Z js:done
+2026-10-05T13:12:12.387Z js:start (()=>{const r=_controlProbe.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()
+2026-10-05T13:12:12.397Z js:done
+2026-10-05T13:12:12.592Z js:start getComputedStyle(_controlProbe).transform!=="none"&&window.iceMotion.gestureCount>0
+2026-10-05T13:12:12.602Z js:done
+2026-10-05T13:12:12.671Z js:start window.iceMotion.setPreference("system");window._systemReduced=window.iceMotion.reduced();window.iceMotion.setPreference("on");_systemReduce
+2026-10-05T13:12:12.682Z js:done
+2026-10-05T13:12:12.692Z js:start window.iceMotion.setPreference("off")
+2026-10-05T13:12:12.701Z js:done
+2026-10-05T13:12:12.711Z js:start window.iceMotion.reduced()&&window.iceMotion.activeCount===0
+2026-10-05T13:12:12.720Z js:done
+2026-10-05T13:12:12.729Z js:start _controlProbe.remove();window.iceMotion.setPreference("on")
+2026-10-05T13:12:12.739Z js:done
+2026-10-05T13:12:12.749Z js:start openNewArticle({reset:true}).then(()=>{newForm.elements.production_mode.value="auto_prepare";syncTitleMode();})
+2026-10-05T13:12:13.033Z js:done
+2026-10-05T13:12:13.043Z js:start newForm.elements.production_mode.value==="auto_prepare"&&!newForm.elements.topic.required
+2026-10-05T13:12:13.052Z js:done
+2026-10-05T13:12:13.062Z js:start document.querySelector("#brief-replace").getBoundingClientRect().width===16
+2026-10-05T13:12:13.071Z js:done
+2026-10-05T13:12:13.081Z js:start (()=>{const c=document.querySelector("#brief-replace"),d=newForm.closest("dialog"),r=c.getBoundingClientRect(),b=d.getBoundingClientRect();r
+2026-10-05T13:12:13.090Z js:done
+2026-10-05T13:12:13.821Z js:start (()=>{const r=newForm.closest("dialog").getBoundingClientRect(),c=document.querySelector("#brief-replace").getBoundingClientRect();return r.
+2026-10-05T13:12:13.831Z js:done

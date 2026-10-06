@@ -1,0 +1,24 @@
+EF
+======================================================================
+ERROR: test_existing_reader_can_open_during_another_connection_write_transaction (tests.test_store_reads.StoreReadConnectionTests.test_existing_reader_can_open_during_another_connection_write_transaction)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\tests\test_store_reads.py", line 24, in test_existing_reader_can_open_during_another_connection_write_transaction
+    reader=Store(self.path)
+           ^^^^^^^^^^^^^^^^
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\ice_agent\domain\store.py", line 256, in __init__
+    self.conn.execute('PRAGMA user_version=9')
+sqlite3.OperationalError: database is locked
+
+======================================================================
+FAIL: test_opening_existing_reader_does_not_change_database_version (tests.test_store_reads.StoreReadConnectionTests.test_opening_existing_reader_does_not_change_database_version)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\tests\test_store_reads.py", line 19, in test_opening_existing_reader_does_not_change_database_version
+    self.assertEqual(self.writer.conn.execute('PRAGMA data_version').fetchone()[0],before,
+AssertionError: 3 != 2 : Opening a read connection must not generate a write
+
+----------------------------------------------------------------------
+Ran 2 tests in 6.521s
+
+FAILED (failures=1, errors=1)

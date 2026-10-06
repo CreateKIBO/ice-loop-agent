@@ -1,0 +1,37 @@
+test_account_isolation_reject_feedback_and_immutable_manual_candidate (tests.test_creative_chat.CreativeChatTests.test_account_isolation_reject_feedback_and_immutable_manual_candidate) ... ok
+test_discussion_persists_without_article_and_restart (tests.test_creative_chat.CreativeChatTests.test_discussion_persists_without_article_and_restart) ... ok
+test_draft_conflict_before_submit_and_before_approval (tests.test_creative_chat.CreativeChatTests.test_draft_conflict_before_submit_and_before_approval) ... ok
+test_nested_library_recent_five_and_all_titles (tests.test_creative_chat.CreativeChatTests.test_nested_library_recent_five_and_all_titles) ... ok
+test_stop_discards_late_reply_and_can_continue (tests.test_creative_chat.CreativeChatTests.test_stop_discards_late_reply_and_can_continue) ... ok
+test_submit_and_approve_are_idempotent_and_source_untouched (tests.test_creative_chat.CreativeChatTests.test_submit_and_approve_are_idempotent_and_source_untouched) ... ok
+test_account_isolation (tests.test_history_planning.TestHistoryPlanning.test_account_isolation) ... ok
+test_baseline_ignores_drafts_and_missing_previous_body_is_not_fabricated (tests.test_history_planning.TestHistoryPlanning.test_baseline_ignores_drafts_and_missing_previous_body_is_not_fabricated) ... ok
+test_changed_fields_forged_hash_and_stale_history_block_creation (tests.test_history_planning.TestHistoryPlanning.test_changed_fields_forged_hash_and_stale_history_block_creation) ... ok
+test_confirmed_edited_title_uses_audited_gate_without_model_call (tests.test_history_planning.TestHistoryPlanning.test_confirmed_edited_title_uses_audited_gate_without_model_call) ... ok
+test_draft_is_not_publication_and_folder_number_is_not_episode (tests.test_history_planning.TestHistoryPlanning.test_draft_is_not_publication_and_folder_number_is_not_episode) ... ok
+test_fake_history_reference_and_duplicate_title_rejected (tests.test_history_planning.TestHistoryPlanning.test_fake_history_reference_and_duplicate_title_rejected) ... ok
+test_history_limits_and_date_validation (tests.test_history_planning.TestHistoryPlanning.test_history_limits_and_date_validation) ... ok
+test_planner_reads_actual_titles_body_and_preview_with_no_seed (tests.test_history_planning.TestHistoryPlanning.test_planner_reads_actual_titles_body_and_preview_with_no_seed) ... ok
+test_progress_change_invalidates_proposal_and_confirmation (tests.test_history_planning.TestHistoryPlanning.test_progress_change_invalidates_proposal_and_confirmation) ... ok
+test_published_body_snapshot_and_stale_edit_protection (tests.test_history_planning.TestHistoryPlanning.test_published_body_snapshot_and_stale_edit_protection) ... ok
+test_published_progress_column_scope_and_real_previous_sections (tests.test_history_planning.TestHistoryPlanning.test_published_progress_column_scope_and_real_previous_sections) ... ok
+test_unconfigured_planner_never_falls_back_to_mock (tests.test_history_planning.TestHistoryPlanning.test_unconfigured_planner_never_falls_back_to_mock) ... ok
+test_fallback_on_server_error (tests.test_router.TestRouter.test_fallback_on_server_error) ... ok
+test_mock_adapter_offline (tests.test_router.TestRouter.test_mock_adapter_offline) ... ok
+test_required_off_no_qualified_raises (tests.test_router.TestRouter.test_required_off_no_qualified_raises) ... ok
+test_required_off_skips_always_on_fallback (tests.test_router.TestRouter.test_required_off_skips_always_on_fallback)
+主模型 always-on，required_off 回退过滤后落到 Qwen（§9.9）。 ... ok
+test_structured_invalid_raises (tests.test_router.TestRouter.test_structured_invalid_raises) ... ok
+test_structured_repair_once (tests.test_router.TestRouter.test_structured_repair_once) ... ok
+test_usage_unknown_recorded (tests.test_router.TestRouter.test_usage_unknown_recorded) ... ok
+test_types_and_required (tests.test_router.TestSchemaValidator.test_types_and_required) ... ok
+test_deepseek_thinking_disabled (tests.test_router.TestThinkingTranslation.test_deepseek_thinking_disabled) ... ok
+test_glm_prefer_off_proceeds_with_note (tests.test_router.TestThinkingTranslation.test_glm_prefer_off_proceeds_with_note) ... ok
+test_glm_required_off_mismatch (tests.test_router.TestThinkingTranslation.test_glm_required_off_mismatch) ... ok
+test_json_object_requested_when_documented (tests.test_router.TestThinkingTranslation.test_json_object_requested_when_documented) ... ok
+test_qwen_enable_thinking_false (tests.test_router.TestThinkingTranslation.test_qwen_enable_thinking_false) ... ok
+
+----------------------------------------------------------------------
+Ran 31 tests in 487.921s
+
+OK

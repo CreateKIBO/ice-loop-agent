@@ -44,13 +44,31 @@ class WorkspaceAssets:
 
     def resources(self):
         rows = self.store.conn.execute("SELECT metadata_json FROM publication_resources WHERE account_id=? ORDER BY updated_at DESC", (self.account_id,))
-        return [json.loads(row[0]) for row in rows]
+        return [self.with_hash(json.loads(row[0])) for row in rows]
+
+    def style_context(self):
+        selected = [r for r in self.resources() if r.get('style_reference')]
+        if len(selected)>8:
+            raise ValueError('风格参考最多8张，请取消部分参考标记')
+        result=[]
+        for r in selected:
+            report=r.get('visual_analysis') or {}
+            result.append({'resource_id':r['resource_id'],'sha256':r['sha256'],'title':r['title'],
+                'description':r.get('description',''),'usage':r.get('usage','reference'),'preset_asset':r.get('preset_asset',''),
+                'style':report.get('style',''),'composition':report.get('composition',''),
+                'palette':r['palette'],'aspect_ratio':round(r['width']/r['height'],3)})
+        return result
+
+    @staticmethod
+    def with_hash(resource):
+        data = {key:value for key,value in resource.items() if key != 'content_hash'}
+        return {**data,'content_hash':sha256_json(data)}
 
     def resource(self, resource_id):
         row = self.store.conn.execute("SELECT metadata_json FROM publication_resources WHERE resource_id=? AND account_id=?", (resource_id, self.account_id)).fetchone()
         if not row:
             raise ValueError("当前公众号没有这项配图资源")
-        return json.loads(row[0])
+        return self.with_hash(json.loads(row[0]))
 
     def import_image(self, file_path):
         source = normalize(file_path)
@@ -70,25 +88,62 @@ class WorkspaceAssets:
                     "sha256": digest, "mime": mime, "size": size, "width": width, "height": height,
                     "palette": palette, "analysis": None, "created_at": now_iso()}
         self.save_resource(resource)
-        return resource
+        return self.resource(resource['resource_id'])
 
-    def save_resource(self, resource):
+    def save_resource(self, resource, *, commit=True):
+        resource = {key:value for key,value in resource.items() if key != 'content_hash'}
         self.store.conn.execute("INSERT OR REPLACE INTO publication_resources VALUES (?,?,?,?)",
             (resource["resource_id"], self.account_id, json.dumps(resource, ensure_ascii=False), now_iso()))
-        self.store.conn.commit()
+        if commit:
+            self.store.conn.commit()
 
-    def preview(self, resource_id):
+    def save_resource_if_current(self, resource, expected_hash):
+        with self.store.transaction():
+            if self.resource(resource['resource_id'])['content_hash'] != expected_hash:
+                raise ValueError('资源已更新，请重新打开后修改或分析')
+            self.save_resource(resource,commit=False)
+        return self.resource(resource['resource_id'])
+
+    def preview(self, resource_id, original=False):
         resource = self.resource(resource_id)
-        path = normalize(resource["file_path"])
-        assert_within(path, self.runtime / "resources" / self.account_id)
-        if hashlib.sha256(path.read_bytes()).hexdigest() != resource["sha256"]:
-            raise ValueError("配图资源文件已改变，请重新导入")
+        path = self.checked_path(resource)
+        if original:
+            return {'data_url':'data:'+resource['mime']+';base64,'+base64.b64encode(path.read_bytes()).decode(),
+                    'width':resource['width'],'height':resource['height']}
         with Image.open(path) as source:
             image = ImageOps.exif_transpose(source).convert("RGBA")
             image.thumbnail((1000, 700))
             output = io.BytesIO()
             image.save(output, format="PNG")
         return {"data_url": "data:image/png;base64," + base64.b64encode(output.getvalue()).decode()}
+
+    def checked_path(self, resource):
+        path = normalize(resource["file_path"])
+        assert_within(path, self.runtime / "resources" / self.account_id)
+        if hashlib.sha256(path.read_bytes()).hexdigest() != resource["sha256"]:
+            raise ValueError("配图资源文件已改变，请重新导入")
+        return path
+
+    def update_resource(self, params):
+        resource = self.resource(params['resource_id'])
+        if resource['content_hash'] != params.get('content_hash'):
+            raise ValueError('资源已更新，请重新打开后修改')
+        title, description, tags = params.get('title'),params.get('description',''),params.get('tags',[])
+        usage = params.get('usage','reference')
+        if not isinstance(title,str) or not 1<=len(title.strip())<=100 or not isinstance(description,str) or len(description)>1000:
+            raise ValueError('名称需为1–100字，说明最多1000字')
+        if not isinstance(tags,list) or len(tags)>12 or any(not isinstance(tag,str) or not 1<=len(tag.strip())<=30 for tag in tags):
+            raise ValueError('最多12个标签，每个标签1–30字')
+        if usage not in ('cover','illustration','screenshot','reference'):
+            raise ValueError('请选择正确的资源用途')
+        reference=params.get('style_reference',resource.get('style_reference',False))
+        if type(reference) is not bool:
+            raise ValueError('风格参考标记需为布尔值')
+        if reference and not resource.get('style_reference') and sum(bool(r.get('style_reference')) for r in self.resources())>=8:
+            raise ValueError('最多设置8张风格参考')
+        resource['style_reference']=reference
+        resource.update(title=title.strip(),description=description.strip(),tags=list(dict.fromkeys(tag.strip() for tag in tags)),usage=usage,metadata_source='user')
+        return self.save_resource_if_current(resource,params['content_hash'])
 
     def drafts(self):
         rows = self.store.conn.execute("SELECT draft_id,title,content_hash,updated_at FROM publication_drafts WHERE account_id=? ORDER BY updated_at DESC", (self.account_id,))

@@ -1,0 +1,40 @@
+.command-palette {
+  width: min(680px, calc(100vw - 40px));
+  max-height: min(680px, calc(100vh - 80px));
+  margin: 9vh auto auto;
+  padding: 0;
+  color: var(--ink, #15191f);
+  background: var(--paper, #faf9f6);
+  border: 1px solid var(--line, #dcded9);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.command-palette::backdrop { background: rgb(21 25 31 / 35%); }
+.command-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 24px 14px; }
+.command-head h2 { font: inherit; font-size: 17px; font-weight: 650; margin: 0 0 5px; }
+.command-head p { font-size: 12px; color: var(--muted, #737b86); margin: 0; }
+.command-close { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 23px; cursor: pointer; }
+.command-close:hover { background: #eeeee8; }
+.command-input-row { display: flex; align-items: center; gap: 10px; margin: 0 20px; border: 1px solid #c8cfdf; border-radius: 10px; background: #fff; padding: 0 14px; }
+.command-input-row:focus-within { border-color: var(--blue, #2448db); outline: 2px solid rgb(36 72 219 / 12%); }
+.command-input-row>span { color: #737b86; font-size: 26px; line-height: 1; }
+.command-input-row input { flex: 1; min-width: 0; width: 100%; height: 48px; padding: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 14px; box-shadow: none; }
+.command-palette kbd { display: inline-grid; place-items: center; min-width: 22px; height: 21px; padding: 0 4px; margin: 0 2px; border: 1px solid #dce0e5; border-radius: 4px; color: #697586; background: #f5f6f8; font: inherit; font-size: 11px; }
+.command-status { margin: 12px 24px 8px; color: var(--muted, #737b86); min-height: 18px; font-size: 12px; }
+.command-results { max-height: min(440px, calc(100vh - 320px)); overflow-y: auto; overscroll-behavior: contain; padding: 0 10px 10px; }
+.command-result { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid transparent; border-radius: 9px; color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; }
+.command-result:hover { background: #f0f1ef; }
+.command-result.selected { border-color: #d2dafa; background: #edf1ff; }
+.command-kind { display: grid; place-items: center; width: 38px; height: 34px; flex: 0 0 38px; border: 1px solid #dce0e5; border-radius: 7px; background: #fff; color: #59697d; font-size: 11px; }
+.command-result-content { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.command-result-content strong { font-size: 14px; font-weight: 550; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.command-result-content small { color: #737b86; font-size: 11px; }
+.command-result-arrow { color: #6c7eb5; font-size: 17px; opacity: 0; }
+.command-result.selected .command-result-arrow { opacity: 1; }
+.command-empty { padding: 36px 16px 44px; text-align: center; }
+.command-empty strong { font-size: 15px; font-weight: 550; }
+.command-empty p { margin-top: 10px; color: #737b86; font-size: 12px; }
+.command-foot { display: flex; align-items: center; gap: 18px; padding: 12px 20px; border-top: 1px solid var(--line, #dcded9); color: #737b86; font-size: 11px; }
+.command-foot>span:last-child { margin-left: auto; }
+.command-palette button:focus-visible { outline: 2px solid var(--blue, #2448db); outline-offset: -2px; }
+@media (max-height: 560px) { .command-palette { margin-top: 20px; max-height: calc(100vh - 40px); } .command-results { max-height: calc(100vh - 260px); } }

@@ -1,0 +1,44 @@
+[
+  {
+    "file": "01-头像-信号蓝.png",
+    "bundled": "avatar.png",
+    "sha256": "32799f456b7e4ef96c052f3e9757323e4782b2f587c772311b29e2f291a2c0b4",
+    "original_bytes_match": true
+  },
+  {
+    "file": "02-横向字标-透明底.png",
+    "bundled": "wordmark.png",
+    "sha256": "ac787c7fab4c965d124f4138e429f986b52b0689a3cb3f256ffdb508c72be156",
+    "original_bytes_match": true
+  },
+  {
+    "file": "03-封面-Python-001.png",
+    "bundled": "cover-py.png",
+    "sha256": "46fab49da810128abf75084f730f6c235f015d19881301919b37f61ac169cd6b",
+    "original_bytes_match": true
+  },
+  {
+    "file": "04-封面-Java-001.png",
+    "bundled": "cover-jv.png",
+    "sha256": "3181bef0111560bbf72b67055e35c111fb947b5869a8212f03ed668aa294e276",
+    "original_bytes_match": true
+  },
+  {
+    "file": "05-封面-AI-001.png",
+    "bundled": "cover-ai.png",
+    "sha256": "8408f2a76b786f911a383cb81965574ea1b07562e7cb33d12f3e8eaa23fe1011",
+    "original_bytes_match": true
+  },
+  {
+    "file": "06-封面-工具周刊-001.png",
+    "bundled": "cover-wk.png",
+    "sha256": "b0636cad9421534e88082d65eead3711ac3cf6d0e916e778b511eb5dc0da6807",
+    "original_bytes_match": true
+  },
+  {
+    "file": "07-品牌视觉总览.png",
+    "bundled": "overview.png",
+    "sha256": "dc08720ba998e82cc56614bec614b916a8c015efb92cc7aeed50f53b1df09fb5",
+    "original_bytes_match": true
+  }
+]

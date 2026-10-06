@@ -1,0 +1,4 @@
+
+> ice-loop-studio@0.8.0 check
+> node --check main.cjs && node --check preload.cjs && node --check renderer/app.js && node --check renderer/publication.js && node --check renderer/brief.js && node --check renderer/planning.js && node --check renderer/outlines.js && node --check renderer/visual.js && node --check renderer/capture.js && node --check renderer/maintenance.js && node --check renderer/supplements.js
+

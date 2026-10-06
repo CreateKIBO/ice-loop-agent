@@ -1,0 +1,20 @@
+{
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\chat-desktop-1791112151044",
+  "components": true,
+  "discussionNoArticle": true,
+  "history": true,
+  "candidate": true,
+  "diff": true,
+  "unsavedProtected": true,
+  "pending": true,
+  "reviewUnsavedProtected": true,
+  "approvalEdited": true,
+  "draftEntry": true,
+  "sharedBody": true,
+  "prompts": true,
+  "compact": true,
+  "isolation": true,
+  "persisted": true,
+  "newContextReset": true,
+  "libraryEntryStable": true
+}

@@ -1,0 +1,16 @@
+test_account_isolation_reject_feedback_and_immutable_manual_candidate (tests.test_creative_chat.CreativeChatTests.test_account_isolation_reject_feedback_and_immutable_manual_candidate) ... ok
+test_assets_handoff_keeps_adopted_body_prompts_and_is_idempotent (tests.test_creative_chat.CreativeChatTests.test_assets_handoff_keeps_adopted_body_prompts_and_is_idempotent) ... ok
+test_discussion_persists_without_article_and_restart (tests.test_creative_chat.CreativeChatTests.test_discussion_persists_without_article_and_restart) ... ok
+test_draft_conflict_before_submit_and_before_approval (tests.test_creative_chat.CreativeChatTests.test_draft_conflict_before_submit_and_before_approval) ... ok
+test_existing_job_adoption_updates_confirmed_title_and_readonly_job_clones (tests.test_creative_chat.CreativeChatTests.test_existing_job_adoption_updates_confirmed_title_and_readonly_job_clones) ... ok
+test_fork_keeps_original_transcript_and_is_scoped (tests.test_creative_chat.CreativeChatTests.test_fork_keeps_original_transcript_and_is_scoped) ... ok
+test_nested_library_recent_five_and_all_titles (tests.test_creative_chat.CreativeChatTests.test_nested_library_recent_five_and_all_titles) ... ok
+test_old_pending_candidate_cannot_create_duplicate_draft_after_adoption (tests.test_creative_chat.CreativeChatTests.test_old_pending_candidate_cannot_create_duplicate_draft_after_adoption) ... ok
+test_real_router_receives_multiturn_history_and_untrusted_documents (tests.test_creative_chat.CreativeChatTests.test_real_router_receives_multiturn_history_and_untrusted_documents) ... ok
+test_stop_discards_late_reply_and_can_continue (tests.test_creative_chat.CreativeChatTests.test_stop_discards_late_reply_and_can_continue) ... ok
+test_submit_and_approve_are_idempotent_and_source_untouched (tests.test_creative_chat.CreativeChatTests.test_submit_and_approve_are_idempotent_and_source_untouched) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 290.838s
+
+OK

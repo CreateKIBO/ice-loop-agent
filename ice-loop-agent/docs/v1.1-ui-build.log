@@ -1,0 +1,10 @@
+  • electron-builder  version=26.0.12 os=10.0.26200
+  • loaded configuration  file=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\builder-ui.json
+  • author is missed in the package.json  appPackageFile=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\desktop\package.json
+  • executing @electron/rebuild  electronVersion=44.5.1 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=44.5.1 appOutDir=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\ui-layer\win-unpacked
+(node:39436) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=G:\05-兴趣项目\gonzhonhao\wechat_agent\ice-loop-agent\.test-tmp\ui-layer\win-unpacked\ICE Loop Studio.exe

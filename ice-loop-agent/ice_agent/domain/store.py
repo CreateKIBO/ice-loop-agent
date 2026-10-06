@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .types import now_iso
+from .. import __version__
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS articles (
@@ -202,6 +203,21 @@ CREATE TABLE IF NOT EXISTS publication_plans (
     episode INTEGER NOT NULL, context_hash TEXT NOT NULL, proposal_json TEXT NOT NULL,
     confirmation_json TEXT, confirmation_hash TEXT, job_id TEXT, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS asset_reviews (
+    candidate_id TEXT PRIMARY KEY, status TEXT NOT NULL, note TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS editorial_topics (
+    topic_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, series TEXT NOT NULL,
+    episode INTEGER NOT NULL, title TEXT NOT NULL, content_angle TEXT NOT NULL,
+    core_benefit TEXT NOT NULL, next_episode_plan TEXT NOT NULL,
+    source_name TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE(account_id,series,episode)
+);
+CREATE TABLE IF NOT EXISTS editorial_topic_imports (
+    import_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, source_name TEXT NOT NULL,
+    source_text TEXT NOT NULL, content_hash TEXT NOT NULL, created_at TEXT NOT NULL
+);
 """
 
 
@@ -227,8 +243,29 @@ class Store:
         self.db_path = Path(db_path)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
+        from ..migrations import MAX_KNOWN_VERSION, run_migrations
+        schema_version=self.conn.execute('PRAGMA user_version').fetchone()[0]
+        if schema_version>MAX_KNOWN_VERSION:
+            self.conn.close()
+            raise ValueError('数据库来自较新版本，不能使用旧引擎打开')
+        if schema_version<9 and self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='articles'").fetchone():
+            backup_path=self.db_path.with_name(self.db_path.stem+'-before-v1.0.db')
+            if not backup_path.exists():
+                with sqlite3.connect(str(backup_path)) as destination:
+                    self.conn.backup(destination)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(_SCHEMA)
+        # Legacy (<9) databases adopt the v1.5.3 baseline version; databases at
+        # 9+ are only ever advanced by numbered migrations, never rewritten on
+        # open (read/poll connections must not take a writer lock).
+        if schema_version < 9:
+            self.conn.execute('PRAGMA user_version=9')
+        self.conn.commit()
+        # Numbered v2.0 migrations run only when something is pending; fully
+        # migrated databases skip the tracking-table check-free fast path.
+        if schema_version < MAX_KNOWN_VERSION or not self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone():
+            run_migrations(self.conn, app_version=__version__)
         self.conn.commit()
 
     def close(self) -> None:
@@ -572,6 +609,46 @@ class Store:
             (job_id, after)).fetchall()
         return [dict(r) for r in rows]
 
+    # ----------------------------------------------------- v2 持久事件流（M1-05）
+    def append_stream_event(self, stream_id: str, account_id: str, event_type: str,
+                            payload: dict[str, Any], event_id: str | None = None,
+                            commit: bool = True) -> dict[str, Any]:
+        """持久化一条流事件，sequence 在 (stream_id) 内严格单调。
+
+        调用方应先提交状态再投递事件：commit=False 时沿用外层事务。
+        """
+        with self.transaction():
+            row = self.conn.execute(
+                "SELECT MAX(sequence) AS s FROM stream_events WHERE stream_id=?",
+                (stream_id,)).fetchone()
+            sequence = (row["s"] or 0) + 1
+            event_id = event_id or f"evt-{stream_id}-{sequence}"
+            self.conn.execute(
+                "INSERT INTO stream_events (stream_id, sequence, event_id, account_id,"
+                " event_type, payload, created_at) VALUES (?,?,?,?,?,?,?)",
+                (stream_id, sequence, event_id, account_id, event_type,
+                 json.dumps(payload or {}, ensure_ascii=False), now_iso()))
+            if commit:
+                self.conn.commit()
+        return {"event_id": event_id, "stream_id": stream_id, "sequence": sequence,
+                "account_id": account_id, "type": event_type, "payload": payload or {}}
+
+    def stream_events_after(self, stream_id: str, after: int = 0,
+                            limit: int = 200) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM stream_events WHERE stream_id=? AND sequence>?"
+            " ORDER BY sequence LIMIT ?", (stream_id, after, limit)).fetchall()
+        return [{"event_id": r["event_id"], "stream_id": r["stream_id"],
+                 "sequence": r["sequence"], "account_id": r["account_id"],
+                 "type": r["event_type"], "payload": json.loads(r["payload"]),
+                 "created_at": r["created_at"]} for r in rows]
+
+    def latest_stream_sequence(self, stream_id: str) -> int:
+        row = self.conn.execute(
+            "SELECT MAX(sequence) AS s FROM stream_events WHERE stream_id=?",
+            (stream_id,)).fetchone()
+        return row["s"] or 0
+
     # ------------------------------------------------------------ 资产
     def upsert_slot(self, slot: dict[str, Any]) -> None:
         self.conn.execute(
@@ -602,9 +679,11 @@ class Store:
 
     def slot_candidates(self, slot_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            "SELECT * FROM asset_candidates WHERE slot_id=? ORDER BY rowid",
+            "SELECT c.*, COALESCE(r.note,'') AS review_note FROM asset_candidates c"
+            " LEFT JOIN asset_reviews r ON r.candidate_id=c.candidate_id WHERE c.slot_id=? ORDER BY c.rowid",
             (slot_id,)).fetchall()
-        return [dict(r) for r in rows]
+        from .types import sha256_json
+        return [{**dict(row),'content_hash':sha256_json(dict(row))} for row in rows]
 
     # ------------------------------------------------------------ 账本
     def insert_operation(self, op: dict[str, Any], *, commit: bool = True) -> None:

@@ -1,0 +1,31 @@
+
+7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+Scanning the drive for archives:
+1 file, 189949261 bytes (182 MiB)
+
+Testing archive: E:\Codex-ICE-Build-1.5.2-01a0f697\ICE-Loop-Studio-1.5.2-Setup.exe
+
+WARNINGS:
+There are data after the end of archive
+
+--
+Path = E:\Codex-ICE-Build-1.5.2-01a0f697\ICE-Loop-Studio-1.5.2-Setup.exe
+Type = zip
+WARNINGS:
+There are data after the end of archive
+Offset = 181568
+Physical Size = 189573683
+Tail Size = 194010
+Characteristics = Local Central
+
+Everything is Ok
+
+Archives with Warnings: 1
+
+Warnings: 1
+Folders: 63
+Files: 844
+Size:       470663027
+Compressed: 189949261
+

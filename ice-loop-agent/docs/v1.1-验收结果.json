@@ -1,0 +1,143 @@
+{
+  "version": "1.1.0",
+  "recorded_at": "2026-10-02T22:43:35.602254+08:00",
+  "scope": "本次内嵌浏览器和手动发布包；保留 v1.0 历史验收，本次没有重跑全量238项",
+  "tests": {
+    "python_related_regression": {
+      "passed": 53,
+      "seconds": 161.795,
+      "log": "v1.1-python-regression.log"
+    },
+    "publication_new_cases": {
+      "passed": 6,
+      "included_in_related_regression": true,
+      "log": "v1.1-publication.log"
+    },
+    "node": {
+      "passed": 29,
+      "seconds": 0.4985852,
+      "log": "v1.1-node.log"
+    },
+    "packaged_desktop": {
+      "passed": true,
+      "details": "desktop-v1.1-validation.json",
+      "log": "v1.1-desktop-packaged.log",
+      "development_python_node_required": false,
+      "path": "SystemRoot/System32 only",
+      "real_python_runs": 3,
+      "publication_export": {
+        "folder": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\electron-1790951645278\\articles\\发布包\\001-for 和 while：让电脑替你重复干活",
+        "twoFolders": true,
+        "markdown": true,
+        "imagesOnly": true,
+        "linksResolved": true,
+        "archiveSeparate": true,
+        "manualInstructions": true
+      },
+      "backup_restore_restart": true,
+      "outline_issue_100": true,
+      "supplement_original_preserved": true
+    },
+    "packaged_browser": {
+      "passed": true,
+      "details": "browser-v1.1-validation.json",
+      "log": "v1.1-browser-packaged.log",
+      "verified_flags": [
+        "tapnowRouteInside",
+        "sessionOnDataDrive",
+        "remoteHasNoBridge",
+        "siteCookiesIsolated",
+        "cookieRetainedAfterNavigation",
+        "back",
+        "forward",
+        "invalidURLRejected",
+        "downloadSaved",
+        "popupInside",
+        "popupNoBridge",
+        "hiddenOnLeave",
+        "compactBounds",
+        "compactNoOverflow",
+        "accountCookiesIsolated",
+        "persistentCookieAfterViewRecreate"
+      ],
+      "fixtures": "原生 HTTPS 测试页验证导航、DownloadItem、弹窗和 Cookie 隔离；测试进程替代保存对话框选择路径",
+      "session_persistence_test": "验证视图销毁再创建后的 Cookie 保留；未实测真实登录跨进程重启"
+    }
+  },
+  "live_websites": {
+    "tapnow": {
+      "loaded": true,
+      "screenshot": "screenshots/v1.1/live-tapnow.png",
+      "observed": "你的智能创意画布首页"
+    },
+    "wechat": {
+      "loaded": true,
+      "screenshot": "screenshots/v1.1/live-wechat.png",
+      "observed": "微信公众平台扫码登录页"
+    },
+    "image_inspection_completed": true,
+    "record_note": "原始浏览器 JSON 的 url/title 字段在导航提交前采集而为空；后续 DOM 完成、原生子视图截图与人工视觉检查确认真实页面加载。保留原始记录不改写。",
+    "screenshots_note": "父窗口 capturePage 不包含原生 WebContentsView；工作台/窄窗口截图只证明本地界面，embedded-view 和 live 图片来自实际子视图。"
+  },
+  "clipboard": {
+    "prompt_copied": true,
+    "rich_clipboard": true,
+    "html_readback": true,
+    "note": "本次测试进程写入读回成功；保留 v1.0 当时拒绝访问记录，不表示已实测微信粘贴"
+  },
+  "package": {
+    "version": "1.1.0",
+    "zip_matches_unpacked": true,
+    "engine_matches_latest_build": true,
+    "user_data_included": false,
+    "files": [
+      {
+        "name": "ICE-Loop-Studio-1.1.0-Setup.exe",
+        "bytes": 136857625,
+        "sha256": "348f3081f72a20a2c19f755f0df866a4b39a70ee8b6b85a530b10e3b426595b6"
+      },
+      {
+        "name": "ICE-Loop-Studio-1.1.0-x64.zip",
+        "bytes": 182645356,
+        "sha256": "14818111f6f7d7e07f9c8f0f4911d069af55b3e51a78e02df6191017dbf7ca84"
+      }
+    ],
+    "source_audit": {
+      "version": "1.1.0",
+      "asar_sha256": "5c035b422ced92c15f050cd3761c1e2565c8410c73be3bb0e9320868fed378b8",
+      "renderer_matches_source": true
+    },
+    "authenticode": [
+      {
+        "file": "ICE-Loop-Studio-1.1.0-Setup.exe",
+        "status": "NotSigned"
+      },
+      {
+        "file": "win-unpacked/ICE Loop Studio.exe",
+        "status": "NotSigned"
+      }
+    ],
+    "independent_matching_file_count": 837,
+    "independent_tested_files_match": true,
+    "installer_helpers_not_executed": [
+      {
+        "file": "resources/elevate.exe",
+        "sha256": "9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37",
+        "note": "NSIS 附加安装辅助程序；未运行安装向导"
+      }
+    ],
+    "installer_wizard_run": false
+  },
+  "external_boundaries": {
+    "tapnow_authenticated_generation": "未登录、未付费生图；由用户在内嵌页面自行操作",
+    "wechat_authenticated_edit_publish": "未扫码、未粘贴发布；MD 需用户排版粘贴，图片分别上传",
+    "text_and_vision_models": "本次没有调用付费模型，连接由用户配置 Key 后实测",
+    "another_machine": "当前 Windows 独立目录测试，未代替另一台机器/系统用户验收",
+    "docker_and_remote_git": "本次未实际调用，沿用 v1.0 的实测边界"
+  },
+  "screenshots": {
+    "folder": "screenshots/v1.1",
+    "count": 27
+  },
+  "user_data": "隔离目录测试；原文章、正式任务、真实 Key 和登录会话未修改，安装包不含实际用户数据"
+}
