@@ -1,0 +1,152 @@
+/* 文章编辑器与改稿审阅样式：随 ArticleEditor 分包按需加载，不进启动包。
+   正文排版贴近公众号阅读（17px / 1.8 行高 / 窄栏），所见即所读。 */
+
+/* ---------------------------------------------------------------- 编辑区 */
+.ice-editor {
+  min-height: 360px; max-width: 760px; width: 100%; margin: 0 auto;
+  padding: var(--ice-space-5) var(--ice-space-6);
+  background: var(--ice-surface); color: var(--ice-ink);
+  border: 1px solid var(--ice-border); border-radius: var(--ice-radius-lg);
+  font-size: 17px; line-height: 1.8; outline: none;
+  transition: border-color var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-editor:focus, .ice-editor:focus-visible {
+  border-color: var(--ice-signal-blue); box-shadow: none;
+}
+.ice-editor > * + * { margin-top: 0.9em; }
+.ice-editor p { margin: 0; }
+.ice-editor h1, .ice-editor h2, .ice-editor h3, .ice-editor h4 {
+  line-height: 1.4; font-weight: 700; margin: 1.6em 0 0.6em;
+}
+.ice-editor > :first-child { margin-top: 0; }
+.ice-editor h1 { font-size: 24px; }
+.ice-editor h2 {
+  font-size: 20px; padding-left: 10px; border-left: 3px solid var(--ice-signal-blue);
+}
+.ice-editor h3 { font-size: 18px; }
+.ice-editor h4 { font-size: 17px; color: var(--ice-text-secondary); }
+.ice-editor strong { font-weight: 700; }
+.ice-editor a { color: var(--ice-signal-blue); }
+.ice-editor ul, .ice-editor ol { padding-left: 1.4em; margin: 0; }
+.ice-editor li + li { margin-top: 0.3em; }
+.ice-editor li > p { margin: 0; }
+.ice-editor blockquote {
+  margin: 0; padding: 4px 0 4px 14px; color: var(--ice-text-secondary);
+  border-left: 3px solid var(--ice-border-strong);
+}
+.ice-editor hr { border: none; border-top: 1px solid var(--ice-border); margin: 1.6em 0; }
+.ice-editor code {
+  font-family: var(--ice-font-mono); font-size: 0.88em;
+  background: var(--ice-surface-sunken); padding: 1px 5px; border-radius: var(--ice-radius-sm);
+}
+/* 叠加 .ProseMirror 提高权重：Tiptap 运行时注入的 `.ProseMirror pre { white-space: pre-wrap }` 更晚加载。 */
+.ice-editor.ProseMirror pre {
+  font-family: var(--ice-font-mono); font-size: 14px; line-height: 1.6;
+  background: var(--ice-ink); color: var(--ice-warm-white);
+  padding: var(--ice-space-3) var(--ice-space-4); border-radius: var(--ice-radius-md);
+  overflow-x: auto; white-space: pre;
+}
+.ice-editor pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+/* 自定义原子节点：一眼区分"占位"与正文，且不能被误当成普通段落编辑 */
+.ice-editor .ice-editor-slot,
+.ice-editor .ice-editor-run {
+  font-size: 13px; line-height: 1.6; padding: 10px 14px;
+  border-radius: var(--ice-radius-md); user-select: none; cursor: default;
+}
+.ice-editor .ice-editor-slot {
+  border: 1px dashed var(--ice-signal-blue); background: var(--ice-info-bg); color: var(--ice-ink);
+}
+.ice-editor .ice-editor-slot strong { color: var(--ice-signal-blue); margin-right: 4px; }
+.ice-editor .ice-editor-run {
+  font-family: var(--ice-font-mono); border: 1px solid var(--ice-success);
+  background: var(--ice-success-bg); color: var(--ice-success);
+}
+.ice-editor .ice-editor-run::before { content: "▶ "; }
+.ice-editor pre.ice-editor-raw {
+  background: var(--ice-surface-muted); color: var(--ice-text-secondary);
+  border: 1px dashed var(--ice-border-strong); white-space: pre-wrap;
+}
+.ice-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--ice-signal-blue); outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- 改稿差异 */
+.ice-diff {
+  display: grid; gap: var(--ice-space-2);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.ice-diff__side { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.ice-diff__side figcaption { font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+.ice-diff__side pre {
+  margin: 0; padding: var(--ice-space-2); border-radius: var(--ice-radius-md);
+  border: 1px solid var(--ice-border); background: var(--ice-surface-muted);
+  font-family: var(--ice-font-ui); font-size: var(--ice-font-size-md); line-height: 1.7;
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto;
+}
+.ice-diff__side--new pre { border-color: var(--ice-success); background: var(--ice-surface); }
+.ice-diff-del {
+  background: var(--ice-danger-bg); color: var(--ice-danger);
+  text-decoration: line-through; text-decoration-color: rgba(194, 59, 51, 0.6);
+  border-radius: 2px;
+}
+.ice-diff-add { background: var(--ice-success-bg); color: var(--ice-success); border-radius: 2px; }
+.ice-diff-empty { color: var(--ice-text-disabled); }
+
+/* ---------------------------------------------------------------- 编辑器顶栏 */
+.ice-editor-bar {
+  display: flex; align-items: center; gap: var(--ice-space-2); flex-wrap: wrap;
+  position: sticky; top: calc(-1 * var(--ice-space-4)); z-index: 1;
+  margin: calc(-1 * var(--ice-space-4)) calc(-1 * var(--ice-space-4)) 0;
+  padding: var(--ice-space-3) var(--ice-space-4);
+  background: var(--ice-warm-white); border-bottom: 1px solid var(--ice-border);
+}
+
+/* ---------------------------------------------------------------- 交付审阅 */
+.ice-review-heading {
+  margin: 0; font-size: var(--ice-font-size-sm); font-weight: 600;
+  color: var(--ice-text-secondary); letter-spacing: 0.02em;
+}
+.ice-review-heading--danger { color: var(--ice-danger); }
+.ice-review-heading--success { color: var(--ice-success); }
+.ice-review-item {
+  display: flex; align-items: center; gap: var(--ice-space-2); min-width: 0;
+  padding: 8px 10px; border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); border: 1px solid var(--ice-border);
+  font-size: var(--ice-font-size-sm); line-height: 1.55;
+}
+.ice-review-item--danger { border-left: 3px solid var(--ice-danger); }
+.ice-review-excerpt { color: var(--ice-text-secondary); overflow-wrap: anywhere; }
+.ice-review-empty {
+  padding: 10px 12px; border-radius: var(--ice-radius-md);
+  background: var(--ice-success-bg); color: var(--ice-success); font-size: var(--ice-font-size-sm);
+}
+.ice-review-figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--ice-space-2); }
+.ice-review-figure {
+  margin: 0; display: grid; gap: 6px; padding: 8px; min-width: 0;
+  border: 1px solid var(--ice-border); border-radius: var(--ice-radius-lg); background: var(--ice-surface);
+  font-size: var(--ice-font-size-sm);
+}
+.ice-review-figure--missing { border-style: dashed; border-color: var(--ice-danger); }
+.ice-review-thumb {
+  display: block; width: 100%; aspect-ratio: 16 / 10; padding: 0; overflow: hidden;
+  border: 0; border-radius: var(--ice-radius-md); background: var(--ice-warm-white); cursor: zoom-in;
+}
+.ice-review-thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform var(--ice-motion-panel) var(--ice-motion-ease);
+}
+.ice-review-thumb:hover img { transform: scale(1.04); }
+.ice-review-thumb--empty {
+  display: grid; place-items: center; cursor: default;
+  color: var(--ice-text-disabled); border: 1px dashed var(--ice-border);
+}
+.ice-review-lightbox {
+  position: fixed; inset: 0; z-index: calc(var(--ice-z-dialog) + 1);
+  display: grid; place-items: center; padding: 32px; border: 0;
+  background: rgba(21, 25, 31, 0.72); cursor: zoom-out;
+}
+.ice-review-lightbox img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: var(--ice-radius-md); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}

@@ -32,8 +32,12 @@ class Migration:
 
     @property
     def checksum(self) -> str:
+        """R15：校验和覆盖不可变声明内容（SQL 常量在 co_consts，字节码在 co_code）。
+        不用 inspect.getsource——冻结引擎无源码；co_consts 保证不同 SQL 的
+        同形函数得到不同 checksum。"""
+        code = self.apply.__code__
         return hashlib.sha256(
-            f"{self.version}|{self.description}|{self.apply.__code__.co_code}".encode()
+            f"{self.version}|{self.description}|{code.co_code}|{repr(code.co_consts)}".encode()
         ).hexdigest()
 
 
@@ -73,11 +77,41 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
     ``stop_after`` injects a failure after the given migration for fault-injection
     tests; the database must stay at the previous version afterwards.
     """
+    if dry_run:
+        # Rolling back each migration separately erases tables required by the
+        # next one. Run the whole chain on a memory snapshot instead. Exceptions
+        # and tracking-table creation never mutate the source connection.
+        if conn.in_transaction:
+            raise ValueError("请先完成当前事务，再执行迁移 dry-run")
+        before = conn.execute("PRAGMA user_version").fetchone()[0]
+        snapshot = sqlite3.connect(":memory:")
+        try:
+            conn.backup(snapshot)
+            result = run_migrations(snapshot, app_version=app_version, stop_after=stop_after)
+            return {"before": before, "after": before, "applied": [], "dry_run": True,
+                    "dry_run_rolled_back": [item["version"] for item in result["applied"]]}
+        finally:
+            snapshot.close()
+    # R15：dry-run 结束后原库必须完全未变——若本调用新建了跟踪表，结束时删掉。
+    tracking_existed = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone() is not None
     _ensure_tracking_table(conn)
     before = conn.execute("PRAGMA user_version").fetchone()[0]
     # 已记录的迁移视作已应用（user_version 可能被旧工具/测试手动降级）；
     # 结束时把 user_version 修复为已应用集合的最大版本。
-    recorded = {row[0] for row in conn.execute("SELECT version FROM schema_migrations")}
+    # R15：已记录行的 checksum 必须与当前构建一致，漂移即拒绝执行。
+    # 算法过渡：v18、v19 使用 co_code+co_consts 算法，之前的 co_code-only checksum
+    # 属于已知历史构建（不是未知漂移），只审计 v18+。
+    CHECKSUM_ALGORITHM_TRANSITION = 18
+    recorded: dict[int, str] = {row[0]: row[1] for row in conn.execute(
+        "SELECT version, checksum FROM schema_migrations")}
+    for version, checksum in recorded.items():
+        item = next((m for m in MIGRATIONS if m.version == version), None)
+        if item is None:
+            continue  # 未知版本（可能来自其他构建），不误报
+        if version >= CHECKSUM_ALGORITHM_TRANSITION and item.checksum != checksum:
+            raise ValueError(
+                f"迁移 {version} 的记录 checksum 与当前构建不一致（数据库可能被其他版本写入）")
     applied: list[dict] = []
     rolled_back: list[int] = []
     for item in pending_migrations(before):
@@ -89,7 +123,7 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
             if item.version <= current or item.version in tracked:
                 conn.execute("ROLLBACK")
                 if item.version in tracked:
-                    recorded.add(item.version)
+                    recorded[item.version] = item.checksum
                     continue
                 continue
             item.apply(conn)
@@ -105,7 +139,7 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
             if stop_after is not None and item.version >= stop_after:
                 raise RuntimeError(f"fault injection: abort after migration {item.version}")
             conn.execute("COMMIT")
-            recorded.add(item.version)
+            recorded[item.version] = item.checksum
             applied.append({"version": item.version, "description": item.description,
                             "checksum": item.checksum})
         except BaseException:
@@ -114,6 +148,10 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
     effective = max([before, *recorded]) if recorded else before
     if effective != conn.execute("PRAGMA user_version").fetchone()[0] and not dry_run:
         conn.execute("PRAGMA user_version=%d" % effective)
+        conn.commit()
+    if dry_run and not tracking_existed:
+        # dry-run 不留任何痕迹：本调用新建的跟踪表一并移除。
+        conn.execute("DROP TABLE schema_migrations")
         conn.commit()
     after = conn.execute("PRAGMA user_version").fetchone()[0]
     return {"before": before, "after": after, "applied": applied,

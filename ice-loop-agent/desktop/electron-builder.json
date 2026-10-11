@@ -6,6 +6,9 @@
   },
   "files": [
     "main.cjs",
+    "workbench-methods.cjs",
+    "ui-mode.cjs",
+    "export-approval.cjs",
     "preload.cjs",
     "tools.cjs",
     "clipboard.cjs",
@@ -13,6 +16,7 @@
     "browser.cjs",
     "browser-smoke.cjs",
     "renderer/**/*",
+    "ui/dist/**/*",
     "package.json",
     "automation.cjs",
     "prompt-smoke.cjs",

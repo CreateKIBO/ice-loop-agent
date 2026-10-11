@@ -28,18 +28,28 @@ def register(cls: type[Handler]) -> type[Handler]:
 
 
 def dispatch_handlers(service: Any, method: str, params: dict) -> Callable[[], Any] | None:
-    """返回可调用或 None（未命中）。门面负责调用。"""
+    """返回零参可调用或 None（未命中）。门面负责调用。"""
     for cls in _HANDLER_GROUPS:
         if method in cls.METHODS:
-            return cls(service).handle_bound(method, params)
+            handler = cls(service)
+            return lambda: handler.handle(method, params)
     return None
 
 
 @register
 class EventsHandler(Handler):
-    """事件流查询（M1-05）。从 desktop_service 提取，账号校验保持一致。"""
+    """事件流查询（M1-05）。委托 desktop_service 上的同名实现。"""
 
     METHODS = frozenset({'events.poll', 'events.latest'})
 
-    def handle_bound(self, method: str, params: dict) -> Any:
+    def handle(self, method: str, params: dict) -> Any:
         return getattr(self.service, method.replace('.', '_'))(params)
+
+
+# v2.0 业务 handler 组（导入即注册）。
+from . import articles as _articles  # noqa: E402,F401
+from . import knowledge as _knowledge  # noqa: E402,F401
+from . import agent as _agent  # noqa: E402,F401
+from . import workflow_review as _workflow_review  # noqa: E402,F401
+from . import assets_graph as _assets_graph  # noqa: E402,F401
+from . import ops_export as _ops_export  # noqa: E402,F401

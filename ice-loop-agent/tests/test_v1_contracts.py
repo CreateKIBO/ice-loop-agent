@@ -6,9 +6,9 @@ from ice_agent.domain.types import RunSpec
 from ice_agent.llm.adapters import make_adapter
 from ice_agent.llm.capabilities import preset_profile
 from ice_agent.domain.types import ModelProfile
-from tests.test_execution_review import TestExecutionReview
+from tests import test_execution_review
 
-class TestCodeEdit(TestExecutionReview):
+class TestCodeEdit(test_execution_review.TestExecutionReview):
     def test_expected_error_is_explicit_and_keeps_real_traceback(self):
         state=self.prepare('# 标题\n\n```python\nprint(1 / 0)\n```\n')
         with patch.object(self.service,'_start',return_value={'started':True}):self.service.execution_approve({'job_id':self.job,'content_hash':execution_hash(state),'expected_failures':{'1':True}})

@@ -4,8 +4,22 @@ Set-Location -LiteralPath $taskRoot
 $env:PATH='E:\Node;'+$env:PATH
 & 'E:/Node/node.exe' desktop/build-components.cjs
 if($LASTEXITCODE -ne 0){throw 'Local component bundle failed'}
-& '.venv/Scripts/python.exe' -m PyInstaller --noconfirm --onedir --name ice-engine --distpath dist --workpath .test-tmp/pyinstaller --specpath build --paths . --collect-data ice_agent build/engine_entry.py
+# v2.0：新工作台产物先构建（Vite 离线 bundle 进 asar 的 ui/dist），失败即停。
+& 'E:/Node/node.exe' build/build-new-ui.cjs
+if($LASTEXITCODE -ne 0){throw 'New UI build failed'}
+# 冻结前清掉源码树字节码缓存（可再生；否则 collect_data_files 会把 __pycache__ 收进引擎，
+# verify_release 的"无生成缓存"审计会失败）。
+$stalePycache = Get-ChildItem -LiteralPath (Join-Path $taskRoot 'ice_agent') -Recurse -Directory -Filter '__pycache__'
+if($stalePycache){$stalePycache | Remove-Item -Recurse -Force}
+& '.venv/Scripts/python.exe' -m PyInstaller --noconfirm --onedir --name ice-engine --distpath dist --workpath .test-tmp/pyinstaller --specpath build --paths . --collect-data ice_agent --collect-data pydantic build/engine_entry.py
 if($LASTEXITCODE -ne 0){throw 'Python engine build failed'}
+# PyInstaller 会把源码树的 __pycache__/*.pyc 当数据收进引擎（audit 零缓存要求）；
+# 且命令行参数会回写 spec 文件，故排除逻辑只能放这里——冻结后清理 dist。
+$enginePycache = Get-ChildItem -LiteralPath (Join-Path $taskRoot 'dist/ice-engine/_internal/ice_agent') -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue
+Write-Host "[build-release] engine pycache dirs found: $($enginePycache.Count)"
+if($enginePycache){$enginePycache | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue}
+# verify_release 审计已区分 PyInstaller 托管字节码（.pyc.<magic> 放行，裸 .pyc 拦截），
+# 故清理失败不阻断打包；剩余目录由审计裁决。
 & 'E:/Node/node.exe' build/prepare-release.cjs
 if($LASTEXITCODE -ne 0){throw 'Resource preparation failed'}
 & (Join-Path $PSScriptRoot 'clean-python-cache.ps1') -PythonRuntime (Join-Path $taskRoot 'dist/teaching-python')

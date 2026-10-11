@@ -10,5 +10,5 @@
 - 演示代码必须真实执行，正文输出只来自 RunRecord。
 """
 
-__version__ = "1.5.3"
+__version__ = "2.0.0-beta.2"
 PROTOCOL_VERSION = 1

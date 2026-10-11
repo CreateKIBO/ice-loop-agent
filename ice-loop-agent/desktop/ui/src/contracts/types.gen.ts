@@ -39,15 +39,15 @@ export type IRpcError = {
 
 export type IRpcRequest = {
   /** 请求关联 ID；通知类可为空 */
-  "id"?: string | null;
+  "id"?: string | number | null;
   "method": string;
   "params"?: Record<string, unknown>;
 };
 
 export type IRpcResponse = {
   "kind"?: "response";
-  "id"?: string | null;
-  "result"?: unknown /* unsupported: {"default":null,"title":"Result"} */;
+  "id"?: string | number | null;
+  "result"?: unknown;
   "error"?: {
     "code": "VALIDATION_ERROR" | "NOT_FOUND" | "ACCOUNT_MISMATCH" | "REVISION_CONFLICT" | "BUDGET_EXCEEDED" | "PERMISSION_DENIED" | "CANCELLED" | "NETWORK" | "PROVIDER_ERROR" | "CAPABILITY_MISMATCH" | "IDEMPOTENCY_CONFLICT" | "STATE_CONFLICT" | "INTERNAL";
     "message": string;

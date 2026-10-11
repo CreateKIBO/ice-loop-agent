@@ -8,40 +8,30 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import "../styles/tokens.css";
 import "../styles/base.css";
+import "../styles/components.css";
+import "../styles/feedback.css";
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   loading?: boolean;
+  /** 紧凑尺寸，用于列表行内操作。 */
+  size?: "md" | "sm";
 }
 
-const BUTTON_STYLES: Record<ButtonVariant, React.CSSProperties> = {
-  primary: { background: "var(--ice-signal-blue)", color: "#fff" },
-  secondary: { background: "var(--ice-surface)", color: "var(--ice-text)", border: "1px solid var(--ice-border)" },
-  danger: { background: "var(--ice-danger)", color: "#fff" },
-  ghost: { background: "transparent", color: "var(--ice-text-secondary)" },
-};
-
-export function Button({ variant = "secondary", loading = false, disabled,
-                         children, style, ...rest }: ButtonProps) {
-  const isActive = !disabled && !loading;
+export function Button({ variant = "secondary", loading = false, size = "md", disabled,
+                         children, className, ...rest }: ButtonProps) {
+  // disabled 的按钮浏览器本身不会触发 click，无需再手动屏蔽事件。
+  const classes = ["ice-btn", `ice-btn--${variant}`, size === "sm" ? "ice-btn--sm" : "", className ?? ""]
+    .filter(Boolean).join(" ");
   return (
     <button
+      type="button"
       {...rest}
+      className={classes}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-        height: "var(--ice-control-height)", padding: "0 var(--ice-space-3)",
-        borderRadius: "var(--ice-radius-md)", cursor: isActive ? "pointer" : "default",
-        opacity: disabled && !loading ? 0.55 : 1,
-        transition: `background var(--ice-motion-fast) var(--ice-motion-ease)`,
-        ...BUTTON_STYLES[variant],
-        ...style,
-      }}
-      onMouseDown={isActive ? rest.onMouseDown : undefined}
-      onClick={isActive ? rest.onClick : undefined}
     >
       {loading && <Spinner size={12} />}
       {children}
@@ -49,33 +39,22 @@ export function Button({ variant = "secondary", loading = false, disabled,
   );
 }
 
-export function IconButton({ label, children, ...rest }:
+export function IconButton({ label, children, className, ...rest }:
   React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <Tooltip content={label}>
       <button
+        type="button"
         {...rest}
+        className={["ice-icon-btn", className ?? ""].filter(Boolean).join(" ")}
         aria-label={label}
-        style={{
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-          width: "var(--ice-control-height)", height: "var(--ice-control-height)",
-          border: "none", background: "transparent", borderRadius: "var(--ice-radius-md)",
-          cursor: "pointer", color: "var(--ice-text-secondary)",
-        }}
       >{children}</button>
     </Tooltip>
   );
 }
 
 export function Spinner({ size = 16 }: { size?: number }) {
-  return (
-    <span aria-hidden style={{
-      width: size, height: size, display: "inline-block",
-      border: "2px solid currentColor", borderTopColor: "transparent",
-      borderRadius: "50%", opacity: 0.8,
-      animation: `ice-spin 700ms linear infinite`,
-    }} />
-  );
+  return <span aria-hidden className="ice-spinner" style={{ width: size, height: size }} />;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
@@ -130,39 +109,61 @@ export function ErrorPanel({ title, detail, onRetry, onDismiss, retryLabel }: {
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
     <div style={{ textAlign: "center", padding: "var(--ice-space-7) var(--ice-space-5)",
                   color: "var(--ice-text-secondary)" }}>
       <div style={{ fontWeight: 600, color: "var(--ice-text)", marginBottom: 6 }}>{title}</div>
       {hint && <div>{hint}</div>}
+      {action && <div style={{ marginTop: "var(--ice-space-3)" }}>{action}</div>}
     </div>
   );
 }
 
-export function Dialog({ open, onOpenChange, title, children, footer }: {
+/** 列表加载占位：保留列表的大致形状，避免内容出现时整块跳动。 */
+export function SkeletonRows({ rows = 4, height = 14, gap = 12 }: { rows?: number; height?: number; gap?: number }) {
+  return (
+    <div aria-hidden style={{ display: "grid", gap, padding: "var(--ice-space-2)" }}>
+      {Array.from({ length: rows }, (_, index) => (
+        <span key={index} className="ice-skeleton" style={{ height, width: `${92 - (index % 3) * 18}%` }} />
+      ))}
+    </div>
+  );
+}
+
+export function Dialog({ open, onOpenChange, title, description, children, footer, width = 560, initialFocus }: {
   open: boolean; onOpenChange: (open: boolean) => void;
-  title: string; children: React.ReactNode; footer?: React.ReactNode;
+  title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode;
+  width?: number;
+  /** 打开时聚焦的元素选择器；默认 Radix 会聚焦并全选第一个输入框。 */
+  initialFocus?: string;
 }) {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const focusInitial = (event: Event) => {
+    const target = initialFocus ? contentRef.current?.querySelector<HTMLElement>(initialFocus) : null;
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay style={{
-          position: "fixed", inset: 0, background: "rgba(21,25,31,0.4)", zIndex: "var(--ice-z-dialog)",
-        }} />
-        <DialogPrimitive.Content style={{
-          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-          background: "var(--ice-surface)", borderRadius: "var(--ice-radius-lg)",
-          padding: "var(--ice-space-5)", width: "min(560px, calc(100vw - 48px))",
-          maxHeight: "calc(100vh - 96px)", display: "flex", flexDirection: "column",
-          zIndex: "var(--ice-z-dialog)", border: "1px solid var(--ice-border)",
-        }}>
+        <DialogPrimitive.Overlay className="ice-dialog-overlay" />
+        <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial}
+                                 className="ice-dialog" style={{ width: `min(${width}px, calc(100vw - 48px))` }}
+                                 {...(description ? {} : { "aria-describedby": undefined })}>
           <DialogPrimitive.Title style={{ margin: 0, fontSize: "var(--ice-font-size-lg)",
-                                          marginBottom: "var(--ice-space-3)" }}>{title}</DialogPrimitive.Title>
+                                          marginBottom: description ? 4 : "var(--ice-space-3)" }}>{title}</DialogPrimitive.Title>
+          {description
+            ? <DialogPrimitive.Description style={{ margin: "0 0 var(--ice-space-3)", color: "var(--ice-text-secondary)",
+                                                    fontSize: "var(--ice-font-size-sm)", lineHeight: 1.6 }}>
+                {description}
+              </DialogPrimitive.Description>
+            : null}
           <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
           {footer && (
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--ice-space-2)",
-                          marginTop: "var(--ice-space-4)", flexShrink: 0 }}>{footer}</div>
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "var(--ice-space-2)",
+                          marginTop: "var(--ice-space-4)", flexShrink: 0, flexWrap: "wrap" }}>{footer}</div>
           )}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -201,8 +202,3 @@ export function Tooltip({ content, children }: { content: string; children: Reac
     </TooltipPrimitive.Provider>
   );
 }
-
-// keyframes 注入一次
-const styleEl = document.createElement("style");
-styleEl.textContent = `@keyframes ice-spin { to { transform: rotate(360deg); } }`;
-document.head.appendChild(styleEl);

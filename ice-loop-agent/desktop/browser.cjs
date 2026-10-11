@@ -44,7 +44,14 @@ function installBrowser({window:owner,assertSender,request,runtime}){
         const choice=await dialog.showSaveDialog(owner(),{title:'保存 '+siteFor(page.site).name+' 下载文件',defaultPath:path.join(folder,safe)});
         if(choice.canceled){item.cancel();return;}
         item.setSavePath(choice.filePath);
-        item.once('done',(_event,result)=>emit({download:result==='completed'?'下载完成，可在配图资源箱导入该图片':'下载未完成',download_file:result==='completed'?choice.filePath:''}));
+        item.once('done',(_event,result)=>{
+          if(result!=='completed'){emit({download:'下载未完成',download_status:'interrupted'});return;}
+          // 进待归档箱而不是直接采纳：图位由用户在工作台选择，重复文件复用原记录。
+          request('downloads.stage',{file_path:choice.filePath,origin_url:String(item.getURL()||'').slice(0,300)})
+            .then(staged=>emit({download:staged.deduped?'该图片此前已下载过，沿用原归档记录':'下载完成，已进入待归档，请在工作台选择图位',
+              download_status:'staged',download_id:staged.download_id,download_file:choice.filePath}))
+            .catch(error=>emit({download:'下载已保存，但归档失败：'+error.message,download_status:'stage_failed',download_file:choice.filePath}));
+        });
         item.resume();
       }catch{item.cancel();emit({download:'下载未完成，请重新选择保存位置'});}
     });

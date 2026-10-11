@@ -40,8 +40,11 @@ class ErrorCode(str, Enum):
 
 
 class RpcRequest(StrictModel):
-    """JSON Lines 请求行。v1 客户端发 {"id","method","params"}，兼容。"""
-    id: str | None = Field(default=None, description="请求关联 ID；通知类可为空")
+    """JSON Lines 请求行。v1 客户端发 {"id","method","params"}，兼容。
+
+    id 由调用方定义（main.cjs 用自增整数，测试用字符串）；响应必须原样回显。
+    """
+    id: str | int | None = Field(default=None, description="请求关联 ID；通知类可为空")
     method: str = Field(min_length=1, max_length=100)
     params: dict[str, Any] = Field(default_factory=dict)
 
@@ -57,7 +60,7 @@ class RpcErrorBody(StrictModel):
 
 class RpcResponse(StrictModel):
     kind: Literal["response"] = "response"
-    id: str | None = None
+    id: str | int | None = None
     result: Any = None
     error: RpcErrorBody | None = None
 

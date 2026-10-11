@@ -1,0 +1,177 @@
+/* 反馈与动效：轻提示、弹层进出场、骨架屏、生成中指示、欢迎页。
+   所有动效都只是"状态变化的过渡"，减弱动效时整体关闭（加载指示除外，见 components.css）。 */
+
+/* ---------------------------------------------------------------- 微交互 */
+.ice-btn { transition-property: background, border-color, color, transform, box-shadow; }
+.ice-btn:active:not(:disabled) { transform: scale(0.97); }
+.ice-btn--primary:hover:not(:disabled) { box-shadow: 0 2px 8px rgba(36, 72, 219, 0.25); }
+.ice-card { transition: border-color var(--ice-motion-fast) var(--ice-motion-ease),
+                        box-shadow var(--ice-motion-fast) var(--ice-motion-ease); }
+.ice-card:hover { box-shadow: 0 2px 10px rgba(21, 25, 31, 0.06); }
+
+/* ---------------------------------------------------------------- 弹层 */
+@keyframes ice-fade-in { from { opacity: 0; } }
+@keyframes ice-fade-out { to { opacity: 0; } }
+@keyframes ice-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -47%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ice-dialog-out {
+  to { opacity: 0; transform: translate(-50%, -49%) scale(0.97); }
+}
+.ice-dialog-overlay {
+  position: fixed; inset: 0; z-index: var(--ice-z-dialog);
+  background: rgba(21, 25, 31, 0.4); backdrop-filter: blur(2px);
+}
+.ice-dialog-overlay[data-state="open"] { animation: ice-fade-in var(--ice-motion-panel) var(--ice-motion-ease); }
+.ice-dialog-overlay[data-state="closed"] { animation: ice-fade-out var(--ice-motion-fast) ease-in forwards; }
+.ice-dialog {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: var(--ice-z-dialog); display: flex; flex-direction: column;
+  max-height: calc(100vh - 96px); padding: var(--ice-space-5);
+  background: var(--ice-surface); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-lg);
+  box-shadow: 0 24px 64px rgba(21, 25, 31, 0.22);
+}
+.ice-dialog[data-state="open"] { animation: ice-dialog-in var(--ice-motion-panel) var(--ice-motion-ease); }
+.ice-dialog[data-state="closed"] { animation: ice-dialog-out var(--ice-motion-fast) ease-in forwards; }
+
+/* ---------------------------------------------------------------- 轻提示 */
+.ice-toaster {
+  position: fixed; right: 16px; bottom: 16px; z-index: var(--ice-z-toast);
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  width: min(380px, calc(100vw - 32px)); pointer-events: none;
+}
+.ice-toast {
+  --tone: var(--ice-signal-blue);
+  position: relative; overflow: hidden; pointer-events: auto; width: 100%;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 10px 12px 12px; border-radius: var(--ice-radius-lg);
+  background: var(--ice-ink); color: var(--ice-warm-white);
+  box-shadow: 0 10px 30px rgba(21, 25, 31, 0.28);
+}
+.ice-toast--success { --tone: #3DBE7E; }
+.ice-toast--warning { --tone: #F2B233; }
+.ice-toast--danger { --tone: #F06A61; }
+.ice-toast__icon {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; margin-top: 1px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--tone); color: var(--ice-ink);
+}
+.ice-toast__body { flex: 1; min-width: 0; }
+.ice-toast__title { font-weight: 600; line-height: 1.4; }
+.ice-toast__detail { margin-top: 2px; font-size: var(--ice-font-size-sm); opacity: 0.75; word-break: break-word; }
+.ice-toast__action {
+  flex-shrink: 0; border: 1px solid rgba(243, 242, 237, 0.3); background: transparent; color: inherit;
+  border-radius: var(--ice-radius-md); padding: 2px 10px; cursor: pointer; font-weight: 600;
+  transition: background var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-toast__action:hover:not(:disabled) { background: rgba(243, 242, 237, 0.12); }
+.ice-toast__close {
+  flex-shrink: 0; border: none; background: transparent; color: inherit; opacity: 0.6;
+  cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: var(--ice-radius-sm);
+}
+.ice-toast__close:hover { opacity: 1; }
+@keyframes ice-toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.ice-toast__progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--tone);
+  transform-origin: left; animation-name: ice-toast-progress; animation-timing-function: linear;
+  animation-fill-mode: forwards; opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------- 骨架屏 */
+@keyframes ice-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.ice-skeleton {
+  display: block; border-radius: var(--ice-radius-sm);
+  background: linear-gradient(90deg, var(--ice-surface-sunken) 25%, var(--ice-surface-muted) 50%, var(--ice-surface-sunken) 75%);
+  background-size: 200% 100%; animation: ice-shimmer 1.4s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------- 生成中 */
+@keyframes ice-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+.ice-typing {
+  display: inline-flex; align-items: center; gap: 4px; padding: 10px 14px;
+  background: var(--ice-surface); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-lg);
+}
+.ice-typing > span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--ice-signal-blue);
+  animation: ice-typing 1.2s ease-in-out infinite;
+}
+.ice-typing > span:nth-child(2) { animation-delay: 0.15s; }
+.ice-typing > span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes ice-blink { 50% { opacity: 0; } }
+.ice-caret {
+  display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; vertical-align: text-bottom;
+  background: var(--ice-signal-blue); animation: ice-blink 1s steps(1) infinite;
+}
+
+/* 本轮真实步骤（引擎事件流） */
+.ice-turn-progress { display: grid; gap: 8px; color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
+.ice-turn-progress__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.ice-turn-progress__label { color: var(--ice-text); font-weight: 500; }
+.ice-turn-progress__detail { color: var(--ice-text-secondary); font-weight: 400; }
+.ice-turn-progress__elapsed { font-variant-numeric: tabular-nums; }
+.ice-turn-steps { list-style: none; margin: 0; padding: 0 0 0 4px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.ice-turn-step { display: inline-flex; align-items: center; gap: 6px; }
+.ice-turn-step__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ice-text-disabled); flex-shrink: 0; }
+.ice-turn-step--done .ice-turn-step__dot { background: var(--ice-success); }
+.ice-turn-step--active { color: var(--ice-text); }
+.ice-turn-step--active .ice-turn-step__dot { background: var(--ice-signal-blue); animation: ice-pulse-dot 1.2s ease-in-out infinite; }
+.ice-turn-step--failed { color: var(--ice-danger); }
+.ice-turn-step--failed .ice-turn-step__dot { background: var(--ice-danger); }
+.ice-turn-step--stopped .ice-turn-step__dot { background: var(--ice-warning); }
+@keyframes ice-pulse-dot { 0%, 100% { box-shadow: 0 0 0 0 rgba(36, 72, 219, 0.35); } 50% { box-shadow: 0 0 0 4px rgba(36, 72, 219, 0); } }
+
+/* 状态点：引擎/模型就绪 */
+.ice-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ice-text-disabled); flex-shrink: 0; }
+.ice-dot--ok { background: var(--ice-success); box-shadow: 0 0 0 3px var(--ice-success-bg); }
+.ice-dot--warn { background: var(--ice-warning); box-shadow: 0 0 0 3px var(--ice-warning-bg); }
+.ice-dot--bad { background: var(--ice-danger); box-shadow: 0 0 0 3px var(--ice-danger-bg); }
+
+/* ---------------------------------------------------------------- 欢迎页 */
+.ice-welcome {
+  flex: 1; overflow-y: auto; display: grid; place-items: center; padding: var(--ice-space-6) var(--ice-space-5);
+}
+.ice-welcome__inner { width: min(560px, 100%); display: grid; gap: var(--ice-space-5); }
+.ice-welcome__mark {
+  width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--ice-ink); color: var(--ice-warm-white); font-weight: 700; font-size: 20px;
+}
+.ice-welcome h1 { margin: 0; font-size: 24px; line-height: 1.3; }
+.ice-welcome p { margin: 0; color: var(--ice-text-secondary); line-height: 1.7; }
+.ice-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--ice-space-3); }
+.ice-quick {
+  display: grid; gap: 6px; text-align: left; cursor: pointer;
+  padding: var(--ice-space-3) var(--ice-space-4); border-radius: var(--ice-radius-lg);
+  border: 1px solid var(--ice-border); background: var(--ice-surface); color: var(--ice-text);
+  transition: border-color var(--ice-motion-fast) var(--ice-motion-ease),
+              box-shadow var(--ice-motion-fast) var(--ice-motion-ease),
+              transform var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-quick:hover { border-color: var(--ice-signal-blue); box-shadow: 0 6px 18px rgba(36, 72, 219, 0.12); transform: translateY(-2px); }
+.ice-quick:active { transform: translateY(0) scale(0.98); }
+.ice-quick strong { font-size: var(--ice-font-size-lg); }
+.ice-quick span { color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
+.ice-quick kbd, .ice-kbd {
+  font-family: var(--ice-font-ui); font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--ice-border); border-bottom-width: 2px; background: var(--ice-surface-muted);
+  color: var(--ice-text-secondary); justify-self: start;
+}
+.ice-shortcuts { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
+
+/* ---------------------------------------------------------------- 引擎退出横幅 */
+.ice-engine-banner {
+  display: flex; align-items: center; gap: var(--ice-space-3); padding: 8px var(--ice-space-4);
+  background: var(--ice-danger); color: #fff; font-size: var(--ice-font-size-md);
+}
+.ice-engine-banner .ice-btn { background: #fff; color: var(--ice-danger); }
+
+/* ---------------------------------------------------------------- 减弱动效 */
+@media (prefers-reduced-motion: reduce) {
+  .ice-dialog-overlay, .ice-dialog, .ice-skeleton, .ice-typing > span, .ice-toast__progress, .ice-caret,
+  .ice-turn-step__dot { animation: none !important; }
+  .ice-btn:active:not(:disabled), .ice-quick:hover, .ice-quick:active { transform: none; }
+}
+[data-reduce-motion="true"] .ice-dialog-overlay, [data-reduce-motion="true"] .ice-dialog,
+[data-reduce-motion="true"] .ice-skeleton, [data-reduce-motion="true"] .ice-typing > span,
+[data-reduce-motion="true"] .ice-turn-step__dot { animation: none !important; }

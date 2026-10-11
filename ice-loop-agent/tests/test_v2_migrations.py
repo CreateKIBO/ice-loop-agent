@@ -32,6 +32,20 @@ def _fresh_v9_db(path: Path) -> sqlite3.Connection:
             job_id TEXT PRIMARY KEY, article_id TEXT NOT NULL, state TEXT NOT NULL,
             current_node TEXT NOT NULL, mode TEXT NOT NULL, created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL);
+        CREATE TABLE model_invocations (
+            invocation_id TEXT PRIMARY KEY, job_id TEXT, node_key TEXT, role TEXT,
+            profile_id TEXT, model_id TEXT, adapter TEXT, attempt INTEGER NOT NULL DEFAULT 1,
+            status TEXT, request_hash TEXT, usage_json TEXT, finish_reason TEXT,
+            error TEXT, created_at TEXT NOT NULL);
+        CREATE TABLE tasks (
+            task_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, kind TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 5, state TEXT NOT NULL DEFAULT 'queued',
+            input_hash TEXT NOT NULL DEFAULT '', idempotency_key TEXT,
+            payload TEXT NOT NULL DEFAULT '{}', result TEXT, error_code TEXT,
+            attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+            lease_token TEXT, lease_expires_at TEXT,
+            cancel_requested INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         INSERT INTO articles VALUES ('art-1', 'PY', 5, '示例主题', 'draft', '{}', '2026-10-07T00:00:00');
         INSERT INTO article_revisions VALUES ('rev-1', 'art-1', 'draft', '# 示例', 'hash-1', '2026-10-07T00:00:00');
         INSERT INTO jobs VALUES ('job-1', 'art-1', 'running', 'draft', 'review_each', '2026-10-07T00:00:00', '2026-10-07T00:00:00');
@@ -76,8 +90,33 @@ class TestMigrationFramework(unittest.TestCase):
         self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 9)
         self.assertIsNone(conn.execute(
             "SELECT name FROM sqlite_master WHERE name='stream_events'").fetchone())
-        rows = conn.execute('SELECT version FROM schema_migrations').fetchall()
-        self.assertEqual(rows, [])
+        # R15：dry-run 不留任何痕迹——包括本调用新建的跟踪表
+        self.assertIsNone(conn.execute(
+            "SELECT name FROM sqlite_master WHERE name='schema_migrations'").fetchone())
+        conn.close()
+
+    def test_checksum_covers_sql_content(self):
+        """R15：不同 SQL 的迁移必须得到不同 checksum；v18+ 记录漂移会被拒绝执行。"""
+        from ice_agent.migrations import Migration
+        def make_a(conn):
+            conn.execute("CREATE TABLE probe_a (x INTEGER)")
+        def make_b(conn):
+            conn.execute("CREATE TABLE probe_b (x INTEGER)")
+        a = Migration(version=998, description="a", apply=make_a)
+        b = Migration(version=999, description="b", apply=make_b)
+        self.assertNotEqual(a.checksum, b.checksum,
+                            "不同 SQL 内容不得因同形字节码得到相同 checksum")
+        # 记录 checksum 漂移被拒绝执行（v18+ 使用当前算法，漂移即拒绝）
+        path = self.dir / 'drift.db'
+        conn = _fresh_v9_db(path)
+        # 先迁移到最新，再篡改 v18 的 checksum
+        run_migrations(conn, app_version=__version__)
+        conn.execute(
+            "UPDATE schema_migrations SET checksum='tampered' WHERE version>=18")
+        conn.commit()
+        with self.assertRaises(ValueError):
+            run_migrations(conn, app_version=__version__)
+        # v10-v17 使用旧算法，属于已知历史构建，不触发漂移拒绝
         conn.close()
 
     def test_failure_injection_rolls_back_version_and_schema(self):

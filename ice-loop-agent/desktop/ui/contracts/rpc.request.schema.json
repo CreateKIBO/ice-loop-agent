@@ -2,12 +2,15 @@
   "$id": "rpc.request",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "JSON Lines 请求行。v1 客户端发 {\"id\",\"method\",\"params\"}，兼容。",
+  "description": "JSON Lines 请求行。v1 客户端发 {\"id\",\"method\",\"params\"}，兼容。\n\nid 由调用方定义（main.cjs 用自增整数，测试用字符串）；响应必须原样回显。",
   "properties": {
     "id": {
       "anyOf": [
         {
           "type": "string"
+        },
+        {
+          "type": "integer"
         },
         {
           "type": "null"

@@ -2,8 +2,11 @@
 // 铁律：所有 query key 以 ['ice', accountId, ...] 开头；切换账号时整体清缓存，
 // 防止任何对象（消息/候选/任务/资源）跨公众号串显。
 import { QueryClient, useQuery, useMutation, type UseQueryOptions } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSyncExternalStore } from "react";
+import { advanceCursor, mergeEvents, needsBackfill, type StreamEvent } from "./eventStream";
+import { chatResult, jobRows } from "./workbenchResponses";
+import { createDirtyFlusher } from "./dirtyFlush";
 
 export interface IceBridge {
   request: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -61,6 +64,119 @@ export function useCurrentConversation(): string | null {
   return useSyncExternalStore(conversationStore.subscribe, conversationStore.get);
 }
 
+// ---------------------------------------------------------------- 编辑对象选择
+let currentEditorJob: string | null = null;
+const editorListeners = new Set<() => void>();
+
+export const editorStore = {
+  get: () => currentEditorJob,
+  set(next: string | null) {
+    if (next === currentEditorJob) return;
+    currentEditorJob = next;
+    editorListeners.forEach(listener => listener());
+  },
+  subscribe(listener: () => void) {
+    editorListeners.add(listener);
+    return () => { editorListeners.delete(listener); };
+  },
+};
+
+export function useEditorJob(): string | null {
+  return useSyncExternalStore(editorStore.subscribe, editorStore.get);
+}
+
+// ------------------------------------------------------- 对象级 dirty（M2-06）
+// 每个对象一个键（如 job:{id}:editor）；不用全局布尔，互不覆盖。
+type DirtyEntry = { dirty: boolean; savedAt: number };
+const dirtyMap = new Map<string, DirtyEntry>();
+const dirtyListeners = new Set<() => void>();
+let dirtyVersion = 0;
+
+function notifyDirty() {
+  dirtyVersion += 1;
+  dirtyListeners.forEach(listener => listener());
+}
+
+export const dirtyStore = {
+  isDirty: (key: string) => dirtyMap.get(key)?.dirty ?? false,
+  anyDirty: () => [...dirtyMap.values()].some(entry => entry.dirty),
+  markDirty(key: string) {
+    const previous = dirtyMap.get(key);
+    if (previous?.dirty) return;
+    dirtyMap.set(key, { dirty: true, savedAt: previous?.savedAt ?? 0 });
+    notifyDirty();
+  },
+  markClean(key: string) {
+    if (!dirtyMap.get(key)?.dirty) return;
+    dirtyMap.set(key, { dirty: false, savedAt: Date.now() });
+    notifyDirty();
+  },
+  subscribe(listener: () => void) {
+    dirtyListeners.add(listener);
+    return () => { dirtyListeners.delete(listener); };
+  },
+  get version() { return dirtyVersion; },
+};
+
+// ------------------------------------------------- 导航前即时落盘（R04 批次二）
+// debounce 窗口内的修改在切文章/会话/账号前立即保存工作草稿，不等 800ms。
+export const { registerDirtyFlush, flushAllDirty, lastFlushFailure } =
+  createDirtyFlusher(key => dirtyMap.get(key)?.dirty ?? false);
+
+export function useObjectDirty(key: string): boolean {
+  return useSyncExternalStore(dirtyStore.subscribe, () => dirtyStore.isDirty(key));
+}
+
+export function useAnyDirtyGuard(): void {
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (dirtyStore.anyDirty()) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+}
+
+// ------------------------------------------------------- 手选引文（M4-05）
+// 引用只在客户端选择；送入 ContextPack 时由后端按 chunk_id 做 hash 绑定。
+type Citation = { chunkId: string; displayName: string; section: string; hash: string };
+let citations: Citation[] = [];
+const citationListeners = new Set<() => void>();
+
+function notifyCitations() {
+  citations = [...citations];
+  citationListeners.forEach(listener => listener());
+}
+
+export const citationStore = {
+  get: () => citations,
+  add(entry: Citation) {
+    if (citations.some(item => item.chunkId === entry.chunkId)) return;
+    if (citations.length >= 8) return; // 与后端 ContextPack 上限一致
+    citations.push(entry);
+    notifyCitations();
+  },
+  remove(chunkId: string) {
+    citations = citations.filter(item => item.chunkId !== chunkId);
+    notifyCitations();
+  },
+  clear() {
+    citations = [];
+    notifyCitations();
+  },
+  subscribe(listener: () => void) {
+    citationListeners.add(listener);
+    return () => { citationListeners.delete(listener); };
+  },
+};
+
+export function useCitations(): Citation[] {
+  return useSyncExternalStore(citationStore.subscribe, citationStore.get);
+}
+
 // ---------------------------------------------------------------- Query 客户端
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,7 +210,10 @@ export class RpcError extends Error {
 /** main.cjs 将引擎错误以 Error(code/recoverable/action) reject；这里统一成 RpcError。 */
 export async function rpc<T>(method: string, params?: Record<string, unknown>): Promise<T> {
   try {
-    return await bridge().request(method, params) as T;
+    const value = await bridge().request(method, params);
+    if (method === "chat.get" || method === "chat.create") return chatResult(value) as T;
+    if (method === "jobs.list") return jobRows(value) as T;
+    return value as T;
   } catch (error) {
     const shape = error as RpcErrorShape;
     if (shape && typeof shape === "object" && shape.code) {
@@ -111,10 +230,11 @@ export function useAccountQuery<T>(method: string, params?: Record<string, unkno
   const account = useCurrentAccount();
   const key = ["ice", account, method, params ?? {}] as const;
   return useQuery<T, RpcError>({
+    ...options,
     queryKey: key,
     queryFn: () => rpc<T>(method, { account_id: account, ...params }),
+    // 放在 ...options 之后：调用方传 enabled 时不能绕过"账号为空不发请求"。
     enabled: Boolean(account) && (options?.enabled ?? true),
-    ...options,
   });
 }
 
@@ -137,29 +257,52 @@ export function useAccountMutation<TVars, TData = unknown>(
   });
 }
 
-/** 引擎事件轮询（M1-05 游标拉取；新 UI 统一走这里，避免与旧页双订阅）。 */
-export function useEventStream(streamId: string, onEvent: (event: { sequence: number; type: string; payload: unknown }) => void,
-                               enabled = true) {
+// ------------------------------------------------- 引擎事件流（M1-05 / C1）
+// 游标与已收事件按"账号|流"缓存在模块级：切换会话再回来不重复拉取，也不会串账号。
+type StreamCache = { cursor: number; events: StreamEvent[] };
+const streamCache = new Map<string, StreamCache>();
+const EVENT_POLL_MS = 500;
+const EVENT_FINAL_PASSES = [0, 700];
+const EVENT_PAGES_PER_TICK = 5;
+
+/** active 期间约每 500ms 按游标补取；转为非活跃时再补取两次（结束事件可能晚于状态提交）。 */
+export function useEventStream(streamId: string | null, active: boolean): StreamEvent[] {
   const account = useCurrentAccount();
+  const key = account && streamId ? account + "|" + streamId : "";
+  const [state, setState] = useState<{ key: string; events: StreamEvent[] }>(
+    () => ({ key, events: streamCache.get(key)?.events ?? [] }));
+  const wasActive = useRef(false);
   useEffect(() => {
-    if (!enabled || !account || !streamId) return;
-    let cursor = 0;
+    if (!key) return;
+    const finishing = !active && wasActive.current;
+    wasActive.current = active;
+    if (!active && !finishing) return;
     let stopped = false;
     let timer: number | undefined;
-    const tick = async () => {
-      try {
-        const data = await rpc<{ events: Array<{ sequence: number; type: string; payload: unknown }>; latest: number }>(
-          "events.poll", { account_id: account, stream_id: streamId, after: cursor });
+    let finalPass = 0;
+    const pull = async () => {
+      for (let page = 0; page < EVENT_PAGES_PER_TICK; page += 1) {
+        const before = streamCache.get(key) ?? { cursor: 0, events: [] };
+        const data = await rpc<{ events: StreamEvent[]; latest: number }>(
+          "events.poll", { account_id: account, stream_id: streamId, after: before.cursor });
         if (stopped) return;
-        for (const event of data.events) {
-          if (event.sequence > cursor) cursor = event.sequence;
-          onEvent(event);
-        }
-        cursor = Math.max(cursor, data.latest);
-      } catch { /* 断线下一轮补取；cursor 不回退即不重复应用 */ }
-      if (!stopped) timer = window.setTimeout(tick, 600);
+        const current = streamCache.get(key) ?? before;
+        const next = { cursor: Math.max(current.cursor, advanceCursor(before.cursor, data.events)),
+                       events: mergeEvents(current.events, data.events) };
+        streamCache.set(key, next);
+        setState({ key, events: next.events });
+        if (!data.events.length || !needsBackfill(next.cursor, data.latest)) return;
+      }
     };
-    timer = window.setTimeout(tick, 0);
+    const tick = async () => {
+      try { await pull(); } catch { /* 断线时游标不前进，下一轮从原位置补取 */ }
+      if (stopped) return;
+      if (active) timer = window.setTimeout(tick, EVENT_POLL_MS);
+      else if (++finalPass < EVENT_FINAL_PASSES.length) timer = window.setTimeout(tick, EVENT_FINAL_PASSES[finalPass]);
+    };
+    timer = window.setTimeout(tick, EVENT_FINAL_PASSES[0]);
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [streamId, account, enabled]);
+  }, [key, active, account, streamId]);
+  if (!key) return [];
+  return state.key === key ? state.events : streamCache.get(key)?.events ?? [];
 }
