@@ -12,8 +12,13 @@ with zipfile.ZipFile(release/f'ICE-Loop-Studio-{version}-x64.zip') as archive:
     forbidden={'credentials.json','app.db','settings.json','Cookies','Local State'}
     bad=[name for name in names if Path(name).name in forbidden or '/.desktop-runtime/' in name or '/.test-tmp/' in name]
     if bad:raise ValueError('Workspace data unexpectedly included: '+str(bad))
-    generated_cache=[name for name in names if '__pycache__' in Path(name).parts]
-    if generated_cache:raise ValueError('Generated Python cache unexpectedly included: '+str(generated_cache[:3]))
+    # PyInstaller 6 onedir 把纯模块字节码按 __pycache__/x.pyc.<magic> 落盘——这是
+    # 托管格式，不是源码树漏收的缓存；只拦截"裸 .pyc / .pyo"（collect_data_files
+    # 从源码 __pycache__ 带入的形态）。
+    import re as _re
+    stray_cache=[name for name in names
+                 if _re.search(r'__pycache__/[^/]+\.py[co]$', name)]
+    if stray_cache:raise ValueError('Generated Python cache unexpectedly included: '+str(stray_cache[:3]))
     for name in selected:
         matches=[entry for entry in names if entry==name or entry.endswith('/'+name)]
         if len(matches)!=1:raise ValueError('Missing/duplicate release entry: '+name)

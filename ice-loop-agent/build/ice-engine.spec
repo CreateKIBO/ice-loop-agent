@@ -3,6 +3,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 datas = []
 datas += collect_data_files('ice_agent')
+datas += collect_data_files('pydantic')
 
 
 a = Analysis(

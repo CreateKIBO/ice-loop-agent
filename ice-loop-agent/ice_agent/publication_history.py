@@ -136,8 +136,10 @@ class PublicationHistory:
         progress = self.store.conn.execute("SELECT published_episode FROM publication_progress WHERE account_id=? AND series=?", (self.account["id"],series)).fetchone()
         maximum = max([row["episode"] for row in published]+[progress[0] if progress else 0])
         target = episode if episode is not None else maximum+1
+        # target 是"参考期号"：发布进度打满 9999 后为 10000（next_episode 此时为
+        # None，见下）。保存/发布进度口径仍是 0–9999（KI-001：旧文案与此不一致）。
         if type(target) is not int or not 1 <= target <= 10000:
-            raise ValueError('拟题期号需为1–9999')
+            raise ValueError('期号需为1–9999（全部发布完后下一期建议为空）')
         # Only preceding articles in this series. Published snapshots win over
         # alternate drafts for the same issue; do not pass future bodies.
         preceding = sorted((row for row in relevant if row['episode'] is not None and row['episode']<target and row['body'].strip()),
@@ -162,3 +164,15 @@ class PublicationHistory:
                 "previous_preview":section_excerpt(latest["body"],"写在最后|结语|总结|下期") if latest else "",
                 "published_count":len(published),"draft_count":sum(row["status"]!="published" for row in relevant),
                 "same_episode_drafts":sum(row["status"]!="published" and row["episode"]==target for row in relevant)}
+
+    def title_coverage(self, series: str, batch: int = 50) -> dict:
+        """全部标题覆盖证明（M4-07）：总数、完整返回与分批区间，供查重与审计。"""
+        if series not in self.columns:
+            raise ValueError("请选择当前公众号的栏目")
+        relevant = [row for row in self.records(bodies=True) if row["series"] == series]
+        total = len(relevant)
+        return {"series": series, "total": total, "fully_returned": True,
+                "batch_size": batch,
+                "batches": [{"from": start + 1, "to": min(start + batch, total)}
+                            for start in range(0, total, batch)] if total else [],
+                "bodies_available": sum(1 for row in relevant if row["body"].strip())}

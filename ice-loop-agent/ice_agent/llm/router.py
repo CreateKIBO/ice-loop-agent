@@ -77,6 +77,7 @@ class RoleRouter:
         self.invocation_hook = invocation_hook
         self.on_delta: Callable[[str, str], None] | None = None
         self.cancelled: Callable[[], bool] | None = None
+        self._conversation_id: str = ""
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -104,7 +105,10 @@ class RoleRouter:
 
     # ------------------------------------------------------------ 主入口
     def generate(self, req: LLMRequest, *, job_id: str | None = None,
+                 conversation_id: str | None = None,
                  max_attempts: int = 3) -> LLMResponse:
+        # conversation_id 透传进调用记录（M8-03/KI-002：创作会话计入预算归属）。
+        self._conversation_id = conversation_id or ""
         route = self.routes.get(req.role)
         if route is None:
             raise ModelError("PARAM_UNSUPPORTED", f"角色未配置路由：{req.role}")
@@ -213,7 +217,8 @@ class RoleRouter:
                "node_key": req.node, "role": req.role, "profile_id": adapter.profile.profile_id,
                "model_id": adapter.profile.model_id, "adapter": adapter.adapter_id,
                "attempt": attempt, "status": "sending", "request_hash": sha256_json(messages),
-               "usage": {"usage": "usage_unknown"}}
+               "usage": {"usage": "usage_unknown"},
+               "conversation_id": getattr(self, "_conversation_id", "")}
         if self.store:
             job = self.store.get_job(job_id) if job_id else None
             maximum = int(job["limits"].get("max_model_calls", 20)) if job else None
@@ -311,6 +316,7 @@ class RoleRouter:
             "usage": usage or {"usage": "unknown"},
             "finish_reason": "",
             "error": str(error)[:300] if error else "",
+            "conversation_id": getattr(self, "_conversation_id", ""),
         }
         if self.store is not None:
             self.store.add_invocation(inv)

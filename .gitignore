@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+
+# Accidentally named desktop runtime; never project source.
+/ice-loop-agent$RT/

@@ -262,6 +262,7 @@ document.addEventListener('click', async event => {
     else if (action === 'open-html') {if(ui.dirty)throw Error('正文尚未保存，请保存并复检后预览');await window.ice.openHTML(ui.currentJob);}
     else if (action === 'import-image') { const result = await window.ice.importImage(ui.currentJob, Number(button.dataset.figure)); if (result) { toast('图片已归档并选用'); await refresh(); } }
     else if (action === 'tapnow') await window.ice.openTapNow();
+    else if (action === 'switch-new-ui') { if (ui.dirty) throw new Error('请先保存正文修改，再切换到新工作台'); await window.ice.switchUi('new'); }
     else if (action === 'wechat') openBrowserSite('wechat');
     else if (action === 'capture-window') { const result = await window.ice.captureWindow(); toast('当前窗口截图已保存：' + result.file); }
     else if (action === 'verify-claim') { const claim = ui.detail.claims.find(c => c.claim_id === button.dataset.claim); document.querySelector('#verify-claim').textContent = claim.text; document.querySelector('#verify-form [name="claim_id"]').value = claim.claim_id; document.querySelector('#verify-dialog').showModal(); }

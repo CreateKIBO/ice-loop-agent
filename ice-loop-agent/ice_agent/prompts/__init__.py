@@ -141,3 +141,39 @@ def render(node: str, *, profile: dict | None = None, **vars_: str) -> str:
                         "exercise", "next_plan")},
     )
     return body
+
+
+# ------------------------------------------------------- v2 模板快照与显式渲染
+import re as _re
+import hashlib as _hashlib
+
+_VAR_RE = _re.compile(r"\{([a-z_][a-z0-9_]*)\}")
+
+
+def template_snapshot(node_or_template: str) -> dict:
+    """模板 id/version/hash 快照（M4-06）：任务记录可回读，先锁旧 fixture。"""
+    if node_or_template in PROMPTS:
+        template = PROMPTS[node_or_template]
+        template_id = node_or_template
+    else:
+        template = node_or_template
+        template_id = "context_pack"
+    digest = _hashlib.sha256(template.encode("utf-8")).hexdigest()
+    declared = sorted(set(_VAR_RE.findall(template)))
+    return {"id": template_id, "version": PROMPTS_VERSION, "hash": digest,
+            "declared_vars": declared}
+
+
+def render_template(template: str, *, values: dict[str, str],
+                    required: list[str] | None = None) -> str:
+    """显式变量渲染（M4-06）：
+    - 只替换 values 中声明的 {var}；未声明的花括号（静态 JSON 等）原样保留；
+    - required 中声明的变量缺失 → ValueError，不允许静默缺项。
+    """
+    for name in (required or []):
+        if name not in values:
+            raise ValueError(f"缺少必需的模板变量：{name}")
+    def repl(match: "_re.Match[str]") -> str:
+        key = match.group(1)
+        return str(values[key]) if key in values else match.group(0)
+    return _VAR_RE.sub(repl, template)

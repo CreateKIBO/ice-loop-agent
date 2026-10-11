@@ -21,6 +21,18 @@ def used_calls(store, job_id):
         "AND status != 'MODEL_CAPABILITY_MISMATCH'", (job_id,)).fetchone()[0]
 
 
+# 会话预算的默认值。settings 里没有 max_chat_calls 时按此展示与执行；
+# 0 是显式关闭限制，不能把"没配置"误读成 0。
+DEFAULT_CHAT_CALLS = 24
+
+
+def chat_budget(settings) -> int:
+    raw = settings.get('max_chat_calls', DEFAULT_CHAT_CALLS)
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0 or raw > 1000:
+        raise ValueError('会话模型调用上限需为 0–1000 的整数（0 表示不限制）')
+    return raw
+
+
 class ModelBudgets:
     def __init__(self, service):
         self.s = service
@@ -31,8 +43,12 @@ class ModelBudgets:
 
     def get(self, params):
         self.check_account(params)
+        chat_limit = chat_budget(self.s.settings)
         result = {'max_model_calls': self.s.settings['max_model_calls'],
-                  'max_image_model_calls': self.s.settings.get('max_image_model_calls', 12)}
+                  'max_image_model_calls': self.s.settings.get('max_image_model_calls', 12),
+                  'max_chat_calls': chat_limit,
+                  'chat_unlimited': chat_limit == 0,
+                  'chat_configured': 'max_chat_calls' in self.s.settings}
         if params.get('job_id'):
             _, _, store = self.s._job_app(params['job_id'])
             try:
@@ -44,6 +60,22 @@ class ModelBudgets:
                     'limit':maximum, 'used':used, 'remaining':max(0, maximum-used),
                     'limits_hash':sha256_json(job['limits']),
                     'legacy_budget':image_only(job) and key not in job['limits']}
+            finally:
+                store.close()
+        if params.get('conversation_id'):
+            conversation_id = str(params['conversation_id'])
+            _, _, store = self.s._app()
+            try:
+                row = store.conn.execute(
+                    "SELECT id FROM creative_conversations WHERE id=? AND account_id=?",
+                    (conversation_id, self.s._account()['id'])).fetchone()
+                if not row:
+                    raise ValueError('会话不存在或不属于当前公众号')
+                used = store.conversation_invocation_count(conversation_id)
+                result['conversation'] = {
+                    'conversation_id': conversation_id, 'limit': chat_limit,
+                    'unlimited': chat_limit == 0, 'used': used,
+                    'remaining': None if chat_limit == 0 else max(0, chat_limit - used)}
             finally:
                 store.close()
         return result
@@ -65,10 +97,12 @@ class ModelBudgets:
         if params.get('scope') == 'defaults':
             normal = validate_limit(params.get('max_model_calls'))
             images = validate_limit(params.get('max_image_model_calls'))
+            chat = chat_budget({'max_chat_calls': params.get('max_chat_calls', DEFAULT_CHAT_CALLS)})
             with self.s._settings_guard:
                 self.check_account(params)
                 updated = copy.deepcopy(self.s.settings)
-                updated.update(max_model_calls=normal, max_image_model_calls=images)
+                updated.update(max_model_calls=normal, max_image_model_calls=images,
+                               max_chat_calls=chat)
                 atomic_write_text(self.s.settings_file, json.dumps(updated, ensure_ascii=False, indent=2))
                 self.s.settings = updated
             return self.get({'account_id':params.get('account_id')})

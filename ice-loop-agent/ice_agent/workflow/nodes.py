@@ -282,7 +282,11 @@ def node_draft(ctx: NodeContext) -> dict[str, Any]:
                  "claims": ctx.state.get("claims", [])},
         stream=True)
     resp = ctx.generate(req)
-    draft = resp.text.strip() + "\n"
+    from ..editorial import accept_model_draft
+    draft, ir_used = accept_model_draft(resp.text.strip())
+    draft = draft + "\n"
+    if ir_used:
+        ctx.state["draft_via_ir"] = True
     if spec.get('title_selection', {}).get('locked'):
         draft = _with_article_title(draft, spec['topic'])
     ctx.state["draft_md"] = draft

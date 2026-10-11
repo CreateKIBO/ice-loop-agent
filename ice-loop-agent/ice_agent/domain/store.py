@@ -812,16 +812,23 @@ class Store:
         self.conn.execute(
             "INSERT INTO model_invocations (invocation_id, job_id, node_key, role,"
             " profile_id, model_id, adapter, attempt, status, request_hash, usage_json,"
-            " finish_reason, error, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " finish_reason, error, conversation_id, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (inv["invocation_id"], inv.get("job_id"), inv.get("node_key"),
              inv.get("role"), inv.get("profile_id"), inv.get("model_id"),
              inv.get("adapter"), inv.get("attempt", 1), inv.get("status", "ok"),
              inv.get("request_hash", ""),
              json.dumps(inv.get("usage") or {"usage": "unknown"}, ensure_ascii=False),
-             inv.get("finish_reason", ""), inv.get("error", ""), now_iso()),
+             inv.get("finish_reason", ""), inv.get("error", ""),
+             inv.get("conversation_id", ""), now_iso()),
         )
         if commit:
             self.conn.commit()
+
+    def conversation_invocation_count(self, conversation_id: str) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM model_invocations WHERE conversation_id=?"
+            " AND status != 'MODEL_CAPABILITY_MISMATCH'", (conversation_id,)).fetchone()[0]
 
     def job_invocations(self, job_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(

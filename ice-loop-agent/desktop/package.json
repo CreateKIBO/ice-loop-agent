@@ -1,6 +1,6 @@
 {
   "name": "ice-loop-studio",
-  "version": "1.5.3",
+  "version": "2.0.0-beta.2",
   "private": true,
   "description": "支持多公众号档案、草稿与视觉资产的内容创作桌面工作台",
   "main": "main.cjs",
@@ -13,6 +13,7 @@
     "check:chat": "node --check renderer/creative-chat.js && node --check chat-smoke.cjs",
     "smoke:chat": "node tests/chat-smoke.cjs",
     "smoke:ui": "node tests/ui-smoke.cjs",
+    "smoke:dpi": "node tests/dpi-smoke.cjs",
     "check": "node --check main.cjs && node --check preload.cjs && node --check renderer/app.js && node --check renderer/publication.js && node --check renderer/brief.js && node --check renderer/planning.js && node --check renderer/outlines.js && node --check renderer/visual.js && node --check renderer/capture.js && node --check renderer/maintenance.js && node --check renderer/supplements.js",
     "test": "node --test tests/*.test.cjs",
     "smoke": "node tests/desktop-smoke.cjs",

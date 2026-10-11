@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, safeStorage, session, clipboard, ClipboardItem } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, safeStorage, session, clipboard, ClipboardItem, screen } = require('electron');
 if(process.argv.includes('--credential-helper')){require('./credential-helper.cjs');return;}
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url');
 const readline = require('node:readline');
 const { randomUUID, createHash } = require('node:crypto');
 const {copyTextVerified}=require('./clipboard.cjs');
+const exportApprovals = new (require('./export-approval.cjs').ExportApprovals)();
 
 const project = app.isPackaged ? path.join(process.resourcesPath,'engine-project') : path.resolve(__dirname, '..');
 const dataSelection = app.isPackaged ? path.join(app.getPath('appData'),'ICE Loop Studio','workspace-path.json') : path.join(project, '.desktop-data-path.json');
@@ -58,6 +59,12 @@ methods.add('chat.fork');
 methods.add('chat.save_draft');
 methods.add('chat.drafts');
 for(const method of ['chat.delete','chat.restore','jobs.archive','jobs.delete','jobs.restore'])methods.add(method);
+// Explicit public methods used by the new workbench. Internal run_turn and the
+// unfinished probe endpoint remain unavailable to renderer requests.
+for (const method of require('./workbench-methods.cjs')) methods.add(method);
+// 可信导出（R05/R06/R13 完成）：目录经由 ice:choose-export-dir 用户选择后，
+// 该绝对路径作为短期批准引用传给 articles.export_bundle；Python 端再次校验。
+methods.add('articles.export_bundle');
 
 function engineCommand(){
   if(app.isPackaged)return {file:path.join(process.resourcesPath,'engine','ice-engine.exe'),args:[]};
@@ -103,8 +110,19 @@ async function captureRun(jobId,figureNo,runKeys,automatic=false){
     }
 }
 
+// 受信应用页面白名单：旧 renderer 与 v2.0 新工作台（同一 window、同一 preload）。
+const TRUSTED_APP_FRAMES = new Set(['ice://app/index.html', 'ice://app/ui/index.html']);
+const uiMode = require('./ui-mode.cjs');
+const UI_PAGES = uiMode.UI_PAGES;
+const uiPreferenceFile = () => path.join(runtime, 'ui-preference.json');
+const newUiBuilt = () => fs.existsSync(path.join(__dirname, 'ui', 'dist', 'index.html'));
+const startPage = () => uiMode.chooseStartPage({
+  argv: process.argv, newUiBuilt: newUiBuilt(), savedMode: uiMode.readUiMode(uiPreferenceFile()),
+});
+
 function assertSender(event) {
-  if (!window || event.sender !== window.webContents || event.senderFrame.url.split('#')[0] !== 'ice://app/index.html') {
+  const frameUrl = event.senderFrame ? event.senderFrame.url.split('#')[0] : '';
+  if (!window || event.sender !== window.webContents || !TRUSTED_APP_FRAMES.has(frameUrl)) {
     throw new Error('无效的窗口请求');
   }
 }
@@ -210,6 +228,22 @@ async function startEngine() {
 }
 
 function registerIPC() {
+  ipcMain.handle('ice:pick-knowledge-file',async event => {
+    assertSender(event);
+    const selected=await dialog.showOpenDialog(window,{title:'导入知识文档（原文只读）',properties:['openFile'],
+      filters:[{name:'文档',extensions:['md','markdown','txt','docx']}]});
+    if(selected.canceled)return null;
+    return selected.filePaths[0];
+  });
+  // 可信导出（R13）：目录必须由用户在系统对话框中选择——该绝对路径即短期批准引用；
+  // Python 端 articles.export_bundle 仍会再次校验绝对/非C/链接/占用。
+  ipcMain.handle('ice:choose-export-dir',async event => {
+    assertSender(event);
+    const selected=await dialog.showOpenDialog(window,{title:'选择导出位置（将在其中创建新文件夹）',
+      properties:['openDirectory','createDirectory']});
+    if(selected.canceled||!selected.filePaths[0])return null;
+    return exportApprovals.issue(selected.filePaths[0]);
+  });
   ipcMain.handle('ice:import-creative-document',async(event,accountId)=>{
     assertSender(event);
     const selected=await dialog.showOpenDialog(window,{title:'引用文档（仅用于当前对话）',properties:['openFile'],filters:[{name:'文档',extensions:['md','txt','docx']}]});
@@ -303,8 +337,10 @@ function registerIPC() {
   ipcMain.handle('ice:request', async (event, method, params) => {
     assertSender(event);
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > 500000) throw new Error('无效请求');
+    if (method === 'articles.export_bundle') exportApprovals.assert(params.destination);
     const result=await request(method, params);
-    if(['accounts.switch','accounts.save','accounts.import'].includes(method))embeddedBrowser.reset();
+    if (method === 'articles.export_bundle') exportApprovals.consume(params.destination);
+    if(['accounts.switch','accounts.save','accounts.import'].includes(method)){embeddedBrowser.reset();exportApprovals.clear();}
     return result;
   });
   ipcMain.handle('ice:import-image', async (event, jobId, figureNo) => {
@@ -380,6 +416,22 @@ function registerIPC() {
     assertSender(event);
     return embeddedBrowser.route('tapnow');
   });
+  ipcMain.handle('ice:switch-ui', async (event, mode) => {
+    assertSender(event);
+    if (mode !== 'new' && mode !== 'classic') throw new Error('未知界面');
+    if (mode === 'new' && !newUiBuilt()) throw new Error('新工作台未随本版本安装，请继续使用经典界面');
+    try { uiMode.writeUiMode(uiPreferenceFile(), mode); } catch { /* 记不住选择不阻塞本次切换 */ }
+    embeddedBrowser.reset();
+    await window.loadURL(UI_PAGES[mode]);
+    return { ok: true };
+  });
+  // 引擎退出后的恢复入口：重启整个应用（引擎随主进程重新拉起）。
+  ipcMain.handle('ice:relaunch', async event => {
+    assertSender(event);
+    app.relaunch();
+    app.quit();
+    return { ok: true };
+  });
 }
 
 async function createWindow() {
@@ -417,8 +469,6 @@ async function createWindow() {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, legacyURL) => { if (!(event.url||legacyURL||'').startsWith('ice://app/')) event.preventDefault(); });
   window.once('ready-to-show', () => { if (!process.argv.includes('--smoke')&&!process.argv.includes('--review-smoke')&&!process.argv.includes('--browser-smoke')&&!process.argv.includes('--chat-smoke')) window.show(); });
-  // feature flag：--new-ui 且产物存在时加载 v2.0 工作台；默认仍进旧页面。
-  const newUiReady = process.argv.includes('--new-ui') && fs.existsSync(path.join(__dirname, 'ui', 'dist', 'index.html'));
   if (process.argv.includes('--ui-smoke')) {
     let smokeSettled = false;
     const settle = async outcome => {
@@ -438,7 +488,29 @@ async function createWindow() {
     }, 1500));
     setTimeout(() => settle({ ok: false, stage: 'timeout', url: window.webContents.getURL() }), 30000);
   }
-  await window.loadURL(newUiReady || process.argv.includes('--ui-smoke') ? 'ice://app/ui/index.html' : 'ice://app/index.html');
+  await window.loadURL(startPage());
+  if (process.argv.includes('--dpi-smoke')) {
+    // M2-10：以 zoomFactor 近似 100/125/150/200% 缩放，记录窗口与视口几何+截图。
+    (async () => {
+      const geometry = { display: screen.getPrimaryDisplay().scaleFactor, rows: [] };
+      try {
+        for (const zoom of [1, 1.25, 1.5, 2]) {
+          window.webContents.setZoomFactor(zoom);
+          await new Promise(resolve => setTimeout(resolve, 600));
+          const bounds = window.getBounds();
+          const viewport = await window.webContents.executeJavaScript(
+            '({w: document.documentElement.clientWidth, h: document.documentElement.clientHeight, overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth})');
+          const shot = await window.webContents.capturePage();
+          const file = path.join(runtime, 'dpi-' + String(zoom).replace('.', '_') + '.png');
+          fs.writeFileSync(file, shot.toPNG());
+          geometry.rows.push({ zoom, bounds, viewport, screenshot: path.basename(file) });
+        }
+        fs.writeFileSync(path.join(runtime, 'dpi-geometry.json'), JSON.stringify(geometry, null, 2));
+      } catch (error) {
+        fs.writeFileSync(path.join(runtime, 'dpi-smoke-error.txt'), error.stack || error.message);
+      } finally { app.quit(); }
+    })();
+  }
   if(process.argv.includes('--browser-smoke')){
     setTimeout(async()=>{try{const result=await require('./browser-smoke.cjs').run({window,controller:embeddedBrowser,request,runtime});fs.writeFileSync(path.join(runtime,'browser-result.json'),JSON.stringify(result,null,2));}catch(error){fs.writeFileSync(path.join(runtime,'browser-error.txt'),error.stack||error.message);}finally{app.quit();}},1200);
   }

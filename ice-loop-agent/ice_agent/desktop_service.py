@@ -24,7 +24,8 @@ from .workflow.nodes import _brief_ctx, _run_rules, evidence_errors
 
 
 class DesktopService:
-    def __init__(self, project_root: Path, runtime_root: Path | None = None, article_root: Path | None = None):
+    def __init__(self, project_root: Path, runtime_root: Path | None = None,
+                 article_root: Path | None = None, *, auto_consumer: bool = True):
         self.root = normalize(project_root)
         self.runtime = normalize(runtime_root or self.root / ".desktop-runtime")
         assert_not_c_drive(self.runtime)
@@ -49,6 +50,27 @@ class DesktopService:
         from .task_lifecycle import initialize_tasks
         initialize_tasks(store)
         store.close()
+        # 批次A：启动唯一队列消费者线程（不在 stdin 读循环同步跑生产任务）；
+        # close() 通过 stop_event 停止调度。daemon 线程不阻止进程退出。
+        # auto_consumer=False 供测试确定性控制（消费者生命周期由测试自行调用 drain）。
+        self._consumer_stop = threading.Event()
+        self._consumer_thread = None
+        if auto_consumer:
+            self._consumer_thread = threading.Thread(
+                target=self._consumer_loop, daemon=True, name="ice-queue-consumer")
+            self._consumer_thread.start()
+
+    def _consumer_loop(self):
+        """唯一队列消费者：间隔认领 queued production 任务并推进引擎。
+        不因 UI 每次刷新重复启动（__init__ 只调一次）。"""
+        from .tasks.worker import drain
+        from .tasks import TaskQueue
+        while not self._consumer_stop.is_set():
+            try:
+                drain(self, max_tasks=2, stop_event=self._consumer_stop)
+            except Exception:
+                pass  # 消费者异常不中止服务；下轮重试
+            self._consumer_stop.wait(timeout=3.0)
 
     def _load_settings(self) -> dict:
         defaults = {
@@ -67,6 +89,11 @@ class DesktopService:
             saved = json.loads(self.settings_file.read_text(encoding="utf-8"))
             saved['profiles']={**defaults['profiles'],**saved.get('profiles',{})}
             defaults.update(saved)
+        # Repair metadata written by the early v2 probe endpoint. Keeping this
+        # inside ModelProfile.extra lets subsequent startup and routes load it.
+        for profile in defaults["profiles"].values():
+            if "probe_results" in profile:
+                profile.setdefault("extra", {})["probe_results"] = profile.pop("probe_results")
         if not defaults.get("accounts"):
             defaults["accounts"] = {"ice-loop": default_account(self.root, self.runtime, defaults["article_root"])}
             if os.environ.get('ICE_PACKAGED')=='1':defaults['accounts']['ice-loop']['library_root']=''
@@ -1035,9 +1062,19 @@ class DesktopService:
             from .workspace_assets import WorkspaceAssets
             box=WorkspaceAssets(store,self.runtime,self._account()['id']);resource=box.import_image(file)
             resource.update(title=context['caption'][:100] or '运行记录截图',usage='screenshot',tags=['真实运行','程序截图'],
-                description='来自本文已执行的运行记录。',capture_hash=context['capture_hash'])
+                description='来自本文已执行的运行记录。',capture_hash=context['capture_hash'],
+                job_id=params['job_id'],figure_no=params['figure_no'],
+                run_ids=[run['run_id'] for run in context['runs']],
+                source_hashes=[run['code_sha256'] for run in context['runs']])
             box.save_resource(resource)
-            return {**candidate,'resource_id':resource['resource_id'],'source':'run_capture'}
+            from . import assets_v2
+            recorded=assets_v2.record_capture(
+                store,self._account()['id'],params['job_id'],params['figure_no'],
+                candidate_id=candidate['candidate_id'],resource_id=resource['resource_id'],
+                file_sha256=resource['sha256'],capture_hash=context['capture_hash'],
+                runs=context['runs'],automatic=bool(params.get('automatic')))
+            return {**candidate,'resource_id':resource['resource_id'],'source':'run_capture',
+                    'capture_id':recorded['capture_id']}
         finally:store.close()
 
     def automation_capture_failure(self, params):
@@ -1500,7 +1537,32 @@ class DesktopService:
             store.close()
 
     def close(self):
+        # 批次A：先停队列消费者（停止调度并退出自有子进程），再关工作线程池。
+        if hasattr(self, '_consumer_stop'):
+            self._consumer_stop.set()
+        if self._consumer_thread is not None:
+            self._consumer_thread.join(timeout=5)
         self.workers.shutdown(wait=False, cancel_futures=True)
+
+    def _app_store_factory(self):
+        """返回 () -> Store 工厂：每次调用开新连接，用完由调用方关闭。"""
+        def factory():
+            _, _, store = self._app()
+            return store
+        return factory
+
+    def publish_event(self, stream_id: str, account_id: str, event_type: str,
+                      payload: dict | None = None):
+        """C1：进度事件只是展示通道，业务状态另行落库；写入失败不影响业务结果。"""
+        try:
+            broker = getattr(self, '_event_broker', None)
+            if broker is None:
+                from .domain.store import Store
+                from .events import EventBroker
+                broker = self._event_broker = EventBroker(lambda: Store(self.runtime / 'app.db'))
+            return broker.publish(stream_id, account_id, event_type, payload or {})
+        except Exception:
+            return None
 
 
 # 重操作路由（M1-04）：这些方法在池内串行执行，不阻塞 stdin 读循环。
