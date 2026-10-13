@@ -1,0 +1,36 @@
+{
+  "mode": "source",
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\reaccept-beta1-20261008\\native-source",
+  "observations": {
+    "initial_text": "切换公众号\nICE Loop\n新建会话\n最近会话查看归档回收站\n草稿箱（保存 ≠ 采纳）\n从左侧选择会话，或新建一次讨论。\n知识检索\n导入文档\n制作任务\n含归档",
+    "has_new_conversation_button": true,
+    "chat_get_shape": {
+      "isArray": false,
+      "keys": [
+        "conversation",
+        "messages",
+        "candidates",
+        "current"
+      ],
+      "messages": true
+    },
+    "after_conversation_click": "切换公众号\nICE Loop\n新建会话\n最近会话查看归档回收站\n原生验收已有会话\n归档\n删除\n草稿箱（保存 ≠ 采纳）\n候选保存验收待审\n已存在的用户消息\n初稿候选\n候选保存验收\n已保存草稿\n# 候选保存验收\n\nDRAFT_NATIVE_MARKER\n保存为草稿\n提交审阅\n展开全文\n保存草稿 ≠ 采纳/发布\n模式\n讨论\n初稿\n改稿\n配图\n发送\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文\n归档\n删除",
+    "conversation_crashes": false,
+    "engine_version": "2.0.0-beta.1",
+    "step": "save_candidate",
+    "candidate_saves_actual_draft": false,
+    "sidebar_draft_body_visible": true,
+    "archived_conversation_visible": true,
+    "editor_text": "切换公众号\nICE Loop\n新建会话\n最近会话查看归档回收站\n原生验收已有会话\n归档\n删除\n草稿箱（保存 ≠ 采纳）\n候选保存验收待审\n统一文章编辑器\nhash d2882aa97fda\n正文已加载\n源模式\n导出草稿包\n导出发布就绪包\n保存新版本\n撤销\n重做\n标题2\n标题3\n粗体\n斜体\n行内代码\n代码块\n引用\n无序列表\n有序列表\n分隔线\n原生验收文章\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n写在最后\n\n这是本轮隔离测试夹具，不是发布文章。\n\n修改提案\n选段修改逐项采纳；人工改稿的段落不会被覆盖。\n暂无待处理的修改提案\n在对话中选择段落后让 Agent 提出修改，会出现在这里。\n工作流状态图\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文\n归档\n删除",
+    "editor_open": true,
+    "editor_initial": "原生验收文章\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n写在最后\n\n这是本轮隔离测试夹具，不是发布文章。",
+    "source_after_rich_edit": "# 原生验收文章\n\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n\n## 写在最后\n\n\n这是本轮隔离测试夹具，不是发布文章。 RICH_UNSAVED_MARKER",
+    "rich_edit_missing_from_source": false,
+    "rich_after_source_edit": "SOURCE_UNSAVED_MARKER\n\nSource mode edited.",
+    "source_edit_missing_from_rich": false,
+    "palette_visible": true,
+    "status": "completed"
+  },
+  "errors": [],
+  "scoped_ui_pass": false
+}

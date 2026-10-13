@@ -1,0 +1,25 @@
+{
+  "mode": "source",
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\reaccept-beta1-20261008\\native-source",
+  "observations": {
+    "initial_text": "切换公众号\nICE Loop\n新建会话\n最近会话查看归档回收站\n草稿箱（保存 ≠ 采纳）\n从左侧选择会话，或新建一次讨论。\n知识检索\n导入文档\n制作任务\n含归档",
+    "has_new_conversation_button": true,
+    "chat_get_shape": {
+      "isArray": false,
+      "keys": [
+        "conversation",
+        "messages",
+        "candidates",
+        "current"
+      ],
+      "messages": true
+    },
+    "after_conversation_click": "切换公众号\nICE Loop\n新建会话\n最近会话查看归档回收站\n原生验收已有会话\n归档\n删除\n草稿箱（保存 ≠ 采纳）\n暂无保存的草稿。初稿候选在对话中「保存为草稿」后出现在这里。\n已存在的用户消息\n初稿候选\n候选保存验收\n# 候选保存验收\n\nDRAFT_NATIVE_MARKER\n保存为草稿\n提交审阅\n展开全文\n保存草稿 ≠ 采纳/发布\n模式\n讨论\n初稿\n改稿\n配图\n发送\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文\n归档\n删除",
+    "conversation_crashes": false,
+    "engine_version": "2.0.0-beta.1",
+    "status": "error"
+  },
+  "errors": [
+    "Error: CDP timeout Runtime.evaluate\n    at Timeout._onTimeout (G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\docs\\复验-beta1-2026-10-08\\native-reaccept.cjs:22:67)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)"
+  ]
+}

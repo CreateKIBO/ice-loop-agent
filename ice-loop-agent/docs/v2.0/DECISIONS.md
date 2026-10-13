@@ -73,3 +73,33 @@
 - 决定：`build/build-release.ps1` 更新以包含 desktop/ui 构建产物（esbuild/Vite 构建进 asar）与新增 Python 依赖（PyInstaller spec 更新）；最终包不能只 repack-ui。electron-builder files 白名单显式加入 `ui/` 与 `main-services/`。
 - 理由：矩阵 M9-06；任务书 §八 明确。
 - 影响：M9 阶段构建脚本改动；期间保持现有 release 脚本可运行。
+
+## ADR-013 提案基线快照与重放语义（2026-10-07）
+
+- 决定：EditProposal 创建时把基线文档整体快照进提案行（base_document_json）；base_revision='current' 表示提案创建时刻的正文。采纳时以快照为 base、当前稿为 theirs，SequenceMatcher 按块指纹对齐重放：块未变→应用；被人工改过/删除→逐项记 conflict；不冲突项安全应用生成 partially_applied 新版本。
+- 理由：任务可能尚无人工 revision（workflow 产出的 integrated_md 不在 article_revisions），快照使重放不依赖文档重建；指纹对齐可解释且可测。
+- 影响：M3-05/06/07 实现；提案行体积增大（可接受，正文 ≤100KB）。
+
+## ADR-014 审批锁定锚点=配图交接 hash（2026-10-07）
+
+- 决定：正文级"审批基线"取 creative_asset_handoffs（chat 候选采用→配图交接）登记的 content_hash 作为锚点；articles.approval_status 只读比较当前正文 hash，不一致即 stale，不修改任何历史审批记录。工作流关卡（topic/outline 等）仅作摘要展示，不冒充正文审批。
+- 理由：v1.5.3 中真正锚定"正文某版本被批准"的数据是候选提交/交接链的 content_hash；approvals 表的关卡 hash 对应生成节点而非正文。不虚构新审批语义。
+- 影响：M3-09 实现；J09 导出预检复用同一 stale 判定。
+
+## ADR-015 前后端 Markdown AST 共享 fixture（2026-10-07）
+
+- 决定：tests/fixtures/editorial-sample.md 为 Python editorial 与前端 markdownBridge 的共同 fixture；两侧测试各自断言相同块类型序列与字节级 round-trip（前端不含文件尾换行）。
+- 理由：矩阵 M8-05 要求两 AST 一致 fixture；M3-02 往返保真。
+- 影响：remark-gfm 引入（表格→raw 块与 Python 对齐）；后续新块类型需两侧同步登记。
+
+## ADR-016 PDF 导入延后为按需插件（2026-10-07）
+
+- 决定：knowledge.parse_source 对 .pdf 明确拒绝并提示转换路径（MD/TXT/DOCX）；不引入 pdfminer/MarkItDown 依赖，等真实 PDF 需求出现时按 §4.1 选型流程最小验证后再加。
+- 理由：报告 §10.1 将 DOCX/可提取 PDF 定义为"增强"；当前无用户 PDF 样本，装了依赖也无法验收解析质量；诚实拒绝优于假装支持。
+- 影响：M4-01 验收含"失败不报成功"；后续接入时补 parser='pdf-v1' 与对应测试。
+
+## ADR-017 历史正文经 sync_article_source 进知识索引（2026-10-07）
+
+- 决定：文章/历史正文以 origin='article'、article_id='history:{history_id}' 进 knowledge 索引；重复选题检查等消费场景在查询前同步（hash 不变跳过）。
+- 理由：M4-02 要求 chunk 绑定 article/revision；M4-09 检索命中需要正文已索引。
+- 影响：检索结果可定位回历史记录；重复导入幂等由 source hash 保证。

@@ -41,7 +41,11 @@
 | @radix-ui/react-switch | 1.3.8 | MIT | 基础交互控件 |
 | @radix-ui/react-tabs | 1.1.22 | MIT | 基础交互控件 |
 | @radix-ui/react-tooltip | 1.3.0 | MIT | 基础交互控件 |
-| codemirror | 6.0.2 | MIT | Markdown 源模式（按需引入子包） |
+| codemirror | 6.0.2 | MIT | Markdown 源模式（@codemirror/view 6.43.13 / state 6.7.6 / commands 6.11.1 / lang-markdown 6.5.2 同步锁定，MIT） |
+| remark-parse | 11.0.0 | MIT | 前端 Markdown→编辑器 AST |
+| remark-gfm | 4.0.1 | MIT | 表格等 GFM 语法（转 raw 块与 Python 侧对齐） |
+| unified | 11.0.5 | MIT | remark 运行核 |
+| @types/mdast | 4.0.4 | MIT | mdast 类型 |
 | dompurify | 3.4.16 | Apache-2.0（双许可取 Apache，ADR-009） | 预览/粘贴清洗 |
 | @xyflow/react | 12.12.0 | MIT | 工作流图投影 |
 | ajv | 8.20.0 | MIT | 构建期 standalone 校验器代码生成 |

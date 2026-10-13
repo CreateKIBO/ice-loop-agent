@@ -1,0 +1,47 @@
+{
+  "files": [
+    {
+      "file": "assets/index-DHCIPeD2.js",
+      "bytes": 1151152,
+      "match": true,
+      "sha256": "ae00454e67388f51f83345bc111102b2129180bece179828fa413ef2459f9786"
+    },
+    {
+      "file": "assets/dist-BSLuc5SO.js",
+      "bytes": 95606,
+      "match": true,
+      "sha256": "f77bb6a9f621b7d86e742b4cc961adec5872d9d1df5d5a486616edb2e05b3e91"
+    },
+    {
+      "file": "assets/dist-D8n0fJis.js",
+      "bytes": 209511,
+      "match": true,
+      "sha256": "d8280ad3ffbe71073f46a5c2e560d8f1e20ff5fa19bf19b63bf933c886127107"
+    },
+    {
+      "file": "assets/dist-DQSMRg9F.js",
+      "bytes": 248352,
+      "match": true,
+      "sha256": "360cd4f38b5acc4d0c630e6a26ad5087d7a473c9815220f94edc495bdd14babd"
+    },
+    {
+      "file": "assets/dist-DuDOi2er.js",
+      "bytes": 54878,
+      "match": true,
+      "sha256": "1eb8f95a8f05ae6994c41bf74c3cedfc85ca9116badfb82edd951c3725ece820"
+    },
+    {
+      "file": "assets/index-X_Ij6dod.css",
+      "bytes": 17604,
+      "match": true,
+      "sha256": "5ffd4b5102ff6010ec25c4856f2bc806f5490cebb96f55e72a4cbd87253f3e97"
+    },
+    {
+      "file": "index.html",
+      "bytes": 622,
+      "match": true,
+      "sha256": "484068698fb5d1806c76fbead667339f03fef17d86990ed653e5fbbfefcfd05f"
+    }
+  ],
+  "all_match": true
+}

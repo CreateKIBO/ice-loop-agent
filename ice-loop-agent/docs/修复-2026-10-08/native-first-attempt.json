@@ -1,0 +1,29 @@
+{
+  "mode": "source",
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\small-fixes-20261008\\native",
+  "observations": {
+    "initial_text": "切换公众号\nICE Loop\n新建会话\n最近会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n从左侧选择会话，或新建一次讨论。\n知识检索\n导入文档\n制作任务\n含归档",
+    "has_new_conversation_button": true,
+    "chat_get_shape": {
+      "isArray": false,
+      "keys": [
+        "conversation",
+        "messages",
+        "candidates",
+        "current"
+      ],
+      "messages": true
+    },
+    "after_conversation_click": "切换公众号\nICE Loop\n新建会话\n最近会话\n原生验收已有会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n已存在的用户消息\n模式\n讨论\n初稿\n改稿\n配图\n发送\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文",
+    "conversation_crashes": false,
+    "editor_text": "切换公众号\nICE Loop\n新建会话\n最近会话\n原生验收已有会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n统一文章编辑器\nhash d2882aa97fda\n工作草稿已保存\n源模式\n保存新版本\n撤销\n重做\n标题2\n标题3\n粗体\n斜体\n行内代码\n代码块\n引用\n无序列表\n有序列表\n分隔线\n原生验收文章\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n写在最后\n\n这是本轮隔离测试夹具，不是发布文章。\n\n工作流状态图\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文",
+    "editor_open": true,
+    "editor_initial": "原生验收文章\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n写在最后\n\n这是本轮隔离测试夹具，不是发布文章。",
+    "source_after_rich_edit": "# 原生验收文章\n\n\nNATIVE_ORIGINAL_PARAGRAPH\n\n\n## 写在最后\n\n\n这是本轮隔离测试夹具，不是发布文章。 RICH_UNSAVED_MARKER",
+    "rich_edit_missing_from_source": false,
+    "status": "error"
+  },
+  "errors": [
+    "Error: SyntaxError: Invalid or unexpected token\n    at evaluate (G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\docs\\修复-2026-10-08\\native-fixes.cjs:32:31)\n    at async G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\docs\\修复-2026-10-08\\native-fixes.cjs:79:3"
+  ]
+}

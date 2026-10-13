@@ -59,7 +59,11 @@ class Workbench:
             if method=='tools.diagnostics':
                 report=self.status(store)
                 # Allowlist-only report: no settings, paths, task content, remote response bodies or keys.
-                report['counts']={table:store.conn.execute('SELECT COUNT(*) FROM '+table).fetchone()[0] for table in ('jobs','articles','model_invocations','asset_candidates')}
+                # SQL 一律字面量：计数语句逐表展开，不用表名拼接。
+                report['counts']={
+                    'articles':store.conn.execute('SELECT COUNT(*) FROM articles').fetchone()[0],
+                    'model_invocations':store.conn.execute('SELECT COUNT(*) FROM model_invocations').fetchone()[0],
+                    'asset_candidates':store.conn.execute('SELECT COUNT(*) FROM asset_candidates').fetchone()[0]}
                 report['counts']['jobs']=len(self.s.jobs_list({}))
                 target=ensure_dir(self.s.runtime/'diagnostics')/('diagnostics-'+new_id('report')+'.json')
                 atomic_write_text(target,json.dumps(report,ensure_ascii=False,indent=2))

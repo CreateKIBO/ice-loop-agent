@@ -1,0 +1,16 @@
+{
+  "tests": 56,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "successful": true,
+  "modules": [
+    "tests.test_review_small_fixes",
+    "tests.test_v2_export_trusted",
+    "tests.test_v2_batches23",
+    "tests.test_v2_queue_consumer",
+    "tests.test_v2_migrations",
+    "tests.test_model_budgets",
+    "tests.test_beta1_reaccept"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "mode": "source",
+  "runtime": "G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\.test-tmp\\review-20261008\\native",
+  "observations": {
+    "initial_text": "切换公众号\nICE Loop\n最近会话\n原生验收已有会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n从左侧选择会话，或新建一次讨论。\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文",
+    "has_new_conversation_button": false,
+    "chat_get_shape": {
+      "isArray": false,
+      "keys": [
+        "conversation",
+        "messages",
+        "candidates",
+        "current"
+      ],
+      "messages": true
+    },
+    "after_conversation_click": "界面遇到问题\n功能数据不受影响；可重试或返回旧版界面（菜单 → 返回旧版）。\nTypeError: n.some is not a function\n    at X2 (ice://app/ui/assets/index-DHCIPeD2.js:218:15692)\n    at rs (ice://app/ui/assets/index-DHCIPeD2.js:9:49234)\n    at Zc (ice://app/ui/assets/index-DHCIPeD2.js:9:72027)\n    at vl (ice://app/ui/assets/index-DHCIPeD2.js:9:82944)\n    at uf (ice://app/ui/assets/index-DHCIPeD2.js:9:128358)\n    at sf (ice://app/ui/assets/index-DHCIPeD2.js:9:127417)\n    at of (ice://app/ui/assets/index-DHCIPeD2.js:9:127252)\n    at qd (ice://app/ui/assets/index-DHCIPeD2.js:9:123948)\n    at Gf (ice://app/ui/assets/index-DHCIPeD2.js:9:136495)\n    at Bf (ice://app/ui/assets/index-DHCIPeD2.js:9:135049)\n重试渲染",
+    "conversation_crashes": true,
+    "editor_text": "切换公众号\nICE Loop\n最近会话\n原生验收已有会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n文章加载失败\nError invoking remote method 'ice:request': Error: 无效请求\n重试\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文",
+    "editor_open": false,
+    "status": "error"
+  },
+  "errors": [
+    "Error: Editor did not mount: 切换公众号\nICE Loop\n最近会话\n原生验收已有会话\n草稿箱\n草稿面板随 M2-07 接入（对象级 dirty 恢复）。\n文章加载失败\nError invoking remote method 'ice:request': Error: 无效请求\n重试\n知识检索\n导入文档\n制作任务\n含归档\n已完成\nPY-005\nfor 和 while：让电脑替你重复干活\n节点：export\n编辑正文\n    at G:\\05-兴趣项目\\gonzhonhao\\wechat_agent\\ice-loop-agent\\docs\\验收-2026-10-08\\native-review.cjs:71:46"
+  ]
+}
