@@ -1,0 +1,218 @@
+{
+  "date": "2026-10-08",
+  "verdict": "NOT_READY_FOR_V2_RELEASE",
+  "scope": "源码/当前发行包审查、离线隔离测试与Electron原生验收；不是产品修复",
+  "source_version": "1.5.3",
+  "tests": {
+    "python_v2": {
+      "executed": 123,
+      "passed": 123,
+      "failed": 0,
+      "log": ".test-tmp/review-20261008/python-v2-tests.log"
+    },
+    "python_legacy_safety": {
+      "executed": 28,
+      "passed": 28,
+      "failed": 0,
+      "log": ".test-tmp/review-20261008/python-safety-tests.log"
+    },
+    "python_executed_total": 151,
+    "node": {
+      "executed": 81,
+      "passed": 81,
+      "failed": 0,
+      "log": "node-tests.log"
+    },
+    "typecheck": {
+      "exit_code": 0,
+      "log": "typecheck.log"
+    },
+    "ui_build": {
+      "exit_code": 0,
+      "main_chunk_bytes_approx": 1151150,
+      "log": "ui-build.log"
+    },
+    "discovery": {
+      "listed": 460,
+      "unique_ids": 452,
+      "duplicates": 8,
+      "executed": false
+    }
+  },
+  "native": {
+    "new_ui_source": {
+      "conversation_crashes": true,
+      "editor_rpc_rejected": true,
+      "result": "native-source-result.json",
+      "passed": false
+    },
+    "new_ui_packaged": {
+      "conversation_crashes": true,
+      "editor_rpc_rejected": true,
+      "result": "native-packaged-result.json",
+      "passed": false
+    },
+    "legacy_chat": {
+      "true_checks": 85,
+      "false_checks": 0,
+      "log": "legacy-chat-packaged.log"
+    },
+    "legacy_prompt": {
+      "first_attempt": "WinError 5 while renaming publishing directory; cause not established",
+      "retry_true_checks": 49,
+      "retry_false_checks": 0,
+      "logs": [
+        "legacy-prompt-packaged.log",
+        "legacy-prompt-packaged-retry.log"
+      ]
+    }
+  },
+  "release": {
+    "javascript_audit_passed": true,
+    "python_payload_audit_passed": true,
+    "new_ui_dist_asar_files": 7,
+    "new_ui_dist_asar_all_match": true,
+    "setup_sha256": "7db80b1770afb74621bc9e6bd0f3b3bb145c420543e4342c04d7974a38e3ef9b",
+    "zip_sha256": "1285df16375334a26418193e29fd80a7443bce0b17f1fc334a3dfbc49ad2e32f",
+    "asar_sha256": "b6a00895f63047dc89689014802a4f7cdce69a2b7c6d235f6e1bfd385b8c9708",
+    "new_packages_built_in_this_review": false
+  },
+  "rpc": {
+    "application_methods": 45,
+    "missing_from_main_allowlist": 45,
+    "ui_used_missing_methods": 13
+  },
+  "findings": [
+    {
+      "id": "R01",
+      "priority": "P0",
+      "evidence": "隔离后端复现",
+      "title": "导出finally清理预先存在的目录",
+      "status": "open"
+    },
+    {
+      "id": "R02",
+      "priority": "P0",
+      "evidence": "静态清单+源码/EXE复现",
+      "title": "45个新RPC缺主进程注册",
+      "status": "open"
+    },
+    {
+      "id": "R03",
+      "priority": "P0",
+      "evidence": "源码/EXE复现",
+      "title": "已有会话对象被当数组导致崩溃",
+      "status": "open"
+    },
+    {
+      "id": "R04",
+      "priority": "P1",
+      "evidence": "静态确认；原生被R02阻断",
+      "title": "两模式正文不同步与输入恢复风险",
+      "status": "open"
+    },
+    {
+      "id": "R05",
+      "priority": "P1",
+      "evidence": "隔离后端复现",
+      "title": "已选配图漏导出/占位未重写/扩展不符",
+      "status": "open"
+    },
+    {
+      "id": "R06",
+      "priority": "P1",
+      "evidence": "隔离真实RPC复现",
+      "title": "ready未核验事实或审批",
+      "status": "open"
+    },
+    {
+      "id": "R07",
+      "priority": "P1",
+      "evidence": "隔离数据库复现",
+      "title": "队列幂等跨账号和异输入错误复用",
+      "status": "open"
+    },
+    {
+      "id": "R08",
+      "priority": "P1",
+      "evidence": "无凭据/阻断网络RPC复现",
+      "title": "能力探测相对导入错误",
+      "status": "open"
+    },
+    {
+      "id": "R09",
+      "priority": "P1",
+      "evidence": "静态循环接线+空稿RPC复现",
+      "title": "工具结果未反馈模型/空稿提案受阻",
+      "status": "open"
+    },
+    {
+      "id": "R10",
+      "priority": "P1",
+      "evidence": "全模块静态消费搜索",
+      "title": "队列事件批量计划截图绑定未闭环",
+      "status": "open"
+    },
+    {
+      "id": "R11",
+      "priority": "P1",
+      "evidence": "前后端静态接线",
+      "title": "引用ContextPack摘要未进入实际chat",
+      "status": "open"
+    },
+    {
+      "id": "R12",
+      "priority": "P1",
+      "evidence": "原生空态+静态",
+      "title": "新建/草稿保存/审阅和导航入口缺失",
+      "status": "open"
+    },
+    {
+      "id": "R13",
+      "priority": "P1",
+      "evidence": "静态；未越界写盘",
+      "title": "新导出缺路径安全策略",
+      "status": "open"
+    },
+    {
+      "id": "R14",
+      "priority": "P1",
+      "evidence": "源码与发行核对",
+      "title": "v2内容仍用1.5.3同名包与开关不清",
+      "status": "open"
+    },
+    {
+      "id": "R15",
+      "priority": "P2",
+      "evidence": "内存SQLite复现",
+      "title": "迁移checksum/历史漂移/dry-run边界",
+      "status": "open"
+    },
+    {
+      "id": "R16",
+      "priority": "P2",
+      "evidence": "测试收集+原生反证",
+      "title": "阶段完成与测试统计口径需收紧",
+      "status": "open"
+    }
+  ],
+  "untested": [
+    "真实云模型和付费质量评测",
+    "TapNow真实付费生图",
+    "公众号发布",
+    "NSIS实际覆盖安装",
+    "完整452个不同Python测试重跑",
+    "200轮会话/完整多账号旅程",
+    "修复RPC后的双模式原生编辑"
+  ],
+  "safety": {
+    "actual_user_workspace_modified": false,
+    "product_source_modified": false,
+    "paid_model_calls": false,
+    "user_files_deleted": false,
+    "controlled_fixture_sentinel_deleted_to_reproduce_bug": true,
+    "network_disabled_in_backend_repro": true,
+    "review_test_processes_exited": true,
+    "fixture_evidence_retained": true
+  }
+}

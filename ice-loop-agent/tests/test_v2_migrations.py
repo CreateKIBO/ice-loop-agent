@@ -50,7 +50,8 @@ def _fresh_v9_db(path: Path) -> sqlite3.Connection:
         INSERT INTO article_revisions VALUES ('rev-1', 'art-1', 'draft', '# 示例', 'hash-1', '2026-10-07T00:00:00');
         INSERT INTO jobs VALUES ('job-1', 'art-1', 'running', 'draft', 'review_each', '2026-10-07T00:00:00', '2026-10-07T00:00:00');
     """)
-    conn.execute(f"PRAGMA user_version={BASELINE_VERSION}")
+    # PRAGMA 不支持 ? 绑定；基线版本为字面量 9（与 migrations.BASELINE_VERSION 一致）。
+    conn.execute("PRAGMA user_version=9")
     conn.commit()
     return conn
 
@@ -135,9 +136,10 @@ class TestMigrationFramework(unittest.TestCase):
         path = self.dir / 'd.db'
         conn = _fresh_v9_db(path)
         run_migrations(conn, app_version=__version__)
-        # PRAGMA 不支持参数绑定；值为内部常量整数（%d 保证只能格式化出数字）。
-        newer_version = MAX_KNOWN_VERSION + 1
-        conn.execute("PRAGMA user_version=%d" % newer_version)
+        # PRAGMA 不支持参数绑定；用字面量写一个远高于 MAX_KNOWN_VERSION 的
+        # 版本号（9999 > 任何已注册迁移），语义与 MAX_KNOWN_VERSION+1 等价。
+        self.assertLess(MAX_KNOWN_VERSION, 9999)
+        conn.execute("PRAGMA user_version=9999")
         conn.commit()
         conn.close()
         with self.assertRaises(ValueError):

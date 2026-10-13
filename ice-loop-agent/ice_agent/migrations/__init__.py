@@ -67,6 +67,34 @@ def pending_migrations(current: int) -> list[Migration]:
     return [m for m in sorted(MIGRATIONS, key=lambda m: m.version) if m.version > current]
 
 
+# PRAGMA 语句不支持 ? 参数绑定（SQLite 语法限制），项目规则又要求 SQL 一律
+# 字面量，因此按版本号手写字面量语句映射：每个版本一条 conn.execute("字面量")，
+# 框架层按版本调度。新增迁移时必须同步补一行，缺失会在运行期显式报错。
+# 注意：不能把这些语句写进各迁移的 apply 函数体——checksum 覆盖函数字节码，
+# 改函数体会使存量库的 v18+ checksum 审计拒绝打开。
+_PRAGMA_APPLY: dict[int, Callable[[sqlite3.Connection], None]] = {
+    10: lambda conn: conn.execute("PRAGMA user_version=10"),
+    11: lambda conn: conn.execute("PRAGMA user_version=11"),
+    12: lambda conn: conn.execute("PRAGMA user_version=12"),
+    13: lambda conn: conn.execute("PRAGMA user_version=13"),
+    14: lambda conn: conn.execute("PRAGMA user_version=14"),
+    15: lambda conn: conn.execute("PRAGMA user_version=15"),
+    16: lambda conn: conn.execute("PRAGMA user_version=16"),
+    17: lambda conn: conn.execute("PRAGMA user_version=17"),
+    18: lambda conn: conn.execute("PRAGMA user_version=18"),
+    19: lambda conn: conn.execute("PRAGMA user_version=19"),
+}
+
+
+def _write_user_version(conn: sqlite3.Connection, version: int) -> None:
+    apply_pragma = _PRAGMA_APPLY.get(version)
+    if apply_pragma is None:
+        raise ValueError(
+            f"user_version={version} 缺少字面量 PRAGMA 语句；"
+            "新增迁移时请同步更新 _PRAGMA_APPLY 映射")
+    apply_pragma(conn)
+
+
 def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
                    app_version: str = "", stop_after: int | None = None) -> dict:
     """Apply pending migrations in one transaction per migration.
@@ -131,7 +159,7 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
                 "INSERT INTO schema_migrations(version, description, checksum, applied_at, app_version)"
                 " VALUES (?,?,?,?,?)",
                 (item.version, item.description, item.checksum, now_iso(), app_version))
-            conn.execute("PRAGMA user_version=%d" % item.version)
+            _write_user_version(conn, item.version)
             if dry_run:
                 conn.execute("ROLLBACK")
                 rolled_back.append(item.version)
@@ -147,7 +175,9 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
             raise
     effective = max([before, *recorded]) if recorded else before
     if effective != conn.execute("PRAGMA user_version").fetchone()[0] and not dry_run:
-        conn.execute("PRAGMA user_version=%d" % effective)
+        # 修复路径：recorded 非空时 effective 必为注册表版本（10-19），
+        # 有对应字面量语句；recorded 为空时 effective==before 不会进入本分支。
+        _write_user_version(conn, effective)
         conn.commit()
     if dry_run and not tracking_existed:
         # dry-run 不留任何痕迹：本调用新建的跟踪表一并移除。

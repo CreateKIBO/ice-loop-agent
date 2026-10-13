@@ -1,0 +1,53 @@
+{
+  "scope": "local isolated reproduction, no paid cloud requests",
+  "observations": {
+    "export_real_selected_asset": {
+      "jobs_get_valid": true,
+      "jobs_get_has_candidate_field": false,
+      "export_images": 0,
+      "missing_images": [
+        1
+      ],
+      "selected_image_omitted": true
+    },
+    "export_path_and_mime": {
+      "copied_images": 1,
+      "body_placeholder_preserved": true,
+      "body_refs_exported_image": false,
+      "file_extension": ".png",
+      "real_image_format": "JPEG"
+    },
+    "ready_export_missing_review_gate": {
+      "accepted_mode": "ready",
+      "unverified_claims": 1,
+      "accepted_unverified_ready": true
+    },
+    "capability_probe": {
+      "raised": true,
+      "type": "ModuleNotFoundError",
+      "message": "No module named 'ice_agent.application.llm'"
+    },
+    "export_cleanup_ownership": {
+      "exception": "FileExistsError",
+      "preexisting_dir_survives": false,
+      "sentinel_survives": false,
+      "unowned_fixture_deleted": true
+    },
+    "queue_idempotency_account_scope": {
+      "first_account": "account-a",
+      "second_returned_account": "account-a",
+      "same_task_id": true,
+      "wrong_account_returned": true
+    },
+    "queue_idempotency_changed_input": {
+      "changed_input_silently_reused": true,
+      "returned_payload": {
+        "episode": 1
+      }
+    },
+    "initial_draft_patch": {
+      "type": "ValueError",
+      "message": "正文还没有可作基线的内容"
+    }
+  }
+}

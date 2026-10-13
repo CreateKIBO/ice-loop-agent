@@ -1,0 +1,280 @@
+{
+  "application_methods": 45,
+  "main_allowlist_methods": 104,
+  "missing_methods_count": 45,
+  "missing_methods": {
+    "agent.answer_question": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.brief_get": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.capabilities": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.questions": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.run_turn": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.runs_list": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "agent.tool_calls_list": {
+      "file": "ice_agent/application/agent.py",
+      "line": 16
+    },
+    "articles.approval_status": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.document": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.editor_draft_clear": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.editor_draft_get": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.editor_draft_save": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.export_bundle": {
+      "file": "ice_agent/application/ops_export.py",
+      "line": 15
+    },
+    "articles.proposal_decide": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.proposals_list": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "articles.propose_patch": {
+      "file": "ice_agent/application/articles.py",
+      "line": 23
+    },
+    "chat.summary": {
+      "file": "ice_agent/application/workflow_review.py",
+      "line": 14
+    },
+    "downloads.bind": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "downloads.list": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "downloads.stage": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "events.latest": {
+      "file": "ice_agent/application/__init__.py",
+      "line": 43
+    },
+    "events.poll": {
+      "file": "ice_agent/application/__init__.py",
+      "line": 43
+    },
+    "knowledge.chunk": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.context_pack": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.duplicate_topics": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.import": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.reindex": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.search": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.source_delete": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "knowledge.sources": {
+      "file": "ice_agent/application/knowledge.py",
+      "line": 13
+    },
+    "models.probe_capabilities": {
+      "file": "ice_agent/application/ops_export.py",
+      "line": 15
+    },
+    "promptv.lint": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "promptv.revisions": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "promptv.save": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "review.center": {
+      "file": "ice_agent/application/workflow_review.py",
+      "line": 14
+    },
+    "slots.bind_run": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "slots.run_binding": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "stylepack.get": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "stylepack.save": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "tools.capacity": {
+      "file": "ice_agent/application/ops_export.py",
+      "line": 15
+    },
+    "tools.health": {
+      "file": "ice_agent/application/ops_export.py",
+      "line": 15
+    },
+    "tools.staging_report": {
+      "file": "ice_agent/application/ops_export.py",
+      "line": 15
+    },
+    "workflow.batch_plan": {
+      "file": "ice_agent/application/workflow_review.py",
+      "line": 14
+    },
+    "workflow.graph": {
+      "file": "ice_agent/application/assets_graph.py",
+      "line": 13
+    },
+    "workflow.invalidation": {
+      "file": "ice_agent/application/workflow_review.py",
+      "line": 14
+    }
+  },
+  "frontend_calls": {
+    "events.poll": [
+      {
+        "file": "desktop/ui/src/data/client.ts",
+        "line": 260,
+        "blocked": true
+      }
+    ],
+    "agent.runs_list": [
+      {
+        "file": "desktop/ui/src/features/chat/AgentActionCards.tsx",
+        "line": 41,
+        "blocked": true
+      }
+    ],
+    "agent.tool_calls_list": [
+      {
+        "file": "desktop/ui/src/features/chat/AgentActionCards.tsx",
+        "line": 47,
+        "blocked": true
+      }
+    ],
+    "articles.proposals_list": [
+      {
+        "file": "desktop/ui/src/features/editor/PatchReview.tsx",
+        "line": 30,
+        "blocked": true
+      }
+    ],
+    "articles.proposal_decide": [
+      {
+        "file": "desktop/ui/src/features/editor/PatchReview.tsx",
+        "line": 50,
+        "blocked": true
+      }
+    ],
+    "articles.document": [
+      {
+        "file": "desktop/ui/src/features/editor/ArticleEditor.tsx",
+        "line": 48,
+        "blocked": true
+      }
+    ],
+    "articles.approval_status": [
+      {
+        "file": "desktop/ui/src/features/editor/ArticleEditor.tsx",
+        "line": 49,
+        "blocked": true
+      }
+    ],
+    "articles.editor_draft_get": [
+      {
+        "file": "desktop/ui/src/features/editor/ArticleEditor.tsx",
+        "line": 50,
+        "blocked": true
+      }
+    ],
+    "articles.editor_draft_save": [
+      {
+        "file": "desktop/ui/src/features/editor/ArticleEditor.tsx",
+        "line": 72,
+        "blocked": true
+      }
+    ],
+    "articles.editor_draft_clear": [
+      {
+        "file": "desktop/ui/src/features/editor/ArticleEditor.tsx",
+        "line": 180,
+        "blocked": true
+      }
+    ],
+    "knowledge.search": [
+      {
+        "file": "desktop/ui/src/features/knowledge/KnowledgePanel.tsx",
+        "line": 45,
+        "blocked": true
+      }
+    ],
+    "knowledge.import": [
+      {
+        "file": "desktop/ui/src/features/knowledge/KnowledgePanel.tsx",
+        "line": 59,
+        "blocked": true
+      }
+    ],
+    "workflow.graph": [
+      {
+        "file": "desktop/ui/src/features/workflow/WorkflowGraph.tsx",
+        "line": 45,
+        "blocked": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "different_sql_same_checksum": true,
+  "changed_migration_silently_accepted": true,
+  "second_table_absent": true,
+  "dry_run_added_tracking_table": true
+}

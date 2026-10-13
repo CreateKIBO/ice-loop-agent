@@ -214,20 +214,36 @@ def migrate_database(file, mappings, runtime):
     with closing(sqlite3.connect(file)) as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise ValueError('备份数据库已损坏')
-        for table, pk, column in [('articles','article_id','spec_json'),
-                ('asset_slots','slot_id','slot_json'), ('publication_resources','resource_id','metadata_json')]:
-            for identifier, text in db.execute(f'SELECT {pk}, {column} FROM {table}').fetchall():
-                data = relocate(json.loads(text), mappings)
-                db.execute(f'UPDATE {table} SET {column}=? WHERE {pk}=?', (json.dumps(data, ensure_ascii=False), identifier))
+        # SQL 一律字面量（项目规则）：逐表展开迁移语句，值走 ? 绑定。
+        for identifier, text in db.execute(
+                'SELECT article_id, spec_json FROM articles').fetchall():
+            data = relocate(json.loads(text), mappings)
+            db.execute('UPDATE articles SET spec_json=? WHERE article_id=?',
+                       (json.dumps(data, ensure_ascii=False), identifier))
+        for identifier, text in db.execute(
+                'SELECT slot_id, slot_json FROM asset_slots').fetchall():
+            data = relocate(json.loads(text), mappings)
+            db.execute('UPDATE asset_slots SET slot_json=? WHERE slot_id=?',
+                       (json.dumps(data, ensure_ascii=False), identifier))
+        for identifier, text in db.execute(
+                'SELECT resource_id, metadata_json FROM publication_resources').fetchall():
+            data = relocate(json.loads(text), mappings)
+            db.execute('UPDATE publication_resources SET metadata_json=? WHERE resource_id=?',
+                       (json.dumps(data, ensure_ascii=False), identifier))
         for job_id, text, expected in db.execute('SELECT * FROM checkpoints').fetchall():
             if sha256_text(text) != expected:
                 raise ValueError('备份任务检查点校验失败')
             data = relocate(json.loads(text), mappings)
             text = json.dumps(data, ensure_ascii=False)
             db.execute('UPDATE checkpoints SET state_json=?,content_hash=? WHERE job_id=?', (text,sha256_text(text),job_id))
-        for table, pk, column in [('artifacts','artifact_id','path'), ('asset_candidates','candidate_id','file_path')]:
-            for identifier, value in db.execute(f'SELECT {pk},{column} FROM {table}').fetchall():
-                db.execute(f'UPDATE {table} SET {column}=? WHERE {pk}=?', (relocate(value, mappings, 'path'),identifier))
+        for identifier, value in db.execute(
+                'SELECT artifact_id, path FROM artifacts').fetchall():
+            db.execute('UPDATE artifacts SET path=? WHERE artifact_id=?',
+                       (relocate(value, mappings, 'path'), identifier))
+        for identifier, value in db.execute(
+                'SELECT candidate_id, file_path FROM asset_candidates').fetchall():
+            db.execute('UPDATE asset_candidates SET file_path=? WHERE candidate_id=?',
+                       (relocate(value, mappings, 'path'), identifier))
         # Old checkpoints remain paused; operation states and paid request ledger are preserved.
         db.execute("UPDATE jobs SET lease=NULL,state='paused',pause_reason='从备份恢复，请检查后继续' WHERE state='running' OR lease IS NOT NULL")
         db.commit()
