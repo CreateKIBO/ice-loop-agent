@@ -5,7 +5,7 @@ export function createDirtyFlusher(isDirty: (key: string) => boolean) {
   return {
     registerDirtyFlush(key: string, flush: () => Promise<void> | void) {
       handlers.set(key, flush);
-      return () => { if (handlers.get(key) === flush) handlers.delete(key); };
+      return () => { if (handlers.get(key) === flush) { handlers.delete(key); failures.delete(key); } };
     },
     async flushAllDirty(): Promise<string[]> {
       const failed: string[] = [];
@@ -14,11 +14,13 @@ export function createDirtyFlusher(isDirty: (key: string) => boolean) {
         try { await flush(); failures.delete(key); }
         catch (error) {
           failed.push(key);
-          failures.set(key, error instanceof Error ? error.message : String(error));
+          const shaped=error as {message?:unknown}|null;
+          failures.set(key,(typeof shaped?.message==='string'?shaped.message:String(error)).slice(0,2000));
         }
       }
       if (failed.length) {
-        throw new Error("工作草稿保存失败，已取消切换以保留编辑内容。请重试：" + failed.join("、"));
+        const reasons=[...new Set(failed.map(key=>failures.get(key)).filter(Boolean))].slice(0,3).map(reason=>reason!.slice(0,500));
+        throw new Error("已取消切换，当前编辑内容已保留。" + reasons.join("；"));
       }
       return [];
     },

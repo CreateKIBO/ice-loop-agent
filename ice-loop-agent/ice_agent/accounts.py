@@ -91,7 +91,10 @@ def normalize_account(data: dict, runtime: Path, *, account_id: str | None = Non
             if not Path(value).is_absolute():
                 raise ValueError("目录请填写绝对路径")
             path = normalize(value)
-            assert_not_c_drive(path)
+            if key == 'article_root':
+                assert_not_c_drive(path)
+            elif path.parent == path:
+                raise ValueError('历史资料请选择文章所在文件夹，不要选择整个磁盘')
             value = str(path)
         result[key] = value
     return result

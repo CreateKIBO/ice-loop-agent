@@ -1,5 +1,10 @@
 'use strict';
 let backupReview = null;
+let restoredBackup = null;
+function showRestoredBackup(result,target){
+  restoredBackup=result;
+  target.innerHTML=`<div class="note-box"><strong>${result.restart_required?'恢复完成，重新打开程序后使用':'资料已恢复，工作目录尚未切换'}</strong><p>${esc(result.runtime_root)}</p><p>${esc(result.selection_error||'请先保存当前工作，再重新打开程序。模型凭据需要重新配置，制作队列等待逐项确认。')}</p>${result.activation_token?'<button class="button primary" data-maintenance="activate-restored">重试切换目录</button>':''}</div>`;
+}
 const revisionKinds = {draft:'AI 初稿',integrated:'回填运行证据',final:'已确认标题',manual:'手动编辑',before_edit:'编辑前快照',restore:'恢复版本'};
 async function loadRevisions(data) {
   const jobId = data.job.job_id;
@@ -44,7 +49,11 @@ document.addEventListener('click',async event=>{
       } else if(action==='restore'){
         if(!backupReview)throw Error('请先预览备份');
         const result=await window.ice.restoreBackup(backupReview.token);const target=document.querySelector('#backup-result');
-        if(result&&target){backupReview=null;target.innerHTML=`<div class="note-box"><strong>恢复完成，重新打开程序后使用</strong><p>${esc(result.runtime_root)}</p><p>请先保存当前未完成的工作，再关闭并重新打开桌面程序。恢复的正文、历史与配图已校验，模型凭据需要重新配置。</p></div>`;}
+        if(result&&target){backupReview=null;showRestoredBackup(result,target);}
+      } else if(action==='activate-restored'){
+        if(!restoredBackup?.activation_token)throw Error('请先恢复备份');
+        const result=await window.ice.activateRestoredBackup(restoredBackup.activation_token);
+        const target=document.querySelector('#backup-result');if(target)showRestoredBackup(result,target);
       }
     }
   }catch(error){toast(error.message);}finally{if(button.isConnected)button.disabled=false;}

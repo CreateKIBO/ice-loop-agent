@@ -10,8 +10,10 @@ from PIL import Image, ImageOps
 from .domain.types import new_id, now_iso, sha256_json
 from .paths import assert_within, ensure_dir, normalize
 from .providers.tapnow import validate_image_file
+from .image_memory import IMAGE_DECODE_GATE, serialized_image_decode, thumbnail_data_url
 
 
+@serialized_image_decode
 def extract_palette(image):
     sample = ImageOps.exif_transpose(image).convert("RGBA")
     sample.thumbnail((160, 160))
@@ -80,9 +82,10 @@ class WorkspaceAssets:
         extension = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}[mime]
         folder = ensure_dir(self.runtime / "resources" / self.account_id)
         target = folder / (digest + extension)
-        with Image.open(io.BytesIO(content)) as image:
-            palette = extract_palette(image)
-            width, height = image.size
+        with IMAGE_DECODE_GATE:
+            with Image.open(io.BytesIO(content)) as image:
+                palette = extract_palette(image)
+                width, height = image.size
         target.write_bytes(content)
         resource = {"resource_id": new_id("resource"), "title": source.stem[:100], "file_path": str(target),
                     "sha256": digest, "mime": mime, "size": size, "width": width, "height": height,
@@ -110,12 +113,7 @@ class WorkspaceAssets:
         if original:
             return {'data_url':'data:'+resource['mime']+';base64,'+base64.b64encode(path.read_bytes()).decode(),
                     'width':resource['width'],'height':resource['height']}
-        with Image.open(path) as source:
-            image = ImageOps.exif_transpose(source).convert("RGBA")
-            image.thumbnail((1000, 700))
-            output = io.BytesIO()
-            image.save(output, format="PNG")
-        return {"data_url": "data:image/png;base64," + base64.b64encode(output.getvalue()).decode()}
+        return {"data_url": thumbnail_data_url(path)}
 
     def checked_path(self, resource):
         path = normalize(resource["file_path"])

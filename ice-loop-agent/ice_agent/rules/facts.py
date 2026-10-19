@@ -12,6 +12,28 @@ from datetime import datetime
 from .markdown_ast import ArticleAST
 from .structural import RuleReport
 
+
+def evidenced_claims(store, article_id: str) -> list[dict]:
+    """Load the same persisted evidence for workflow checks and delivery checks."""
+    claims=store.article_claims(article_id)
+    for claim in claims:
+        refs=[store.get_source(source_id) for source_id in claim.get('source_ids',[])]
+        claim['evidence_verified']=bool(refs) and all(ref and ref.get('article_id')==article_id
+            and ref.get('content_hash') and ref.get('summary') for ref in refs)
+    return claims
+
+
+def claim_verified(claim: dict) -> bool:
+    if not (claim.get('status')=='verified' and claim.get('source_ids') and claim.get('verified_at')
+            and claim.get('evidence_verified') and claim.get('review_notes')):
+        return False
+    if claim.get('publish_day_check_required'):
+        try:
+            return datetime.fromisoformat(claim['verified_at']).astimezone().date()==datetime.now().astimezone().date()
+        except (ValueError,TypeError):
+            return False
+    return True
+
 _HIGH_RISK_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
     ("version", "版本号", re.compile(r"[vV]?\d+\.\d+(?:\.\d+)?")),
     ("price", "价格", re.compile(r"[¥$]\s*\d+|(\d+)\s*元|/月|\d+\s*美元")),
@@ -46,17 +68,7 @@ def check_facts(ast: ArticleAST, claims: list[dict],
     """
     rpt = RuleReport()
     hits = scan_high_risk(ast)
-    def verified(claim):
-        if not (claim.get("status") == "verified" and claim.get("source_ids")
-                and claim.get("verified_at") and claim.get("evidence_verified")
-                and claim.get("review_notes")):
-            return False
-        if claim.get("publish_day_check_required"):
-            try:
-                return datetime.fromisoformat(claim["verified_at"]).astimezone().date() == datetime.now().astimezone().date()
-            except (ValueError, TypeError):
-                return False
-        return True
+    verified=claim_verified
 
     needs_day_check = False
     for h in hits:

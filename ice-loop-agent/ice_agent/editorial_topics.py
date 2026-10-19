@@ -141,23 +141,51 @@ class EditorialTopics:
         rows=self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? ORDER BY series,episode',(self.account['id'],)).fetchall()
         return [{**dict(row),'content_hash':sha256_json(dict(row))} for row in rows]
 
-    def base_hash(self) -> str:return sha256_json({'columns':self.account['columns'],'rows':self.list()})
+    def base_hash(self) -> str:
+        # Same canonical JSON bytes as the original list-based fingerprint,
+        # without retaining every topic's long notes just to hash them.
+        import json
+        hasher=hashlib.sha256()
+        hasher.update(('{"columns": '+json.dumps(self.account['columns'],ensure_ascii=False,sort_keys=True)+', "rows": [').encode('utf-8'))
+        separator=''
+        for row in self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? ORDER BY series,episode',(self.account['id'],)):
+            value={**dict(row),'content_hash':sha256_json(dict(row))}
+            hasher.update((separator+json.dumps(value,ensure_ascii=False,sort_keys=True)).encode('utf-8'))
+            separator=', '
+        hasher.update(b']}')
+        return hasher.hexdigest()
 
     def get(self, topic_id: str) -> dict:
-        row=next((row for row in self.list() if row['topic_id']==topic_id),None)
+        row=self.store.conn.execute('SELECT * FROM editorial_topics WHERE topic_id=? AND account_id=?', (topic_id,self.account['id'])).fetchone()
         if not row:raise ValueError('选题不存在或不属于当前公众号')
-        return row
+        return {**dict(row),'content_hash':sha256_json(dict(row))}
+
+    def page(self, params):
+        from .paging import page_request, page_bounds
+        size,page,series,query=page_request(params,{c['code'] for c in self.account['columns']})
+        args=(self.account['id'],series,series,query,query)
+        with self.store.transaction():
+            total=self.store.conn.execute("SELECT COUNT(*) FROM editorial_topics WHERE account_id=? AND (?='' OR series=?) AND (?='' OR instr(lower(title)||' '||CAST(episode AS TEXT),lower(?))>0)",args).fetchone()[0]
+            page,pages=page_bounds(total,page,size)
+            rows=self.store.conn.execute("SELECT * FROM editorial_topics WHERE account_id=? AND (?='' OR series=?) AND (?='' OR instr(lower(title)||' '||CAST(episode AS TEXT),lower(?))>0) ORDER BY series,episode,topic_id LIMIT ? OFFSET ?",(*args,size,page*size)).fetchall()
+        return {'rows':[{**dict(row),'content_hash':sha256_json(dict(row))} for row in rows],
+                'total':total,'page':page,'pages':pages,'page_size':size,'example':example(self.account)}
 
     def preview(self, params: dict) -> dict:
         text=params.get('text','');name=params.get('source_name','手动粘贴')
         if not isinstance(name,str) or not name.strip() or len(name)>200:raise ValueError('来源名称需为1–200字')
         parsed=parse_text(text,self.account);base=self.base_hash()
-        old={(row['series'],row['episode']):row for row in self.list()}
-        rows=[{**row,'existing':old.get((row['series'],row['episode']))} for row in parsed['rows']]
+        rows=[]
+        for row in parsed['rows']:
+            prior=self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? AND series=? AND episode=?',
+                                          (self.account['id'],row['series'],row['episode'])).fetchone()
+            existing={**dict(prior),'content_hash':sha256_json(dict(prior))} if prior else None
+            rows.append({**row,'existing':existing})
         return {**parsed,'rows':rows,'base_hash':base,'source_name':name,
                 'preview_hash':sha256_json({'account':self.account['id'],'base':base,'name':name,'text':text})}
 
     def save(self, params: dict) -> dict:
+        if type(params.get('return_rows', True)) is not bool:raise ValueError('返回清单选项应为布尔值')
         preview=self.preview(params)
         if preview['preview_hash']!=params.get('preview_hash') or preview['base_hash']!=params.get('base_hash'):
             raise ValueError('文档、栏目或已存选题变化，请重新解析预览')
@@ -167,16 +195,16 @@ class EditorialTopics:
         if len({(row['series'],row['episode']) for row in rows})!=len(rows):raise ValueError('同一栏目同一期号重复')
         with self.store.transaction():
             if self.base_hash()!=preview['base_hash']:raise ValueError('选题已变化，请重新预览')
-            old={(row['series'],row['episode']):row for row in self.list()}
             for row in rows:
-                existing=old.get((row['series'],row['episode']))
+                existing=self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? AND series=? AND episode=?',
+                                                 (self.account['id'],row['series'],row['episode'])).fetchone()
                 if existing and any(existing[key]!=row[key] for key in FIELDS) and params.get('replace_existing') is not True:
                     raise ValueError(f'{row["series"]}/{row["episode"]}已有题目，请确认覆盖已有期的选题')
                 self.store.conn.execute('INSERT INTO editorial_topics VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(account_id,series,episode) DO UPDATE SET title=excluded.title,content_angle=excluded.content_angle,core_benefit=excluded.core_benefit,next_episode_plan=excluded.next_episode_plan,source_name=excluded.source_name,updated_at=excluded.updated_at',
                     (existing['topic_id'] if existing else new_id('editorial'),self.account['id'],row['series'],row['episode'],row['title'],row['content_angle'],row['core_benefit'],row['next_episode_plan'],preview['source_name'],now_iso()))
             self.store.conn.execute('INSERT INTO editorial_topic_imports VALUES (?,?,?,?,?,?)',
                 (new_id('import'),self.account['id'],preview['source_name'],params['text'],sha256_text(params['text']),now_iso()))
-        return {'saved':len(rows),'rows':self.list()}
+        return {'saved':len(rows),'rows':self.list() if params.get('return_rows',True) else []}
 
     def update(self, params: dict) -> dict:
         with self.store.transaction():
@@ -186,19 +214,27 @@ class EditorialTopics:
                 self.store.conn.execute('DELETE FROM editorial_topics WHERE topic_id=? AND account_id=?',(old['topic_id'],self.account['id']))
             else:
                 row=validate(params,self.account)
-                if any(other['topic_id']!=old['topic_id'] and (other['series'],other['episode'])==(row['series'],row['episode']) for other in self.list()):
+                if self.store.conn.execute('SELECT 1 FROM editorial_topics WHERE account_id=? AND series=? AND episode=? AND topic_id!=?',
+                                           (self.account['id'],row['series'],row['episode'],old['topic_id'])).fetchone():
                     raise ValueError('该栏目期号已有选题，请修改期号')
                 self.store.conn.execute('UPDATE editorial_topics SET series=?,episode=?,title=?,content_angle=?,core_benefit=?,next_episode_plan=?,updated_at=? WHERE topic_id=?',
                     (*(row[key] for key in FIELDS),now_iso(),old['topic_id']))
         return {'ok':True}
 
-    def match(self, series: str, episode: int) -> dict:
+    def match(self, series: str, episode: int, *, include_available: bool = True) -> dict:
         if series not in {col['code'] for col in self.account['columns']} or type(episode) is not int or not 1<=episode<=9999:
             raise ValueError('请选择栏目与1–9999期号')
-        rows=self.list();row=next((row for row in rows if row['series']==series and row['episode']==episode),None)
-        following=next((row for row in rows if row['series']==series and row['episode']==episode+1),None)
-        return {'topic':row,'next_title':following['title'] if following else '',
-                'available':[{key:item[key] for key in ('topic_id','episode','title','content_hash')} for item in rows if item['series']==series]}
+        if type(include_available) is not bool:raise ValueError('候选清单选项应为布尔值')
+        with self.store.transaction():
+            found=self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? AND series=? AND episode=?',(self.account['id'],series,episode)).fetchone()
+            following=self.store.conn.execute('SELECT title FROM editorial_topics WHERE account_id=? AND series=? AND episode=?',(self.account['id'],series,episode+1)).fetchone()
+            row={**dict(found),'content_hash':sha256_json(dict(found))} if found else None
+            # The classic selector needs all title identities, not all topic text.
+            available=[]
+            if include_available:
+                for item in self.store.conn.execute('SELECT * FROM editorial_topics WHERE account_id=? AND series=? ORDER BY episode',(self.account['id'],series)):
+                    available.append({**{key:item[key] for key in ('topic_id','episode','title')},'content_hash':sha256_json(dict(item))})
+        return {'topic':row,'next_title':following['title'] if following else '', 'available':available}
 
 
 def locked_title_payload(spec: dict) -> dict:

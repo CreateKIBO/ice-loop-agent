@@ -117,6 +117,43 @@ class TestDeliveryReview(unittest.TestCase):
             with self.subTest(method=method), self.assertRaisesRegex(ValueError, '当前公众号'):
                 self.service.call(method, {'job_id': self.foreign, **params})
 
+    def test_ready_export_is_blocked_while_a_reviewed_job_is_running(self):
+        self.confirm(self.snapshot()['delivery_hash'])
+        _,_,store=self.service._job_app(self.job)
+        try:
+            store.conn.execute("UPDATE jobs SET lease='running-fixture' WHERE job_id=?",(self.job,));store.conn.commit()
+            with self.assertRaisesRegex(ValueError,'正在运行'):
+                self.export_ready()
+        finally:
+            store.conn.execute('UPDATE jobs SET lease=NULL WHERE job_id=?',(self.job,));store.conn.commit();store.close()
+
+    def test_requested_body_and_delivery_versions_are_checked_before_export(self):
+        snap=self.snapshot();target=temp_dir('export-expected-version-')/'export'
+        for params in ({'body_hash':'0'*64},{'delivery_hash':'0'*64},{'mode':'typo'},{'account_id':'other'}):
+            with self.subTest(params=params),self.assertRaises(ValueError):
+                self.service.call('articles.export_bundle',{'job_id':self.job,'destination':str(target),'mode':'draft',**params})
+            self.assertFalse(target.exists())
+        result=self.service.call('articles.export_bundle',{'job_id':self.job,'destination':str(target),'mode':'draft',
+            'body_hash':snap['body_hash'],'delivery_hash':snap['delivery_hash']})
+        self.assertEqual(result['source_body_sha256'],snap['body_hash'])
+
+    def test_regular_images_are_reported_by_snapshot_and_draft_export(self):
+        self.write_state(integrated_md=BODY+'\n\n![未归档图片](images/source.png)\n')
+        self.assertTrue(any(row['kind']=='image' and '未归档图片' in row['message'] for row in self.snapshot()['blocking']))
+        target=temp_dir('export-unmanaged-image-')/'draft'
+        result=self.service.call('articles.export_bundle',{'job_id':self.job,'destination':str(target),'mode':'draft'})
+        self.assertEqual(result['checks']['unmanaged_images'],[{'caption':'未归档图片'}])
+
+    def test_unknown_figure_and_output_references_are_snapshot_blockers(self):
+        self.write_state(integrated_md=BODY+'\n\n![图99：新增配图](待配图：示意图｜手动)\n\n<!--RUN_OUTPUT:run-not-present-->\n')
+        blockers=self.snapshot()['blocking']
+        self.assertTrue(any(row['kind']=='image' and row.get('figure_no')==99 for row in blockers))
+        self.assertTrue(any(row['kind']=='evidence' and '运行输出' in row['message'] for row in blockers))
+
+    def test_commonmark_program_fence_cannot_silently_bypass_execution_evidence(self):
+        self.write_state(integrated_md=BODY+'\n\n~~~python\nprint(2)\n~~~\n')
+        self.assertTrue(any(row['kind']=='plan' for row in self.snapshot()['blocking']))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -183,7 +183,9 @@ class TestPublications(unittest.TestCase):
         with patch('ice_agent.llm.router.OpenAIChatTransport',return_value=transport):
             result = self.service.call('resources.analyze', {'aggregate':True})
         self.assertEqual(set(result['analysis']['source_resource_ids']),{first['resource_id'],second['resource_id']})
-        self.assertIn('"sample_count": 2',transport.calls[0]['messages'][-1]['content'])
+        request_context = json.loads(transport.calls[0]['messages'][-1]['content'].split('<context>',1)[1].rsplit('</context>',1)[0])
+        self.assertEqual(request_context['sample_count'],2)
+        self.assertEqual({color['hex'] for color in request_context['measured_palette']},{'#224466','#FFCC88','#667788'})
 
     def test_resource_can_be_copied_into_a_real_article_slot(self):
         engine,cfg,store = self.service._app(demo=True)

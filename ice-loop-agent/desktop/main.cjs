@@ -23,7 +23,10 @@ const firstPackagedStart=app.isPackaged&&!process.env.ICE_DESKTOP_RUNTIME&&!sele
 if (!path.isAbsolute(runtime) || /^c:/i.test(runtime)) throw Error('工作数据目录必须使用 C 盘之外的绝对路径');
 if(selectedRuntime&&!JSON.parse(fs.readFileSync(dataSelection,'utf8')).fresh&&(!fs.existsSync(path.join(runtime,'app.db'))||!fs.existsSync(path.join(runtime,'settings.json'))))throw Error('恢复后的工作目录不存在或不完整，请检查工作目录选择记录');
 fs.mkdirSync(runtime, { recursive: true });
-const chatLifecycle=stage=>{if(process.argv.includes('--chat-smoke'))fs.appendFileSync(path.join(runtime,'chat-lifecycle.log'),new Date().toISOString()+' '+stage+'\n');};
+const chatLifecycle=stage=>{
+  if(process.argv.includes('--chat-smoke'))fs.appendFileSync(path.join(runtime,'chat-lifecycle.log'),new Date().toISOString()+' '+stage+'\n');
+  if(process.argv.includes('--startup-diagnostics'))fs.appendFileSync(path.join(runtime,'startup-diagnostics.log'),new Date().toISOString()+' '+stage+'\n');
+};
 chatLifecycle('main:runtime-ready');
 for (const folder of ['electron', 'electron/sessions', 'electron/crash-dumps', 'logs']) fs.mkdirSync(path.join(runtime, folder), { recursive: true });
 app.setPath('userData', path.join(runtime, 'electron'));
@@ -42,10 +45,12 @@ let smokeClipboard=null;
 let nextId = 0;
 const pending = new Map();
 if(app.isPackaged)process.env.ICE_PACKAGED='1';
-const backupReviews = new Map();
+const backupActions = new (require('./backup-actions.cjs').BackupActions)({
+  request: (...args) => request(...args), dialog, window: () => window, project, selection: dataSelection,
+});
 const methods = new Set(['bootstrap', 'brief.suggest', 'jobs.list', 'jobs.create', 'jobs.get', 'jobs.resume', 'jobs.stop',
   'approvals.decide', 'approvals.edit', 'articles.save', 'articles.finalize', 'assets.select', 'assets.preview',
-  'execution.approve', 'execution.inputs', 'claims.verify', 'models.save', 'models.probe', 'library.list', 'library.read']);
+  'execution.approve', 'execution.inputs', 'claims.verify', 'models.save', 'models.routes_save', 'models.probe', 'library.list', 'library.read']);
 for (const method of ['accounts.save','accounts.switch','accounts.export','resources.list','resources.preview','resources.analyze','resources.apply','resources.use','resources.update','resources.vision','resources.recommend','vision.save','vision.probe','drafts.list','drafts.get','drafts.save','history.list','history.get','history.update','history.progress','planning.context','planning.propose','planning.confirm']) methods.add(method);
 for (const method of ['articles.revisions','articles.compare','articles.restore']) methods.add(method);
 for (const method of ['supplements.from_library','supplements.plan','supplements.prepare','supplements.execute','assets.review','outlines.list','outlines.preview','outlines.save','outlines.update','outlines.match']) methods.add(method);
@@ -65,6 +70,7 @@ for (const method of require('./workbench-methods.cjs')) methods.add(method);
 // 可信导出（R05/R06/R13 完成）：目录经由 ice:choose-export-dir 用户选择后，
 // 该绝对路径作为短期批准引用传给 articles.export_bundle；Python 端再次校验。
 methods.add('articles.export_bundle');
+methods.add('accounts.preview_import');
 
 function engineCommand(){
   if(app.isPackaged)return {file:path.join(process.resourcesPath,'engine','ice-engine.exe'),args:[]};
@@ -215,13 +221,22 @@ async function startEngine() {
   python.stderr.on('data', data => {
     fs.appendFileSync(path.join(runtime, 'sidecar.log'), data);
   });
-  const exited = () => {
+  let exitReported = false;
+  const exited = (code, signal, spawnError = null) => {
+    if (exitReported) return;
+    exitReported = true;
+    // Exit diagnostics contain no request bodies, keys or document content.
+    try { fs.appendFileSync(path.join(runtime,'logs','engine-exit.jsonl'),JSON.stringify({
+      at:new Date().toISOString(),code,signal,spawn_error:spawnError,expected:shuttingDown
+    })+'\n'); } catch { /* A full disk must not prevent rejecting pending requests. */ }
     for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error('文章引擎已退出，请重启工作台')); }
     pending.clear();
     if (!shuttingDown && window && !window.isDestroyed()) window.webContents.send('ice:engine-exit');
   };
-  python.on('exit', exited); python.on('error', exited);
+  python.on('exit', (code,signal) => exited(code,signal));
+  python.on('error', error => exited(null,null,error.code || 'SPAWN_ERROR'));
   const keys = await readKeys();
+  chatLifecycle('engine:credentials-read');
   if (Object.keys(keys).length) await request('secrets.set', { keys });
   await request('bootstrap');
   chatLifecycle('engine:ready');
@@ -243,6 +258,15 @@ function registerIPC() {
       properties:['openDirectory','createDirectory']});
     if(selected.canceled||!selected.filePaths[0])return null;
     return exportApprovals.issue(selected.filePaths[0]);
+  });
+  ipcMain.handle('ice:cancel-export-dir',(event,destination)=>{
+    assertSender(event);
+    if(typeof destination!=='string'||!path.isAbsolute(destination))throw Error('导出位置无效');
+    exportApprovals.consume(destination);return {ok:true};
+  });
+  ipcMain.handle('ice:open-export-folder',async(event,destination)=>{
+    assertSender(event);const folder=exportApprovals.completedPath(destination);
+    const error=await shell.openPath(folder);if(error)throw Error(error);return {ok:true};
   });
   ipcMain.handle('ice:import-creative-document',async(event,accountId)=>{
     assertSender(event);
@@ -274,33 +298,19 @@ function registerIPC() {
   });
   ipcMain.handle('ice:create-backup', async event => {
     assertSender(event);
-    const result = await dialog.showSaveDialog(window, {title:'保存工作台备份',
-      defaultPath:path.join(project,'backups','ice-workspace-'+new Date().toISOString().slice(0,10)+'.zip'),
-      filters:[{name:'工作台备份',extensions:['zip']}]});
-    if (result.canceled) return null;
-    return request('backup.create',{file_path:result.filePath});
+    return backupActions.create();
   });
   ipcMain.handle('ice:inspect-backup', async event => {
     assertSender(event);
-    const result = await dialog.showOpenDialog(window,{title:'预览工作台备份',properties:['openFile'],filters:[{name:'工作台备份',extensions:['zip']}]});
-    if (result.canceled) return null;
-    const summary = await request('backup.inspect',{file_path:result.filePaths[0]});
-    const token = randomUUID(); backupReviews.clear();
-    backupReviews.set(token,{file:result.filePaths[0],hash:summary.package_hash});
-    return {...summary,token};
+    return backupActions.inspect();
   });
   ipcMain.handle('ice:restore-backup', async (event,token) => {
     assertSender(event);
-    const review = backupReviews.get(token);
-    if(!review) throw Error('请先选择并预览备份包');
-    const result = await dialog.showOpenDialog(window,{title:'选择恢复目录的父文件夹（会新建工作目录）',properties:['openDirectory','createDirectory']});
-    if(result.canceled)return null;
-    const destination = path.join(result.filePaths[0],'ice-restored-'+Date.now()+'-'+randomUUID().slice(0,8));
-    const restored = await request('backup.restore',{file_path:review.file,destination,package_hash:review.hash});
-    const temporary = dataSelection+'.tmp';
-    fs.mkdirSync(path.dirname(dataSelection),{recursive:true});fs.writeFileSync(temporary,JSON.stringify({runtime_root:restored.runtime_root},null,2));
-    fs.renameSync(temporary,dataSelection); backupReviews.clear();
-    return {...restored,restart_required:true};
+    return backupActions.restore(token);
+  });
+  ipcMain.handle('ice:activate-restored-backup', async (event,token) => {
+    assertSender(event);
+    return backupActions.activate(token);
   });
   ipcMain.handle('ice:open-html', async (event,jobId) => {
     assertSender(event);
@@ -339,7 +349,7 @@ function registerIPC() {
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > 500000) throw new Error('无效请求');
     if (method === 'articles.export_bundle') exportApprovals.assert(params.destination);
     const result=await request(method, params);
-    if (method === 'articles.export_bundle') exportApprovals.consume(params.destination);
+    if (method === 'articles.export_bundle') result.can_open=exportApprovals.complete(params.destination);
     if(['accounts.switch','accounts.save','accounts.import'].includes(method)){embeddedBrowser.reset();exportApprovals.clear();}
     return result;
   });
@@ -356,7 +366,16 @@ function registerIPC() {
     if (choice.canceled) return null;
     const file = choice.filePaths[0];
     if (fs.statSync(file).size > 128000) throw Error('文件过大，请使用小于128KB的配置或品牌说明');
-    return request('accounts.import', { text: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''), format: path.extname(file).slice(1).toLowerCase(), name: path.basename(file, path.extname(file)) });
+    const result=await request('accounts.import', { text: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''), format: path.extname(file).slice(1).toLowerCase(), name: path.basename(file, path.extname(file)) });
+    embeddedBrowser.reset();exportApprovals.clear();
+    return result;
+  });
+  ipcMain.handle('ice:choose-publication-dir', async (event,kind) => {
+    assertSender(event);
+    if(kind!=='library'&&kind!=='output')throw Error('未知目录用途');
+    const choice=await dialog.showOpenDialog(window,{title:kind==='library'?'选择已有文章目录（只读）':'选择新文章输出目录',
+      properties:kind==='library'?['openDirectory']:['openDirectory','createDirectory']});
+    return choice.canceled?null:choice.filePaths[0];
   });
   ipcMain.handle('ice:export-publication', async event => {
     assertSender(event);
@@ -454,7 +473,9 @@ async function createWindow() {
   },1200));
   window.on('resize',()=>embeddedBrowser.resize());
   window.on('closed',()=>embeddedBrowser.reset());
-  if(credentialWarning)window.webContents.once('did-finish-load',()=>{window.webContents.executeJavaScript('toast('+JSON.stringify(credentialWarning)+')').catch(()=>{});});
+  // New UI reports credential_warning from bootstrap; only the classic UI has
+  // a global toast function. Do not throw during new-workbench startup.
+  if(credentialWarning)window.webContents.once('did-finish-load',()=>{window.webContents.executeJavaScript('if(typeof toast === "function") toast('+JSON.stringify(credentialWarning)+')').catch(()=>{});});
   if(process.argv.includes('--review-smoke')){
     window.webContents.once('did-finish-load',()=>setTimeout(async()=>{
       try{
@@ -633,6 +654,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  chatLifecycle('app:ready');
   if(process.argv.includes('--smoke')){
     smokeClipboard=[];
     for(const item of await clipboard.read()){

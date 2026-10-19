@@ -74,8 +74,10 @@ class ArticlesEditorHandler(Handler):
             if article["spec"].get("account_id", "ice-loop") != service._account()["id"]:
                 raise ValueError("只能保存当前公众号的草稿")
             content = params.get("content")
-            if not isinstance(content, str) or not 1 <= len(content) <= 100000:
-                raise ValueError("草稿内容不能为空或超过长度上限")
+            # Empty is a valid recovery state when the user deliberately clears
+            # the editor. This never writes the approved/published body.
+            if not isinstance(content, str) or len(content) > 100000:
+                raise ValueError("草稿内容必须是文本且不能超过长度上限")
             content_hash = sha256_text(content)
             changed = editorial_store.save_editor_draft(
                 store, service._account()["id"], article["article_id"], content,

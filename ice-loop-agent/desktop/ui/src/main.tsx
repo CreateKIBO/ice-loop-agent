@@ -11,12 +11,16 @@ import { engineStore, paletteStore } from "./app/uiState";
 import { ErrorBoundary, WorkbenchShell } from "./app/WorkbenchShell";
 import { toast, Toaster } from "./components/toast";
 import { Button, ErrorPanel, Spinner } from "./components/ui";
-import { useAnyDirtyGuard, useCurrentConversation, accountStore, queryClient, rpc, useEditorJob } from "./data/client";
+import { useAnyDirtyGuard, useCurrentConversation, useCurrentAccount, accountStore, queryClient, rpc, useEditorJob } from "./data/client";
 import { onEngineExit, relaunchApp, switchToClassic } from "./data/desktop";
 import { ChatPane } from "./features/chat/ChatPane";
 import { Welcome } from "./features/chat/Welcome";
 import { LeftNav } from "./features/navigation/LeftNav";
 import { RightPane } from "./features/tasks/RightPane";
+import { BrowserHost } from './app/BrowserHost';
+import { PublicationSettingsHost } from './app/PublicationSettingsHost';
+import { BackupSettingsHost,BackupRestoreNotice } from './app/BackupSettingsHost';
+import { EditorialHost } from './app/EditorialHost';
 
 // 编辑器带着 Tiptap / CodeMirror / remark，是启动包里最重的部分；
 // 大多数时候用户停留在对话里，所以点"编辑正文"时才下载。
@@ -80,6 +84,15 @@ function Splash({ children }: { children: ReactNode }) {
   );
 }
 
+function Workspace({ data }: { data: Bootstrap }) {
+  const account = useCurrentAccount();
+  const conversation = useCurrentConversation();
+  const editor = useEditorJob();
+  return <WorkbenchShell navigationKey={`${account}:${conversation || ""}:${editor || ""}`}
+    left={<LeftNav accounts={data.accounts} activeAccountId={data.account.id} version={data.version} />}
+    center={<Center />} right={<RightPane />} />;
+}
+
 function App() {
   const [state, setState] = useState<
     { phase: "loading" } | { phase: "error"; message: string } | { phase: "ready"; data: Bootstrap }
@@ -123,16 +136,17 @@ function App() {
     <MotionConfig reducedMotion="user">
       <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <EngineBanner />
+        <BackupRestoreNotice />
         <div style={{ flex: 1, minHeight: 0 }}>
-          <WorkbenchShell
-            left={<LeftNav accounts={data.accounts} activeAccountId={data.account.id} version={data.version} />}
-            center={<Center />}
-            right={<RightPane />}
-          />
+          <Workspace data={data} />
         </div>
       </div>
       <CommandPalette open={palette} onOpenChange={paletteStore.set} />
       <ModelSettings />
+      <PublicationSettingsHost />
+      <BackupSettingsHost />
+      <EditorialHost />
+      <BrowserHost />
       <Toaster />
     </MotionConfig>
   );

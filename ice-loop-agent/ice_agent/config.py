@@ -79,13 +79,25 @@ def make_runtime_config(
     runtime_root: str | Path | None = None,
     profile_path: str | Path | None = None,
 ) -> RuntimeConfig:
-    profile = load_profile(profile_path)
+    profile_file = normalize(profile_path) if profile_path else _DEFAULT_PROFILE
+    profile = load_profile(profile_file)
     storage = profile.get("storage", {})
-    art = article_root or storage.get("article_root_win")
-    run = runtime_root or storage.get("runtime_root_win")
+    # Explicit caller paths retain their normal cwd semantics. Paths declared
+    # by a profile belong to that profile, so moving the project or launching
+    # from another working directory cannot select a different data workspace.
+    def configured_path(explicit, key):
+        if explicit is not None:
+            return explicit
+        value = storage.get(key)
+        if value:
+            path = Path(value).expanduser()
+            return path if path.is_absolute() else profile_file.parent / path
+        return None
+    art = configured_path(article_root, "article_root_win")
+    run = configured_path(runtime_root, "runtime_root_win")
     if not art or not run:
         raise ValueError("article_root 与 runtime_root 必须显式给定或存在于 profile")
     return RuntimeConfig(
         article_root=Path(art), runtime_root=Path(run), profile=profile,
-        profile_path=normalize(profile_path) if profile_path else _DEFAULT_PROFILE,
+        profile_path=profile_file,
     )

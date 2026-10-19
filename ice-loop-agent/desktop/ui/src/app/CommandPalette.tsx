@@ -4,10 +4,10 @@ import * as React from "react";
 
 import { Dialog, Input } from "../components/ui";
 import { toast } from "../components/toast";
-import { createConversation, openConversation, openEditor } from "../data/actions";
+import { createConversation, openConversation, openEditor,openGettingStarted } from "../data/actions";
 import { editorStore, flushAllDirty, useAccountQuery, useEditorJob } from "../data/client";
 import { switchToClassic } from "../data/desktop";
-import { paletteStore, settingsStore } from "./uiState";
+import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore } from "./uiState";
 
 type Action = {
   id: string; label: string; group: string; hint?: string; keywords?: string;
@@ -59,10 +59,19 @@ export function CommandPalette({ open, onOpenChange }: {
       });
     }
     list.push({
+      id:'getting-started',group:'操作',label:'开始指南',keywords:'首次使用 导入 配置 first start home',run:openGettingStarted,
+    },{
+      id:'publication-settings',group:'操作',label:'公众号与品牌',keywords:'账号 新增 公众号 品牌 历史 导入 account brand',
+      run:()=>publicationSettingsStore.set(true),
+    },{
       id: "model-settings", group: "操作", label: "模型与 Key 设置", hint: "Ctrl ,", keywords: "model key api 供应商 设置",
       run: () => { settingsStore.set(true); },
     }, {
-      id: "classic-ui", group: "操作", label: "切换到经典界面", hint: "素材、版本、备份等完整功能",
+      id:'backup-settings',group:'操作',label:'备份与恢复',keywords:'backup restore 迁移 导出 工作台 数据',run:()=>backupSettingsStore.set(true),
+    },{
+      id:'editorial',group:'操作',label:'选题与排期',keywords:'标题 大纲 历史 期号 已发布 计划 outline roadmap',run:()=>editorialStore.set(true),
+    }, {
+      id: "classic-ui", group: "操作", label: "切换到经典界面", hint: "更多管理工具",
       keywords: "classic 旧版 经典 素材 备份 版本",
       run: () => switchToClassic(),
     });

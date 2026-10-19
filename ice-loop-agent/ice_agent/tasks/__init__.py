@@ -24,6 +24,7 @@ from ..domain.types import now_iso
 
 TERMINAL_STATES = frozenset({"succeeded", "failed", "cancelled"})
 ACTIVE_STATES = frozenset({"queued", "running", "waiting_user", "waiting_model", "waiting_resource"})
+KNOWN_STATES = ACTIVE_STATES | TERMINAL_STATES | {"paused"}
 DEFAULT_LEASE_SECONDS = 120
 
 
@@ -124,7 +125,8 @@ class TaskQueue:
         with self.store.transaction():
             if requeue:
                 self.store.conn.execute(
-                    "UPDATE tasks SET state='queued', lease_token=NULL, lease_expires_at=NULL,"
+                    "UPDATE tasks SET state=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'queued' END,"
+                    " lease_token=NULL, lease_expires_at=NULL,"
                     " updated_at=? WHERE task_id=? AND lease_token=? AND state='running'",
                     (now_iso(), task_id, token))
             else:
@@ -137,8 +139,8 @@ class TaskQueue:
         with self.store.transaction():
             updated = self.store.conn.execute(
                 "UPDATE tasks SET state='succeeded', result=?, lease_token=NULL,"
-                " lease_expires_at=NULL, cancel_requested=0, updated_at=?"
-                " WHERE task_id=? AND lease_token=? AND state='running'",
+                " lease_expires_at=NULL, cancel_requested=0, error_code=NULL, updated_at=?"
+                " WHERE task_id=? AND lease_token=? AND state='running' AND cancel_requested=0",
                 (json.dumps(result, ensure_ascii=False), now_iso(), task_id, token))
             return updated.rowcount == 1
 
@@ -146,19 +148,20 @@ class TaskQueue:
                           result: dict[str, Any]) -> bool:
         """批次A：带 lease 的严格状态提交（waiting_user/paused 等中间态）。
 
-        只允许从 running 转出；state 必须在 ACTIVE_STATES∪TERMINAL_STATES。
+        只允许从 running 转出；paused 是可恢复中间态，不属于运行中或终态。
         result 持久化（job_id/等待门/可读错误），不只留瞬时 dict。
         """
-        if state not in ACTIVE_STATES | TERMINAL_STATES:
+        if state not in KNOWN_STATES or state == 'running':
             raise ValueError(f"未知任务状态：{state}")
         with self.store.transaction():
             # waiting_user 等中间态保留租约归零（不再倒计时），但不先释放再无条件 UPDATE。
             updated = self.store.conn.execute(
                 "UPDATE tasks SET state=?, result=?, lease_token=NULL,"
                 " lease_expires_at=NULL, updated_at=?"
-                " WHERE task_id=? AND lease_token=? AND state='running'",
+                " WHERE task_id=? AND lease_token=? AND state='running'"
+                " AND (cancel_requested=0 OR ?='cancelled')",
                 (state, json.dumps(result, ensure_ascii=False), now_iso(),
-                 task_id, token))
+                 task_id, token, state))
             return updated.rowcount == 1
 
     def bind_job(self, task_id: str, job_id: str, account_id: str) -> str:
@@ -167,6 +170,9 @@ class TaskQueue:
         返回生效的 job_id（绑定已存在时返回既有绑定，不重建 job）。
         """
         with self.store.transaction():
+            task = self.store.conn.execute("SELECT account_id FROM tasks WHERE task_id=?",(task_id,)).fetchone()
+            if not task or task['account_id'] != account_id:
+                raise ValueError('任务绑定的公众号归属不一致')
             existing = self.store.conn.execute(
                 "SELECT job_id FROM task_job_bindings WHERE task_id=?",
                 (task_id,)).fetchone()
@@ -178,7 +184,7 @@ class TaskQueue:
                 "SELECT task_id FROM task_job_bindings WHERE job_id=?",
                 (job_id,)).fetchone()
             if conflict:
-                return job_id  # 另一任务先绑定了此 job；调用方复用
+                raise ValueError("该 job 已绑定其他任务，拒绝静默复用")
             self.store.conn.execute(
                 "INSERT INTO task_job_bindings (task_id, job_id, account_id, bound_at)"
                 " VALUES (?,?,?,?)", (task_id, job_id, account_id, now_iso()))
@@ -189,6 +195,23 @@ class TaskQueue:
             "SELECT job_id FROM task_job_bindings WHERE task_id=?", (task_id,)).fetchone()
         return row["job_id"] if row else None
 
+    def pause_bound_job(self,task_id: str,token: str,reason: str) -> bool:
+        """Fence the ownership check and actual engine pause in one write lock."""
+        with self.store.transaction():
+            row = self.store.conn.execute(
+                "SELECT b.job_id,j.state,j.article_id,t.account_id FROM task_job_bindings b"
+                " JOIN tasks t ON t.task_id=b.task_id JOIN jobs j ON j.job_id=b.job_id"
+                " WHERE t.task_id=? AND t.lease_token=? AND t.state='running'",
+                (task_id,token)).fetchone()
+            if not row or row['state'] in ('completed','cancelled','paused'):
+                return False
+            article = self.store.get_article(row['article_id'])
+            if not article or article['spec'].get('account_id','ice-loop') != row['account_id']:
+                return False
+            self.store.update_job(row['job_id'],state='paused',pause_reason=reason,commit=False)
+            self.store.append_event(row['job_id'],'job.paused',{'source':'task_queue'})
+            return True
+
     def fail(self, task_id: str, token: str, error_code: str,
              *, retryable: bool = True) -> dict[str, Any] | None:
         """失败按 attempt 上限决定重排或终态；返回更新后的任务。"""
@@ -198,7 +221,12 @@ class TaskQueue:
             if not row:
                 return None
             task = self._row(row)
-            if task["attempt"] < task["max_attempts"] and retryable:
+            if task['cancel_requested']:
+                self.store.conn.execute(
+                    "UPDATE tasks SET state='cancelled', error_code=?, lease_token=NULL,"
+                    " lease_expires_at=NULL, updated_at=? WHERE task_id=? AND lease_token=?",
+                    (error_code,now_iso(),task_id,token))
+            elif task["attempt"] < task["max_attempts"] and retryable:
                 self.store.conn.execute(
                     "UPDATE tasks SET state='queued', error_code=?, lease_token=NULL,"
                     " lease_expires_at=NULL, updated_at=? WHERE task_id=?",
@@ -220,7 +248,7 @@ class TaskQueue:
             if not row:
                 raise TaskNotFoundError(task_id)
             task = self._row(row)
-            if task["state"] == "queued":
+            if task["state"] in ("queued", "paused"):
                 self.store.conn.execute(
                     "UPDATE tasks SET state='cancelled', updated_at=? WHERE task_id=?",
                     (now_iso(), task_id))
@@ -243,21 +271,37 @@ class TaskQueue:
             return updated.rowcount == 1
 
     # ---------------------------------------------------------------- 恢复
-    def requeue_expired(self) -> list[str]:
+    def requeue_expired(self, *, account_id: str | None = None, kind: str | None = None) -> list[str]:
         """重启/恢复：收回租约过期的 running 任务（不是重放外部付费请求）。"""
         now = now_iso()
         with self.store.transaction():
             rows = self.store.conn.execute(
                 "SELECT task_id FROM tasks WHERE state='running' AND lease_expires_at IS NOT NULL"
-                " AND lease_expires_at < ?", (now,)).fetchall()
+                " AND lease_expires_at < ? AND (? IS NULL OR account_id=?)"
+                " AND (? IS NULL OR kind=?)", (now,account_id,account_id,kind,kind)).fetchall()
             ids = [r["task_id"] for r in rows]
             if ids:
-                marks = ",".join("?" * len(ids))
                 self.store.conn.execute(
-                    f"UPDATE tasks SET state='queued', lease_token=NULL, lease_expires_at=NULL,"
-                    f" updated_at=? WHERE task_id IN ({marks})",
-                    (now_iso(), *ids))
+                    "UPDATE tasks SET state=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'queued' END,"
+                    " lease_token=NULL, lease_expires_at=NULL, updated_at=?"
+                    " WHERE state='running' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?"
+                    " AND (? IS NULL OR account_id=?) AND (? IS NULL OR kind=?)",
+                    (now,now,account_id,account_id,kind,kind))
             return ids
+
+    def recover_after_restart(self) -> None:
+        """Only the desktop's single-owner startup may recover the departed sidecar.
+
+        Bound jobs stay paused for explicit user resume. An unbound production
+        task has not started an engine; atomic binding makes it safe to requeue.
+        """
+        with self.store.transaction():
+            self.store.conn.execute(
+                "UPDATE tasks SET state=CASE WHEN cancel_requested=1 THEN 'cancelled'"
+                " WHEN EXISTS(SELECT 1 FROM task_job_bindings b WHERE b.task_id=tasks.task_id) THEN 'paused'"
+                " ELSE 'queued' END, lease_token=NULL,lease_expires_at=NULL,"
+                " error_code='PROCESS_RESTARTED',updated_at=? WHERE kind='production' AND state='running'",
+                (now_iso(),))
 
     # ---------------------------------------------------------------- 查询
     def get(self, task_id: str) -> dict[str, Any]:
@@ -270,7 +314,7 @@ class TaskQueue:
     def list_for_account(self, account_id: str, *, include_terminal: bool = False,
                          limit: int = 100) -> list[dict[str, Any]]:
         state_filter = "" if include_terminal else \
-            " AND state IN ('queued','running','waiting_user','waiting_model','waiting_resource')"
+            " AND state IN ('queued','running','paused','waiting_user','waiting_model','waiting_resource')"
         rows = self.store.conn.execute(
             "SELECT * FROM tasks WHERE account_id=?"
             f"{state_filter} ORDER BY created_at DESC LIMIT ?",

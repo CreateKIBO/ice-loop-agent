@@ -42,8 +42,8 @@ class PublicationHistory:
         with self.store.transaction():
             if root_value and Path(root_value).is_dir():
                 root = normalize(root_value)
-                from .article_library import library_entries
-                for entry in library_entries(self.account):
+                from .article_library import iter_library_entries
+                for entry in iter_library_entries(self.account):
                     folder = Path(entry['file_path']).parent
                     if not folder.is_dir():
                         continue
@@ -55,7 +55,7 @@ class PublicationHistory:
                         assert_within(file, root)
                         if file.stat().st_size > 600000:
                             continue
-                        body = file.read_text(encoding="utf-8-sig")[:200000]
+                        body = entry['body'][:200000]
                         title = next((line[2:].strip() for line in body.splitlines() if line.startswith("# ")), folder.name)
                         headers = [body.splitlines()[0] if body else "", folder.name]
                         for name in ("00-阅读入口.md","02-发布信息与排版说明.md"):
@@ -72,7 +72,7 @@ class PublicationHistory:
                         # Damaged or escaping files are not included in model context.
                         continue
             import json
-            rows = self.store.conn.execute("SELECT * FROM articles ORDER BY created_at").fetchall()
+            rows = self.store.conn.execute("SELECT * FROM articles ORDER BY created_at")
             for row in rows:
                 spec = json.loads(row["spec_json"])
                 if spec.get("account_id","ice-loop") != self.account["id"] or spec.get("demo") or spec.get('image_only'):
@@ -80,17 +80,43 @@ class PublicationHistory:
                 revision = self.store.conn.execute("SELECT content FROM article_revisions WHERE article_id=? AND kind IN ('restore','manual','final','integrated','draft') ORDER BY rowid DESC LIMIT 1", (row["article_id"],)).fetchone()
                 body = revision[0] if revision else ""
                 self._index("article:"+row["article_id"],row["final_title"] or row["working_title"] or row["topic"],body,row["series"],row["episode"])
-            for row in self.store.conn.execute("SELECT * FROM publication_drafts WHERE account_id=?", (self.account["id"],)).fetchall():
+            for row in self.store.conn.execute("SELECT * FROM publication_drafts WHERE account_id=?", (self.account["id"],)):
                 metadata = None
                 if self.store.conn.execute("SELECT 1 FROM sqlite_master WHERE name='creative_article_metadata'").fetchone():
                     metadata = self.store.conn.execute('SELECT series,episode FROM creative_article_metadata WHERE account_id=? AND draft_id=?',(self.account['id'],row['draft_id'])).fetchone()
                 self._index("draft:"+row["draft_id"],row["title"],row["body"],metadata['series'] if metadata else '',metadata['episode'] if metadata else None)
 
-    def records(self, *, bodies: bool = False) -> list[dict]:
+    def records(self, *, bodies: bool = False, _series: str | None = None, _availability: bool = False) -> list[dict]:
         self.sync()
-        rows = self.store.conn.execute("SELECT * FROM publication_history WHERE account_id=? ORDER BY COALESCE(episode,0) DESC,history_id", (self.account["id"],)).fetchall()
-        return [{**dict(row), "body":row["body"] if bodies else None,
-                 "content_hash":sha256_json(dict(row))} for row in rows]
+        rows = self.store.conn.execute("SELECT * FROM publication_history WHERE account_id=? AND (? IS NULL OR series=?) ORDER BY COALESCE(episode,0) DESC,history_id", (self.account["id"],_series,_series))
+        result=[]
+        for row in rows:
+            value={**dict(row),'content_hash':sha256_json(dict(row))}
+            if _availability:value['_body_available']=bool(row['body'].strip())
+            if not bodies:value['body']=None
+            result.append(value)
+        return result
+
+    def get(self, history_id: str, *, refresh: bool = True) -> dict:
+        if refresh:self.sync()
+        row=self.store.conn.execute('SELECT * FROM publication_history WHERE account_id=? AND history_id=?',(self.account['id'],history_id)).fetchone()
+        if not row:raise ValueError('当前公众号没有这篇历史文章')
+        return {**dict(row),'content_hash':sha256_json(dict(row))}
+
+    def page(self, params: dict) -> dict:
+        from .paging import page_request, page_bounds
+        size,page,series,query=page_request(params,self.columns)
+        unclassified,status,refresh=params.get('include_unclassified',False),params.get('status',''),params.get('refresh',True)
+        if type(unclassified) is not bool or type(refresh) is not bool or status not in ('','draft','published'):
+            raise ValueError('历史筛选选项无效')
+        with self.store.transaction():
+            if refresh:self.sync()
+            args=(self.account['id'],series,series,int(unclassified),query,query,status,status)
+            total=self.store.conn.execute("SELECT COUNT(*) FROM publication_history WHERE account_id=? AND (?='' OR series=? OR (?=1 AND series='')) AND (?='' OR instr(lower(title)||' '||COALESCE(CAST(episode AS TEXT),''),lower(?))>0) AND (?='' OR status=?)",args).fetchone()[0]
+            page,pages=page_bounds(total,page,size)
+            rows=self.store.conn.execute("SELECT * FROM publication_history WHERE account_id=? AND (?='' OR series=? OR (?=1 AND series='')) AND (?='' OR instr(lower(title)||' '||COALESCE(CAST(episode AS TEXT),''),lower(?))>0) AND (?='' OR status=?) ORDER BY COALESCE(episode,0) DESC,history_id LIMIT ? OFFSET ?",(*args,size,page*size)).fetchall()
+            values=[{**dict(row),'body':None,'content_hash':sha256_json(dict(row))} for row in rows]
+        return {'rows':values,'total':total,'page':page,'pages':pages,'page_size':size}
 
     def update(self, params: dict) -> dict:
         self.sync()
@@ -120,17 +146,24 @@ class PublicationHistory:
             self.store.conn.execute("UPDATE publication_history SET series=?,episode=?,title=?,status=?,published_at=?,manual_metadata=1,updated_at=? WHERE history_id=?", (series,episode,title,status,published_at,now_iso(),row["history_id"]))
         return {"ok":True}
 
-    def progress(self, series: str, episode: int) -> dict:
+    def progress(self, series: str, episode: int, context_hash: str | None = None) -> dict:
         if series not in self.columns or type(episode) is not int or not 0 <= episode <= 9999:
             raise ValueError("请选择栏目，已发布期号需为0–9999（0表示尚未发布）")
-        self.store.conn.execute("INSERT INTO publication_progress VALUES (?,?,?) ON CONFLICT(account_id,series) DO UPDATE SET published_episode=excluded.published_episode", (self.account["id"],series,episode))
-        self.store.conn.commit()
+        with self.store.transaction():
+            if context_hash is not None and self.context(series)['context_hash'] != context_hash:
+                raise ValueError('发布进度或历史已在别处变化，请刷新后再保存')
+            self.store.conn.execute("INSERT INTO publication_progress VALUES (?,?,?) ON CONFLICT(account_id,series) DO UPDATE SET published_episode=excluded.published_episode", (self.account["id"],series,episode))
         return self.context(series)
 
-    def context(self, series: str, episode: int | None = None) -> dict:
+    def context(self, series: str, episode: int | None = None, *, include_titles: bool = True) -> dict:
+        if type(include_titles) is not bool:raise ValueError('标题清单选项应为布尔值')
+        with self.store.transaction():
+            return self._context(series,episode,include_titles=include_titles)
+
+    def _context(self, series: str, episode: int | None, *, include_titles: bool) -> dict:
         if series not in self.columns:
             raise ValueError("请选择当前公众号的栏目")
-        records = self.records(bodies=True)
+        records = self.records(_series=series,_availability=True)
         relevant = [row for row in records if row["series"] == series]
         published = sorted((row for row in relevant if row["status"]=="published"),key=lambda row:(row["episode"],row["published_at"]),reverse=True)
         progress = self.store.conn.execute("SELECT published_episode FROM publication_progress WHERE account_id=? AND series=?", (self.account["id"],series)).fetchone()
@@ -142,12 +175,12 @@ class PublicationHistory:
             raise ValueError('期号需为1–9999（全部发布完后下一期建议为空）')
         # Only preceding articles in this series. Published snapshots win over
         # alternate drafts for the same issue; do not pass future bodies.
-        preceding = sorted((row for row in relevant if row['episode'] is not None and row['episode']<target and row['body'].strip()),
+        preceding = sorted((row for row in relevant if row['episode'] is not None and row['episode']<target and row['_body_available']),
                            key=lambda row:(row['episode'],row['status']=='published',row['updated_at'],row['history_id']),reverse=True)
         chosen=[];seen=set()
         for row in preceding:
             if row['episode'] not in seen:
-                chosen.append(row);seen.add(row['episode'])
+                chosen.append(self.get(row['history_id'],refresh=False));seen.add(row['episode'])
             if len(chosen)==5:break
         latest = next((row for row in chosen if row['episode']==target-1),None)
         history = [{"history_id":row["history_id"],"title":row["title"],"series":row["series"],"episode":row["episode"],"status":row["status"],
@@ -157,7 +190,7 @@ class PublicationHistory:
         return {"account_id":self.account["id"],"series":series,"last_published_episode":maximum,
                 "next_episode":maximum+1 if maximum<9999 else None,"context_hash":context_hash,
                 "reference_episode":target,"history":history,
-                "known_titles":[{"history_id":r["history_id"],"title":r["title"],"series":r["series"],"episode":r["episode"],"status":r["status"]} for r in relevant],
+                "known_titles":[{"history_id":r["history_id"],"title":r["title"],"series":r["series"],"episode":r["episode"],"status":r["status"]} for r in relevant] if include_titles else [],
                 "body_history_count":len(history),"title_history_count":len(relevant),
                 "previous_status":latest['status'] if latest else '',
                 "previous_exercise":section_excerpt(latest["body"],"动手|练习|挑战|试一试") if latest else "",
@@ -169,10 +202,10 @@ class PublicationHistory:
         """全部标题覆盖证明（M4-07）：总数、完整返回与分批区间，供查重与审计。"""
         if series not in self.columns:
             raise ValueError("请选择当前公众号的栏目")
-        relevant = [row for row in self.records(bodies=True) if row["series"] == series]
+        relevant = self.records(_series=series,_availability=True)
         total = len(relevant)
         return {"series": series, "total": total, "fully_returned": True,
                 "batch_size": batch,
                 "batches": [{"from": start + 1, "to": min(start + batch, total)}
                             for start in range(0, total, batch)] if total else [],
-                "bodies_available": sum(1 for row in relevant if row["body"].strip())}
+                "bodies_available": sum(1 for row in relevant if row['_body_available'])}

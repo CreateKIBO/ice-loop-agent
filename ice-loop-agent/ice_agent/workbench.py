@@ -177,17 +177,13 @@ class Workbench:
         return {'ok':True,'action':action}
 
     def catalog(self,params):
-        from .llm.transport import validate_endpoint,_NoRedirect
+        from .llm.transport import OpenAIChatTransport
         p=self.s.settings['profiles'].get(params.get('provider'))
         if not p:raise ValueError('模型供应商不存在')
-        endpoint=validate_endpoint(p['base_url']);key=os.environ.get(p['api_key_env'])
+        key=os.environ.get(p['api_key_env'])
         if not key:raise ValueError('请先配置该供应商Key')
-        request=urllib.request.Request(endpoint+'/models',headers={'Authorization':'Bearer '+key})
         try:
-            with urllib.request.build_opener(_NoRedirect).open(request,timeout=25) as response:
-                raw=response.read(2_000_001)
-            if len(raw)>2_000_000:raise ValueError('模型目录过大')
-            rows=json.loads(raw).get('data',[])
+            rows=OpenAIChatTransport().models(p['base_url'],key)
             ids=sorted({str(row['id']) for row in rows if isinstance(row,dict) and isinstance(row.get('id'),str) and len(row['id'])<=200})
         except Exception as exc:
             raise ValueError('该服务未提供可用模型目录或连接失败；请在模型设置手动填写官方模型ID') from None

@@ -1,0 +1,125 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const {openNativeSession,wait}=require('./native-session.cjs');
+const repo=path.resolve(__dirname,'../..'),out=path.join(repo,'docs/上线准备');
+const f=JSON.parse(fs.readFileSync(path.join(out,'editorial-fixture.json'),'utf8'));
+const attempt=path.join(out,'editorial-attempts',path.basename(f.root)+'-'+Date.now());fs.mkdirSync(attempt,{recursive:true});
+const report={state:'running',runtime:f.runtime,evidence_dir:attempt,offline_model:true,os_file_dialog_injected:true,checks:{},errors:[]};
+const save=()=>{const body=JSON.stringify(report,null,2);fs.writeFileSync(path.join(out,'editorial-native.json'),body);fs.writeFileSync(path.join(attempt,'result.json'),body);};
+const assert=(name,ok)=>{report.checks[name]=Boolean(ok);save();if(!ok)throw Error(name+' failed');};
+const digest=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const documentBefore=digest(f.document);
+let session,call,evaluate,until;
+const rpc=(method,params={})=>evaluate(`window.ice.request(${JSON.stringify(method)},${JSON.stringify({account_id:f.account_id,...params})})`);
+const select=(selector)=>clickSelector(selector);
+const clickSelector=async selector=>{
+ await until(`(()=>{const e=${selector};if(!e||e.matches(':disabled'))return false;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})()`);
+ const point=await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{const e=${selector},r=e.getBoundingClientRect();resolve({x:r.x+r.width/2,y:r.y+r.height/2});})))`);
+ await call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});await call('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});await call('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
+};
+const button=(text,scope='document')=>`[...${scope}.querySelectorAll('button')].find(e=>e.innerText.trim()===${JSON.stringify(text)}&&!e.matches(':disabled'))`;
+const click=(text,scope='document')=>clickSelector(button(text,scope));
+const field=async(label,value)=>{
+ await evaluate(`(()=>{const e=document.querySelector('[aria-label=${JSON.stringify(label)}]');const setter=Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set;setter.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+};
+const idle=()=>until(`!document.querySelector('.ice-editorial__progress')`);
+const shot=async name=>{const r=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(attempt,name),Buffer.from(r.data,'base64'));};
+const sourceRows=()=>rpc('outlines.list');
+(async()=>{
+ save();try{
+  session=await openNativeSession(repo,f.runtime,{entryPath:f.entry});({call,evaluate,until}=session);
+  await until(`document.querySelector('#ice-account-select')?.value===${JSON.stringify(f.account_id)}`);
+  await call('Emulation.setDeviceMetricsOverride',{width:1280,height:950,deviceScaleFactor:1,mobile:false});
+  await click('选题与排期');await until(`document.querySelector('[aria-label="本期期号"]')?.value==='11'`);
+  await until(`document.querySelector('.ice-editorial')?.innerText.includes('已发布到第 10 期')`);
+  assert('next_issue_is_published_max_plus_one',await evaluate(`document.querySelector('.ice-editorial').innerText.includes('已发布到第 10 期')`));
+  let ctx=await rpc('planning.context',{series:'OBS',episode:11});
+  assert('context_has_five_preceding_bodies_and_all_seventy_titles',ctx.body_history_count===5&&ctx.title_history_count===70&&JSON.stringify(ctx.history.map(r=>r.episode))==='[10,9,8,7,6]'&&ctx.history[0].body_excerpt.includes('完整正文10'));
+  await click('选题大纲');await click('填入示例');
+  assert('sample_documents_explain_issues_over_ten',await evaluate(`document.querySelector('[aria-label="选题大纲文本"]').value.includes('第100期')`));
+  await click('关闭');await until(`document.body.innerText.includes('有修改尚未确认')`);await click('继续编辑');
+  assert('close_guard_preserves_unsaved_source',await evaluate(`document.querySelector('[aria-label="选题大纲文本"]').value.includes('第100期')`));
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'n',ctrlKey:true,bubbles:true}))`);
+  await until(`document.body.innerText.includes('选题与排期有未确认修改')`);
+  assert('global_navigation_does_not_drop_unconfirmed_document',(await rpc('chat.list')).length===0);
+  await click('读取大纲文档');await until(`document.body.innerText.includes('有修改尚未确认')`);await click('放弃修改并继续');await idle();
+  assert('docx_read_is_real_and_does_not_save',await evaluate(`document.querySelector('[aria-label="选题大纲文本"]').value.includes('第035期')&&document.querySelector('[aria-label="大纲来源名称"]').value==='观察排期.docx'`)&&(await sourceRows()).rows.length===0);
+  await click('识别并预览题目');await until(`document.querySelector('.ice-editorial')?.innerText.includes('识别出 26 条期题')`);await idle();
+  assert('preview_is_bounded_but_keeps_all_26_topics',await evaluate(`document.querySelectorAll('.ice-editorial__topic').length===8&&document.querySelector('.ice-editorial__pager').innerText.includes('1 / 4')`));
+  await field('期题 1 标题','从一条街道开始观察');
+  await click('下一页','document.querySelector("[aria-label=大纲识别预览]")');await until(`Boolean(document.querySelector('[aria-label="期题 9 标题"]'))`);
+  await click('上一页','document.querySelector("[aria-label=大纲识别预览]")');
+  assert('edited_title_survives_import_pagination',await evaluate(`document.querySelector('[aria-label="期题 1 标题"]').value==='从一条街道开始观察'`));
+  await click('确认并保存期题');await until(`!document.querySelector('[aria-label="大纲识别预览"]')`);await idle();
+  let rows=(await sourceRows()).rows;
+  assert('saving_import_keeps_later_issues_and_edits',rows.length===26&&rows.find(r=>r.episode===11).title==='从一条街道开始观察'&&rows.some(r=>r.episode===100));
+  await click('读取大纲文档');await idle();await click('识别并预览题目');await until(`Boolean(document.querySelector('[aria-label="期题 1 标题"]'))`);await idle();
+  await click('确认并保存期题');await until(`document.querySelector('.ice-editorial').innerText.includes('请确认覆盖已有期的选题')`);await idle();
+  assert('existing_issue_is_not_silently_overwritten',(await sourceRows()).rows.find(r=>r.episode===11).title==='从一条街道开始观察');
+  await field('期题 1 标题','经过确认的新观察题目');
+  await clickSelector(`document.querySelector('.ice-editorial__check input')`);await click('确认并保存期题');await until(`!document.querySelector('[aria-label="大纲识别预览"]')`);await idle();
+  assert('explicit_overwrite_only_updates_confirmed_topics',(await sourceRows()).rows.length===26&&(await sourceRows()).rows.find(r=>r.episode===11).title==='经过确认的新观察题目');
+  await field('搜索预设期题','100');await until(`document.querySelectorAll('.ice-editorial__list-row').length===1`);await click('选用此期');
+  await until(`document.querySelector('[aria-label="本期期号"]')?.value==='100'&&document.querySelector('[aria-label="确认本期标题"]')?.value==='回看第一百次观察'`);
+  assert('jumping_to_issue100_does_not_use_issue12_preview',await evaluate(`document.querySelector('[aria-label="本期下期预告"]').value===''`));
+  await field('确认本期标题','第一百次观察之后');await field('本期内容要点','从真实记录中归纳观察方法，不虚构数据。');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape'});
+  await until(`document.body.innerText.includes('有修改尚未确认')`);await click('继续编辑');
+  assert('edited_final_title_survives_escape',await evaluate(`document.querySelector('[aria-label="确认本期标题"]').value==='第一百次观察之后'`));
+  for(const width of [1280,800]){
+   await call('Emulation.setDeviceMetricsOverride',{width,height:950,deviceScaleFactor:1,mobile:false});
+   assert('editorial_no_horizontal_overflow_'+width,await evaluate(`(()=>{const d=document.querySelector('[role=dialog]'),r=d.getBoundingClientRect();return d.scrollWidth<=d.clientWidth+1&&r.left>=0&&r.right<=innerWidth+1;})()`));
+  }
+  await call('Emulation.setDeviceMetricsOverride',{width:1280,height:950,deviceScaleFactor:1,mobile:false});await shot('confirmed-issue.png');
+  await click('确认并带入对话');await until(`!document.querySelector('[role=dialog]')&&document.querySelector('[aria-label="消息输入"]')?.value.includes('第100期')`);
+  let conversations=await rpc('chat.list');const cid=conversations[0].id;report.conversation_id=cid;
+  let chat=await rpc('chat.get',{conversation_id:cid});
+  assert('handoff_creates_one_conversation_without_automatic_model_call',conversations.length===1&&chat.messages.length===0&&chat.candidates.length===0);
+  assert('selected_issue_and_title_are_persisted_in_server_snapshot',chat.conversation.target.editorial_plan.confirmation.fields.episode===100&&chat.conversation.target.editorial_plan.confirmation.fields.topic==='第一百次观察之后');
+  assert('composer_and_header_explain_confirmed_issue',await evaluate(`document.querySelector('[aria-label="消息输入"]').value.includes('第一百次观察之后')&&document.querySelector('.ice-conversation-header').innerText.includes('OBS / 100')`));
+  await rpc('history.progress',{series:'OBS',episode:12});
+  await click('发送');await until(`Boolean(document.querySelector('[aria-label="初稿候选"]'))`,40000);
+  chat=await rpc('chat.get',{conversation_id:cid});const candidate=chat.candidates[0];
+  assert('real_offline_draft_keeps_confirmed_issue_despite_new_progress',candidate.title==='第一百次观察之后'&&candidate.body.startsWith('# 第一百次观察之后')&&candidate.base.episode===100);
+  assert('generating_draft_does_not_create_production_job',(await rpc('jobs.list')).length===0);
+  await click('保存为草稿');await until(`document.body.innerText.includes('已保存草稿')`);
+  const drafts=await rpc('chat.drafts');assert('saved_draft_has_correct_issue_and_sidebar_title',drafts[0].episode===100&&drafts[0].title==='第一百次观察之后'&&await evaluate(`document.querySelector('.ice-left')?.innerText.includes('第一百次观察之后')||document.body.innerText.includes('草稿箱')`));
+  await shot('draft-handoff.png');
+  await click('选题与排期');await until(`document.querySelector('[aria-label="本期期号"]')?.value==='13'`);await click('发布记录');await until(`document.querySelector('.ice-editorial')?.innerText.includes('OBS / 70')`);
+  await clickSelector(`[...[...document.querySelectorAll('.ice-editorial__list-row')].find(e=>e.innerText.includes('OBS / 70')).querySelectorAll('button')].find(e=>e.innerText==='登记发布状态')`);
+  await until(`Boolean(document.querySelector('[aria-label="文章发布状态"]'))`);
+  await evaluate(`(()=>{const e=document.querySelector('[aria-label="文章发布状态"]');e.value='published';e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await field('实际发布日期','2099-01-01');await click('保存发布记录');await until(`document.body.innerText.includes('不能晚于今天')`);await idle();
+  assert('future_publication_date_is_rejected_and_input_kept',await evaluate(`document.querySelector('[aria-label="实际发布日期"]').value==='2099-01-01'`));
+  await field('实际发布日期','2026-10-01');await click('保存发布记录');await until(`!document.querySelector('[aria-label="文章发布状态"]')`);await idle();
+  await click('本期创作');await until(`document.querySelector('[aria-label="本期期号"]')?.value==='71'`);
+  assert('registering_real_publication_advances_default_issue',(await rpc('planning.context',{series:'OBS'})).next_episode===71);
+  await click('发布记录');await field('本栏已发布到第几期','50');await click('保存发布进度');await idle();
+  assert('quick_progress_does_not_erase_higher_published_records',(await rpc('planning.context',{series:'OBS'})).last_published_episode===70);
+  assert('source_document_bytes_unchanged',digest(f.document)===documentBefore);
+  assert('outline_edit_does_not_rewrite_already_confirmed_conversation',(await rpc('chat.get',{conversation_id:cid})).candidates[0].title==='第一百次观察之后');
+  // Scale the real persisted schedule beyond a thousand rows, then exercise
+  // opening/unmounting the actual panel; do not equate bundle size with RAM.
+  const scaleText='## OBS\n'+Array.from({length:1000},(_,i)=>`### 第${3001+i}期：长期观察主题${3001+i}\n内容要点：独立验收数据。`).join('\n');
+  const scale=await rpc('outlines.preview',{text:scaleText,source_name:'owned scale fixture'});
+  await rpc('outlines.save',{text:scaleText,source_name:scale.source_name,rows:scale.rows,base_hash:scale.base_hash,preview_hash:scale.preview_hash});
+  await click('关闭');await until(`!document.querySelector('[role=dialog]')`);
+  const visit=async()=>{
+   await click('选题与排期');await until(`Boolean(document.querySelector('[aria-label="本期期号"]'))`);await click('选题大纲');
+   await until(`document.querySelector('.ice-editorial')?.innerText.includes('1026 条')`);
+   const bounded=await evaluate(`document.querySelectorAll('.ice-editorial__list-row').length===10`);
+   await click('关闭');await until(`!document.querySelector('[role=dialog]')`);return bounded;
+  };
+  const memory=async()=>{await call('HeapProfiler.collectGarbage');await wait(180);await call('HeapProfiler.collectGarbage');return {heap:await call('Runtime.getHeapUsage'),dom:await call('Memory.getDOMCounters')};};
+  for(let n=0;n<3;n++)await visit();
+  const warm=await memory();let bounded=true;
+  for(let n=0;n<12;n++)bounded=(await visit())&&bounded;
+  const settled=await memory();report.memory={warm,settled,heap_growth_bytes:settled.heap.usedSize-warm.heap.usedSize,cycles_after_warmup:12,persisted_topics:1026};
+  assert('thousand_saved_topics_render_only_ten_rows',bounded);
+  assert('repeated_panel_closure_releases_dom',settled.dom.nodes<=warm.dom.nodes+30);
+  assert('repeated_panel_closure_bounds_heap_growth',report.memory.heap_growth_bytes<4*1024*1024);
+  assert('repeated_panel_closure_does_not_accumulate_event_listeners',settled.dom.jsEventListeners<=warm.dom.jsEventListeners+12);
+  report.errors.push(...session.errors);assert('no_uncaught_renderer_errors',report.errors.length===0);report.state='finished';report.success=true;
+ }catch(error){report.state='failed';report.success=false;report.errors.push(error.stack);if(session)try{await shot('failure.png');}catch{}throw error;}
+ finally{save();if(session)await session.close();}
+})().then(()=>console.log(JSON.stringify({success:true,checks:Object.keys(report.checks).length,evidence_dir:attempt}))).catch(error=>{console.error(error.stack);process.exitCode=1;});

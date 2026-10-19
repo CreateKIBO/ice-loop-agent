@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..domain.types import new_id
 from ..paths import ensure_dir, normalize, assert_not_c_drive
+from ..image_memory import serialized_image_decode
 
 # PNG / JPEG / WebP 魔数（下载校验：HTML 错误页不能冒充图片，§22.1）
 _MAGIC = (
@@ -17,6 +18,7 @@ _MAGIC = (
 )
 
 
+@serialized_image_decode
 def validate_image_file(path: Path) -> tuple[bool, str, int]:
     """返回 (是否有效图片, mime, 大小)。"""
     if not path.is_file() or not 0 < path.stat().st_size <= 32 * 1024 * 1024:

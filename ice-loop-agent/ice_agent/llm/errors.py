@@ -61,6 +61,12 @@ class ContextLengthError(ModelError):
         super().__init__("CONTEXT_LENGTH", message)
 
 
+class RequestTimeoutError(ModelError):
+    """One attempt's total deadline, including waiting for response headers/body."""
+    def __init__(self, message: str):
+        super().__init__('MODEL_TIMEOUT', message)
+
+
 class ParamUnsupportedError(ModelError):
     """参数不被模型支持：preflight 拒绝或修正能力标签。"""
 

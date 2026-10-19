@@ -69,7 +69,8 @@ class NodeContext:
         from ..llm.errors import ModelError
         from ..task_lifecycle import task_is_hidden
         current = self.store.get_job(self.job['job_id'])
-        if not current or current['state'] in ('paused', 'cancelled') or task_is_hidden(self.store, self.job['job_id']):
+        cancelled = getattr(self.router,'cancelled',None)
+        if (cancelled and cancelled()) or not current or current['state'] in ('paused', 'cancelled') or task_is_hidden(self.store, self.job['job_id']):
             raise ModelError('CANCELLED', '任务已停止，保留已完成的文章与运行证据')
 
     def render(self, node, **values):
@@ -328,8 +329,8 @@ def node_verify_code(ctx: NodeContext) -> dict[str, Any]:
     if plan['blocks'] and not reviewed:
         raise UserActionRequired(
             "演示代码需要在本机真实执行（§14.2 受控本机模式）："
-            "请在任务输入设置 approve_local_exec=true（CLI --allow-local-exec）"
-            "以确认你已审阅将运行的代码")
+            "请在代码运行面板审阅源码和示例输入后确认运行。"
+            "CLI 可使用 --allow-local-exec 确认已审阅将运行的代码")
     previous=ctx.state.get('runs',{});runs={};ctx.state['runs']=runs
     for block in plan['blocks']:
         ctx.check_cancelled()
@@ -363,6 +364,9 @@ def node_verify_code(ctx: NodeContext) -> dict[str, Any]:
         ctx.store.save_checkpoint(ctx.job['job_id'],ctx.state)
         ctx.emit("step.progress", {"run_id": rec.run_id, "verdict": v,
                                    "exit_code": rec.exit_code})
+        if v == 'cancelled':
+            from ..llm.errors import ModelError
+            raise ModelError('CANCELLED', '教学程序已停止，真实输出与清理记录已保留')
         if v in ("runtime_error", "timed_out", "expected_failure_but_succeeded", "output_limit_exceeded"):
             raise NodeFailed(
                 "verify_code", "CODE_VERIFY_FAILED",
@@ -753,12 +757,8 @@ def _run_rules(ctx: NodeContext, text: str) -> dict[str, Any]:
 
 
 def _evidenced_claims(ctx):
-    claims = ctx.store.article_claims(ctx.article["article_id"])
-    for claim in claims:
-        refs = [ctx.store.get_source(sid) for sid in claim.get("source_ids", [])]
-        claim["evidence_verified"] = bool(refs) and all(
-            ref and ref.get("content_hash") and ref.get("summary") for ref in refs)
-    return claims
+    from ..rules.facts import evidenced_claims
+    return evidenced_claims(ctx.store,ctx.article['article_id'])
 
 
 def evidence_errors(text: str, runs: dict[str, dict]) -> list[str]:

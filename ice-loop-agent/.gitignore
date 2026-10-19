@@ -11,6 +11,8 @@ __pycache__/
 .deps/
 .review-uv-cache/
 .desktop-runtime/
+.desktop-runtime-*/
+.desktop-data-path.json
 .desktop-articles/
 desktop/node_modules/
 desktop/dist/
@@ -48,3 +50,16 @@ secrets.json
 build/ice-engine/
 build/*.toc
 docs/screenshots/
+
+# Local acceptance output stays on the development machine; keep reports and reusable runners.
+/docs/上线准备/*
+!/docs/上线准备/*.md
+!/docs/上线准备/run_*_checks.py
+!/docs/上线准备/image_memory_bench.py
+!/docs/上线准备/measure_network_client.py
+!/docs/上线准备/check_context_transport.py
+!/docs/上线准备/measure-network.cjs
+!/docs/上线准备/measure-paging.cjs
+!/docs/上线准备/check-network-frozen.cjs
+/docs/交互迭代-2026-10-15/*.json
+/docs/交互迭代-2026-10-15/*.png

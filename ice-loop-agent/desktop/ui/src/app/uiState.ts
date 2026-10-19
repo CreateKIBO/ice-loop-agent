@@ -21,4 +21,11 @@ function createValueStore<T>(initial: T) {
 
 export const paletteStore = createValueStore(false);
 export const settingsStore = createValueStore(false);
+export const backupSettingsStore = createValueStore(false);
+export const editorialStore = createValueStore(false);
+export const publicationSettingsStore = createValueStore(false);
+export const publicationEntryStore = createValueStore<"identity" | "new" | "history">("identity");
+export function openPublicationSetup(entry: "identity" | "new" | "history") {
+  publicationEntryStore.set(entry); publicationSettingsStore.set(true);
+}
 export const engineStore = createValueStore<"ready" | "exited">("ready");

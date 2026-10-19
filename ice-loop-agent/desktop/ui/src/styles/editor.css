@@ -95,12 +95,23 @@
 
 /* ---------------------------------------------------------------- 编辑器顶栏 */
 .ice-editor-bar {
-  display: flex; align-items: center; gap: var(--ice-space-2); flex-wrap: wrap;
+  display: grid; gap: var(--ice-space-2); min-width: 0;
   position: sticky; top: calc(-1 * var(--ice-space-4)); z-index: 1;
   margin: calc(-1 * var(--ice-space-4)) calc(-1 * var(--ice-space-4)) 0;
   padding: var(--ice-space-3) var(--ice-space-4);
   background: var(--ice-warm-white); border-bottom: 1px solid var(--ice-border);
 }
+.ice-editor-bar__primary, .ice-editor-bar__secondary {
+  display: flex; align-items: center; gap: var(--ice-space-2); min-width: 0;
+}
+.ice-editor-bar__identity {
+  flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap;
+  gap: 6px var(--ice-space-2);
+}
+.ice-editor-bar__primary > button { flex: 0 0 auto; }
+.ice-editor-bar__secondary { flex-wrap: wrap; justify-content: space-between; }
+.ice-editor-bar__count { color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); white-space: nowrap; }
+.ice-editor-bar__actions { display: flex; align-items: center; gap: var(--ice-space-2); flex-wrap: wrap; }
 
 /* ---------------------------------------------------------------- 交付审阅 */
 .ice-review-heading {

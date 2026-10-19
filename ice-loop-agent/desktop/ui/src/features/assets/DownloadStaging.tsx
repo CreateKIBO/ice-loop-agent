@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Button } from "../../components/ui";
 import { toast } from "../../components/toast";
 import { rpc, useAccountQuery, type RpcError } from "../../data/client";
+import { usePaneActive } from "../../app/PaneActivity";
 
 type DownloadRow = {
   download_id: string; file_path: string; file_sha256: string; mime: string;
@@ -26,8 +27,9 @@ function formatSize(bytes: number): string {
 }
 
 export function DownloadStaging() {
+  const active = usePaneActive();
   const list = useAccountQuery<{ downloads: DownloadRow[] }>("downloads.list", {},
-    { refetchInterval: 8_000 });
+    { enabled: active, refetchInterval: 8_000 });
   const rows = list.data?.downloads ?? [];
   const pending = rows.filter(row => row.status === "pending").length;
   const [open, setOpen] = React.useState(true);

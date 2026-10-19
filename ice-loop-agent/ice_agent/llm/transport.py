@@ -1,4 +1,4 @@
-"""OpenAI 兼容 Chat Completions 传输层（纯标准库 urllib 实现）。
+"""OpenAI compatible Chat Completions with bounded, cancellable HTTPX I/O.
 
 安全边界（设计文档 §9.15 / §20.3）：
 - base_url 只允许 https（本机联调可显式放行 http 且仅限回环地址）；
@@ -13,6 +13,8 @@ import ipaddress
 import json
 import socket
 import time
+import zlib
+from contextlib import closing
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -32,6 +34,8 @@ from .errors import (
 )
 
 _SENSIBLE_TIMEOUT = 120
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_SSE_EVENT_BYTES = 2 * 1024 * 1024
 
 
 class EndpointRejected(NetworkError):
@@ -49,6 +53,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def validate_endpoint(base_url: str, *, allow_loopback_http: bool = False) -> str:
     """校验端点协议与主机地址边界；返回规范化的 base_url（尾部不带 /）。"""
     parsed = urlparse(base_url)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise EndpointRejected('端点不允许用户名、密码、查询或片段')
     host = parsed.hostname or ""
     if not host:
         raise EndpointRejected(f"base_url 缺少主机名：{base_url}")
@@ -117,6 +123,20 @@ class OpenAIChatTransport:
     def __init__(self, *, allow_loopback_http: bool = False):
         self._allow_loopback_http = allow_loopback_http
 
+    def models(self, base_url: str, api_key: str, *, timeout: float = 25) -> list[dict]:
+        """Bounded metadata GET; same endpoint/redirect/auth boundary as chat."""
+        try:
+            raw=self._receive(base_url,'/models',api_key,method='GET',timeout=timeout,limit=2_000_000)
+            data=json.loads(raw)
+            rows=data.get('data') if isinstance(data,dict) else None
+            if not isinstance(rows,list) or len(rows)>10000:
+                raise ParamUnsupportedError('模型目录格式无效，请手动填写模型ID')
+            return [row for row in rows if isinstance(row,dict) and isinstance(row.get('id'),str) and 0<len(row['id'])<=200]
+        except IncompleteResponseError:
+            raise ParamUnsupportedError('模型目录过大或响应损坏，请手动填写模型ID') from None
+        except (ValueError,UnicodeError):
+            raise ParamUnsupportedError('模型目录不是有效JSON，请手动填写模型ID') from None
+
     def chat(
         self,
         base_url: str,
@@ -129,47 +149,81 @@ class OpenAIChatTransport:
         timeout: float = _SENSIBLE_TIMEOUT,
         on_delta: Callable[[str], None] | None = None,
     ) -> ChatResult:
-        url = validate_endpoint(base_url,
-                                allow_loopback_http=self._allow_loopback_http)
-        url = url + "/chat/completions"
         body: dict[str, Any] = {"model": model, "messages": messages}
         if stream:
             body["stream"] = True
             body["stream_options"] = {"include_usage": True}
         if extra_body:
             body.update(extra_body)
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-                "Accept": "text/event-stream" if stream else "application/json",
-            },
-            method="POST",
-        )
-        opener = urllib.request.build_opener(_NoRedirect)
+        result=self._receive(base_url,'/chat/completions',api_key,method='POST',
+            body=json.dumps(body,ensure_ascii=False).encode('utf-8'),timeout=timeout,
+            limit=MAX_RESPONSE_BYTES,stream=stream,on_delta=on_delta)
+        if isinstance(result,ChatResult):
+            return result
         try:
-            resp = opener.open(req, timeout=timeout)
-        except urllib.error.HTTPError as e:
-            if 300 <= e.code < 400:
-                raise EndpointRejected(
-                    f"服务端要求重定向（HTTP {e.code}），已拒绝以免凭据外泄") from e
-            _raise_for_status(e.code, e.read().decode("utf-8", "replace"))
-        except urllib.error.URLError as e:
-            if isinstance(e.reason, urllib.error.HTTPError):
-                raise
-            raise NetworkError(f"网络请求失败：{type(e.reason).__name__}") from e
-        except (TimeoutError, OSError) as e:
-            raise NetworkError(f"网络请求失败：{type(e).__name__}") from e
-        with resp:
-            if stream:
-                return _read_sse(resp, on_delta, deadline=time.monotonic() + timeout)
-            raw = resp.read(8 * 1024 * 1024 + 1)
-            if len(raw) > 8 * 1024 * 1024:
-                raise IncompleteResponseError("响应超过大小上限")
-        text = raw.decode("utf-8", "replace")
-        return _parse_json_response(text)
+            return _parse_json_response(result.decode('utf-8','strict'))
+        except UnicodeError:
+            raise IncompleteResponseError('响应包含损坏的UTF8字符') from None
+
+    def _receive(self,base_url,suffix,api_key,*,method,timeout,limit,body=None,stream=False,on_delta=None):
+        from .http_io import exchange
+        headers={'Authorization':'Bearer '+api_key,'Accept':'text/event-stream' if stream else 'application/json',
+                 'Accept-Encoding':'identity'}
+        if body is not None:
+            headers['Content-Type']='application/json'
+        with closing(exchange(base_url,suffix,method=method,headers=headers,body=body,timeout=timeout,
+                              allow_loopback=self._allow_loopback_http)) as events:
+            kind,head=next(events)
+            if kind!='headers':
+                raise IncompleteResponseError('响应缺少HTTP头部')
+            status,response_headers=head
+            if 300<=status<400:
+                raise EndpointRejected('服务端要求重定向，已拒绝以保护凭据')
+            if status>=400:
+                if status!=400:
+                    _raise_for_status(status,'')
+                prefix=b''.join(_decoded_chunks(events,response_headers,65536,prefix_only=True))
+                _raise_for_status(status,prefix.decode('utf-8','replace'))
+            chunks=_decoded_chunks(events,response_headers,limit)
+            if stream and 'application/json' not in response_headers.get('content-type',''):
+                parser=_SSEReader(on_delta)
+                for chunk in chunks:
+                    parser.feed(chunk)
+                    if parser.done:
+                        break
+                return parser.result()
+            return b''.join(chunks)
+
+
+def _decoded_chunks(events,headers,limit,*,prefix_only=False):
+    encoding=headers.get('content-encoding','identity').lower().strip()
+    if encoding not in ('','identity','gzip','deflate'):
+        raise IncompleteResponseError('响应使用了不支持的压缩格式')
+    decoder=zlib.decompressobj(16+zlib.MAX_WBITS if encoding=='gzip' else zlib.MAX_WBITS) if encoding in ('gzip','deflate') else None
+    wire=total=0
+    try:
+        for kind,raw in events:
+            if kind!='data':continue
+            wire+=len(raw)
+            if wire>limit and not prefix_only:
+                raise IncompleteResponseError('响应超过字节大小上限')
+            while raw:
+                chunk=decoder.decompress(raw,min(65536,limit-total+1)) if decoder else raw
+                if decoder and decoder.unused_data:
+                    raise IncompleteResponseError('压缩响应包含额外数据')
+                raw=decoder.unconsumed_tail if decoder else b''
+                total+=len(chunk)
+                if total>limit:
+                    if prefix_only:
+                        yield chunk[:len(chunk)-(total-limit)]
+                        return
+                    raise IncompleteResponseError('响应超过字节大小上限')
+                if chunk:yield chunk
+            if prefix_only and (total>=limit or wire>=limit):return
+        if decoder and not decoder.eof:
+            raise IncompleteResponseError('压缩响应未完整结束')
+    except zlib.error:
+        raise IncompleteResponseError('压缩响应损坏') from None
 
 
 def _parse_json_response(text: str) -> ChatResult:
@@ -177,12 +231,18 @@ def _parse_json_response(text: str) -> ChatResult:
         data = json.loads(text)
     except json.JSONDecodeError as e:
         raise EmptyResponseError("响应不是合法 JSON") from e
+    if not isinstance(data,dict):
+        raise IncompleteResponseError('响应对象格式无效')
     if "error" in data and not data.get("choices"):
         raise ServerError("服务端返回错误对象")
     choices = data.get("choices") or []
     if not choices:
         raise EmptyResponseError("choices 为空（可能为 JSON 模式空内容）")
-    content = (choices[0].get("message") or {}).get("content") or ""
+    if not isinstance(choices,list) or not isinstance(choices[0],dict) or not isinstance(choices[0].get('message'),dict):
+        raise IncompleteResponseError('响应choices格式无效')
+    content = choices[0]['message'].get('content') or ""
+    if not isinstance(content,str):
+        raise IncompleteResponseError('响应正文格式无效')
     if not content.strip():
         raise EmptyResponseError("模型返回空正文（JSON 模式可能出现空内容，需重试）")
     finish = choices[0].get("finish_reason", "")
@@ -202,49 +262,108 @@ def _check_finish(reason: str) -> None:
         raise IncompleteResponseError(f"正文没有正常完成（finish_reason={reason or 'missing'}）")
 
 
-def _read_sse(lines, on_delta=None, *, deadline: float | None = None) -> ChatResult:
-    chunks: list[str] = []
-    usage: dict[str, Any] = {}
-    finish = ""
-    model = ""
-    size = 0
-    for line in lines:
-        if deadline is not None and time.monotonic() > deadline:
-            raise IncompleteResponseError("流式请求超过总时限")
-        if isinstance(line, bytes):
-            line = line.decode("utf-8", "strict")
-        size += len(line)
-        if size > 8 * 1024 * 1024:
-            raise IncompleteResponseError("流式响应超过大小上限")
-        line = line.strip()
-        if not line.startswith("data:"):
-            continue
-        payload = line[5:].strip()
-        if payload == "[DONE]":
-            break
+class _SSEReader:
+    def __init__(self,on_delta=None):
+        self.on_delta=on_delta
+        self.buffer=bytearray();self.chunks=[];self.pending=[]
+        self.total=0;self.event_bytes=0;self.done=False
+        self.usage={};self.finish='';self.model=''
+        self.depth=0;self.quoted=False;self.escaped=False;self.has_token=False
+
+    def feed(self,chunk):
+        self.total+=len(chunk)
+        if self.total>MAX_RESPONSE_BYTES:
+            raise IncompleteResponseError('流式响应超过字节大小上限')
+        self.buffer.extend(chunk)
+        while not self.done:
+            split=self.buffer.find(b'\n')
+            if split<0:break
+            line=bytes(self.buffer[:split]);del self.buffer[:split+1]
+            self.line(line)
+        if len(self.buffer)>MAX_SSE_EVENT_BYTES:
+            raise IncompleteResponseError('单个流式事件超过大小上限')
+
+    def line(self,raw):
+        if len(raw)>MAX_SSE_EVENT_BYTES:
+            raise IncompleteResponseError('单个流式事件超过大小上限')
         try:
-            evt = json.loads(payload)
-        except json.JSONDecodeError as exc:
-            raise IncompleteResponseError("流式事件损坏") from exc
-        if evt.get("error"):
-            raise ServerError("流式响应返回错误事件")
-        model = model or evt.get("model", "")
-        if evt.get("usage"):
-            usage = evt["usage"]
-        for ch in evt.get("choices") or []:
-            finish = ch.get("finish_reason") or finish
-            delta = ch.get("delta") or {}
-            piece = delta.get("content")
+            line=raw.decode('utf-8','strict') if isinstance(raw,bytes) else raw
+        except UnicodeError:
+            raise IncompleteResponseError('流式事件包含损坏的UTF8字符') from None
+        line=line.rstrip('\r\n')
+        if not line:
+            if self.pending:self.dispatch(final=True)
+            return
+        if not line.startswith('data:'):return
+        payload=line[5:].lstrip(' ')
+        self.event_bytes+=len(raw if isinstance(raw,bytes) else raw.encode('utf-8'))
+        if self.event_bytes>MAX_SSE_EVENT_BYTES:
+            raise IncompleteResponseError('单个流式事件超过大小上限')
+        if payload=='[DONE]':
+            if self.pending:self.dispatch(final=True)
+            self.done=True;return
+        self.pending.append(payload)
+        # Scan once; do not repeatedly parse an ever-growing multiline prefix.
+        for char in payload:
+            if not char.isspace():self.has_token=True
+            if self.quoted:
+                if self.escaped:self.escaped=False
+                elif char=='\\':self.escaped=True
+                elif char=='"':self.quoted=False
+            elif char=='"':self.quoted=True
+            elif char in '{[':self.depth+=1
+            elif char in '}]':self.depth-=1
+            if self.depth<0:raise IncompleteResponseError('流式事件损坏')
+        if self.has_token and self.depth==0 and not self.quoted:self.dispatch(final=True)
+
+    def dispatch(self,*,final):
+        try:
+            event=json.loads('\n'.join(self.pending))
+        except (ValueError,RecursionError):
+            if final:raise IncompleteResponseError('流式事件损坏') from None
+            return
+        self.pending.clear();self.event_bytes=0
+        self.depth=0;self.quoted=False;self.escaped=False;self.has_token=False
+        if not isinstance(event,dict):raise IncompleteResponseError('流式事件对象格式无效')
+        if event.get('error'):raise ServerError('流式响应返回错误事件')
+        self.model=self.model or event.get('model','')
+        if isinstance(event.get('usage'),dict):self.usage=event['usage']
+        choices=event.get('choices') or []
+        if not isinstance(choices,list):raise IncompleteResponseError('流式choices格式无效')
+        for choice in choices:
+            if not isinstance(choice,dict):raise IncompleteResponseError('流式choice格式无效')
+            self.finish=choice.get('finish_reason') or self.finish
+            delta=choice.get('delta') or {}
+            if not isinstance(delta,dict):raise IncompleteResponseError('流式delta格式无效')
+            piece=delta.get('content')
             if piece:
-                chunks.append(piece)
-                if on_delta:
-                    on_delta(piece)
-    content = "".join(chunks)
-    if not content.strip():
-        raise EmptyResponseError("流式响应没有收到任何正文增量")
-    _check_finish(finish)
-    return ChatResult(content=content, finish_reason=finish,
-                      usage=usage, raw_model=model, streamed=True)
+                if not isinstance(piece,str):raise IncompleteResponseError('流式正文格式无效')
+                try:piece.encode('utf-8','strict')
+                except UnicodeError:raise IncompleteResponseError('流式正文包含损坏的Unicode字符') from None
+                self.chunks.append(piece)
+                if self.on_delta:self.on_delta(piece)
+
+    def result(self):
+        if self.buffer and not self.done:self.line(bytes(self.buffer))
+        if self.pending:self.dispatch(final=True)
+        self.buffer.clear()
+        content=''.join(self.chunks)
+        if not content.strip():raise EmptyResponseError('流式响应没有收到任何正文增量')
+        _check_finish(self.finish)
+        return ChatResult(content=content,finish_reason=self.finish,usage=self.usage,raw_model=self.model,streamed=True)
+
+
+def _read_sse(lines, on_delta=None, *, deadline: float | None = None) -> ChatResult:
+    """In-memory line compatibility helper; live HTTP uses bounded byte chunks."""
+    parser=_SSEReader(on_delta)
+    for line in lines:
+        if deadline is not None and time.monotonic()>deadline:
+            raise IncompleteResponseError('流式请求超过总时限')
+        parser.total+=len(line if isinstance(line,bytes) else line.encode('utf-8'))
+        if parser.total>MAX_RESPONSE_BYTES:raise IncompleteResponseError('流式响应超过字节大小上限')
+        parser.line(line)
+        if parser.done:break
+    return parser.result()
 
 
 def _parse_sse(text: str, on_delta: Callable[[str], None] | None) -> ChatResult:

@@ -40,20 +40,17 @@ class WorkflowEngine:
         self.runner = runner or CodeRunner(cfg.runtime_root)
         self.ledger = ledger or OperationsLedger(store)
         self.exporter = exporter
+        self.should_stop: Callable[[], bool] | None = None
 
     # ------------------------------------------------------------ 建任务
     def create_job(self, spec: dict[str, Any], *,
                    limits: dict[str, Any] | None = None,
-                   mode: str = "semi_auto") -> tuple[str, str]:
+                   mode: str = "semi_auto",
+                   on_created: Callable[[str], None] | None = None) -> tuple[str, str]:
         series = spec.get("series", "PY")
         episode = int(spec.get("episode", 1))
         job_id = new_id("job")
         article_id = new_id("art")
-        self.store.create_article({
-            "article_id": article_id, "series": series, "episode": episode,
-            "topic": spec.get("topic", ""), "readiness": "draft",
-            "spec": spec,
-        })
         default_limits = {
             "max_model_calls":
                 self.cfg.profile.get("limits", {}).get("per_article_model_calls", 20),
@@ -62,23 +59,32 @@ class WorkflowEngine:
                 self.cfg.profile.get("limits", {}).get("max_auto_revision_rounds", 2),
         }
         default_limits.update(limits or {})
-        self.store.create_job({
-            "job_id": job_id, "article_id": article_id,
-            "workflow": "new_article_v1", "state": "queued",
-            "current_node": WORKFLOW_NODES[0], "mode": mode,
-            "model_route_snapshot": self.router.snapshot,
-            "limits": default_limits,
-        })
-        self.store.append_event(job_id, "job.created", {
-            "article_id": article_id, "mode": mode,
-            "route": self.router.snapshot})
         import copy
         state: dict[str, Any] = {"spec": spec, "rules_profile_snapshot": copy.deepcopy(self.cfg.profile)}
-        self._save_state(job_id, state)
+        # The queue binding (when present) shares this connection/transaction.
+        # After commit the DB checkpoint is authoritative even if the file mirror fails.
+        with self.store.transaction():
+            self.store.create_article({
+                'article_id':article_id,'series':series,'episode':episode,
+                'topic':spec.get('topic',''),'readiness':'draft','spec':spec,
+            },commit=False)
+            self.store.create_job({
+                'job_id':job_id,'article_id':article_id,'workflow':'new_article_v1',
+                'state':'queued','current_node':WORKFLOW_NODES[0],'mode':mode,
+                'model_route_snapshot':self.router.snapshot,'limits':default_limits,
+            },commit=False)
+            self.store.save_checkpoint(job_id,state,commit=False)
+            self.store.append_event(job_id,'job.created',{
+                'article_id':article_id,'mode':mode,'route':self.router.snapshot})
+            if on_created is not None:
+                on_created(job_id)
+        self._write_state_file(job_id,state)
         return job_id, article_id
 
     # -------------------------------------------------------------- 运行
     def _halted(self, job_id: str) -> bool:
+        if self.should_stop and self.should_stop():
+            return True
         from ..task_lifecycle import task_is_hidden
         job = self.store.get_job(job_id)
         return not job or job['state'] in ('paused', 'cancelled') or task_is_hidden(self.store, job_id)
@@ -89,7 +95,7 @@ class WorkflowEngine:
         # lock; otherwise an in-flight result could overwrite the pause request.
         with self.store.transaction():
             job = self.store.get_job(job_id)
-            if not job or task_is_hidden(self.store, job_id) or job['state'] == 'cancelled' or (
+            if (self.should_stop and self.should_stop()) or not job or task_is_hidden(self.store, job_id) or job['state'] == 'cancelled' or (
                     job['state'] == 'paused' and not allow_paused):
                 return False
             self.store.update_job(job_id, **fields)
@@ -107,6 +113,8 @@ class WorkflowEngine:
             if job is None:
                 raise KeyError(job_id)
             return job
+        previous_stop = getattr(self.runner, 'should_stop', None)
+        self.runner.should_stop = lambda: self._halted(job_id) or bool(previous_stop and previous_stop())
         try:
             return self._run(job_id, auto_approver=auto_approver, actor=actor)
         except Exception as exc:
@@ -117,6 +125,7 @@ class WorkflowEngine:
             self._update_if_active(job_id, state="failed", pause_reason=str(exc))
             return self.store.get_job(job_id)
         finally:
+            self.runner.should_stop = previous_stop
             self.store.release_job(job_id, token)
 
     def _run(self, job_id: str, *, auto_approver=None, actor="user") -> dict[str, Any]:

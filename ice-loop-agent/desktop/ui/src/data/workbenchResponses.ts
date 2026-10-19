@@ -5,10 +5,17 @@ export type ChatMessage = {
 };
 
 export type ChatResult = {
-  conversation: { id: string; title: string };
+  conversation: { id: string; title: string; target?:{editorial_plan?:{confirmation?:{fields:{series:string;episode:number;topic:string;title_mode:string}}}} };
   messages: ChatMessage[];
   candidates: unknown[];
   current: unknown;
+  message_page?: ChatPage;
+  candidate_page?: ChatPage;
+};
+
+export type ChatPage = {
+  has_older: boolean; has_newer: boolean;
+  oldest_id: string | null; newest_id: string | null;
 };
 
 /** Validate the response boundary before handing it to React. */
@@ -22,6 +29,14 @@ export function chatResult(value: unknown): ChatResult {
         && typeof message.id === "string" && typeof message.role === "string"
         && typeof message.content === "string" && typeof message.status === "string")) {
     throw new Error("会话响应格式无效，请重试或升级引擎");
+  }
+  for (const key of ['message_page', 'candidate_page']) {
+    if (row[key] === undefined) continue;
+    const page = row[key] as ChatPage | null;
+    if (!page || typeof page.has_older !== 'boolean' || typeof page.has_newer !== 'boolean'
+        || !['oldest_id', 'newest_id'].every(id => page[id as keyof ChatPage] === null || typeof page[id as keyof ChatPage] === 'string')) {
+      throw new Error('历史分页响应无效，请重试或升级引擎');
+    }
   }
   return value as ChatResult;
 }

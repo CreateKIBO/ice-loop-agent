@@ -87,7 +87,7 @@ function installBrowser({window:owner,assertSender,request,runtime}){
     let loadHome=false;
     if(!page){
       const ses=session.fromPartition(partition(id,site));configureSession(ses);
-      const view=new WebContentsView({webPreferences:{session:ses,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,backgroundThrottling:false}});
+      const view=new WebContentsView({webPreferences:{session:ses,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,backgroundThrottling:true}});
       page={site,account:id,session:ses,view,error:''};pages.set(site,page);secureContents(view.webContents,page);
       for(const eventName of ['did-start-loading','did-stop-loading','did-navigate','did-navigate-in-page','page-title-updated'])view.webContents.on(eventName,()=>{if(active===page)emit();});
       view.webContents.on('did-fail-load',(_e,code,_description,_url,main)=>{if(main&&code!==-3){page.error='网页加载失败（'+code+'），请检查网络后重试';if(active===page)emit();}});
@@ -114,6 +114,11 @@ function installBrowser({window:owner,assertSender,request,runtime}){
     else if(action==='forward'){if(wc.navigationHistory.canGoForward())wc.navigationHistory.goForward();}
     else if(action==='reload')wc.reload();
     else if(action==='stop')wc.stop();
+    else if(action==='close'){
+      const page=active;hide();pages.delete(page.site);active=null;layout=null;
+      for(const popup of popups)if(!popup.isDestroyed()&&popup.webContents.session===page.session){popup.destroy();popups.delete(popup);}
+      if(!wc.isDestroyed())wc.close();emit();return state();
+    }
     else if(action==='home')wc.loadURL(siteFor(active.site).url).catch(()=>{});
     else if(action==='navigate'){if(!allowedURL(value))throw Error('请输入有效的 HTTPS 网页地址');wc.loadURL(value).catch(()=>{});}
     else if(action==='logout'){

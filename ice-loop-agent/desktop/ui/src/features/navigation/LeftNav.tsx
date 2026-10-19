@@ -6,14 +6,18 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { Button, Dialog, EmptyState, Input, SkeletonRows, Spinner } from "../../components/ui";
 import { toast } from "../../components/toast";
-import { createConversation } from "../../data/actions";
+import { applyAccountBootstrap,createConversation,openGettingStarted } from "../../data/actions";
 import {
-  accountStore, conversationStore, editorStore, flushAllDirty, queryClient, resetForAccountSwitch,
+  accountStore, conversationStore, editorStore, flushAllDirty, queryClient,
   rpc, useAccountQuery, type RpcError,
 } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
-import { useModelReadiness } from "../../app/ModelSettings";
-import { settingsStore } from "../../app/uiState";
+import { useBootstrap,useModelReadiness } from "../../app/ModelSettings";
+import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore } from "../../app/uiState";
+import { CopyButton } from "../../components/CopyButton";
+import { openWebsite } from '../../data/websites';
+import { MarkdownContent } from "../../components/MarkdownContent";
+import { usePaneActive } from "../../app/PaneActivity";
 
 type BootstrapAccount = { id: string; name: string };
 type ConversationRow = {
@@ -48,6 +52,7 @@ const refreshConversationLists = () =>
 export function LeftNav({ accounts, activeAccountId, version }: {
   accounts: BootstrapAccount[]; activeAccountId: string; version?: string;
 }) {
+  const active = usePaneActive();
   const [filter, setFilter] = React.useState("");
   const [creating, setCreating] = React.useState(false);
   const [createError, setCreateError] = React.useState<string | null>(null);
@@ -55,9 +60,9 @@ export function LeftNav({ accounts, activeAccountId, version }: {
   const showArchived = view === "archived", showDeleted = view === "deleted";
   const requestId = React.useRef<string | null>(null);
   const conversations = useAccountQuery<ConversationRow[]>("chat.list", { archived: showArchived, deleted: showDeleted },
-    { staleTime: 3_000, refetchInterval: 15_000 });
+    { enabled: active, staleTime: 3_000, refetchInterval: 15_000 });
   const drafts = useAccountQuery<DraftRow[]>("chat.drafts", {},
-    { staleTime: 5_000, refetchInterval: 20_000 });
+    { enabled: active, staleTime: 5_000, refetchInterval: 20_000 });
 
   const filtered = React.useMemo(() => {
     const rows = conversations.data ?? [];
@@ -68,6 +73,8 @@ export function LeftNav({ accounts, activeAccountId, version }: {
     if (!needle) return visible;
     return visible.filter(row => row.title.toLowerCase().includes(needle));
   }, [conversations.data, filter, showArchived, showDeleted]);
+  const filteredDrafts = (drafts.data ?? []).filter(draft => !filter.trim()
+    || (draft.title + " " + (draft.series ?? "")).toLowerCase().includes(filter.trim().toLowerCase()));
 
   const newConversation = async () => {
     if (creating) return;
@@ -91,10 +98,10 @@ export function LeftNav({ accounts, activeAccountId, version }: {
         {createError && <div role="alert" style={{ color: "var(--ice-danger)", marginTop: 8 }}>{createError}</div>}
       </div>
       <div style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)", display: "grid", gap: "var(--ice-space-2)" }}>
-        <Input placeholder="搜索会话（当前公众号）" value={filter} type="search"
+        <Input placeholder="搜索会话或草稿" value={filter} type="search"
                onChange={event => setFilter(event.target.value)}
                onKeyDown={event => { if (event.key === "Escape" && filter) { event.preventDefault(); setFilter(""); } }}
-               aria-label="搜索会话" style={{ width: "100%" }} />
+               aria-label="搜索会话或草稿" style={{ width: "100%" }} />
         <div className="ice-segmented ice-segmented--animated" role="group" aria-label="会话筛选">
           {VIEWS.map(option => (
             <button key={option.value} type="button" aria-pressed={view === option.value}
@@ -107,6 +114,9 @@ export function LeftNav({ accounts, activeAccountId, version }: {
             </button>
           ))}
         </div>
+      </div>
+      <div className="ice-nav-summary"><span>{showDeleted ? "已删除会话" : showArchived ? "归档会话" : "最近会话"} · {filtered.length}</span>
+        {filter && <button type="button" className="ice-link-btn" onClick={() => setFilter("")}>清除搜索</button>}
       </div>
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, padding: "0 var(--ice-space-2)" }}>
         {conversations.isLoading && <SkeletonRows rows={6} height={16} />}
@@ -134,16 +144,17 @@ export function LeftNav({ accounts, activeAccountId, version }: {
           </AnimatePresence>
         </ul>
       </div>
-      <SectionTitle>草稿箱（保存 ≠ 采纳）</SectionTitle>
+      <SectionTitle>草稿箱 <span className="ice-nav-count">{filteredDrafts.length}</span></SectionTitle>
       <div style={{ flexShrink: 0, maxHeight: 200, overflowY: "auto", padding: "0 var(--ice-space-2) var(--ice-space-2)" }}>
         {drafts.isLoading && <SkeletonRows rows={2} height={12} gap={8} />}
-        {!drafts.isLoading && (drafts.data ?? []).length === 0 && (
+        {drafts.error && <div role="alert" className="ice-error-text">草稿加载失败 <button className="ice-link-btn" onClick={() => drafts.refetch()}>重试</button></div>}
+        {!drafts.isLoading && !drafts.error && filteredDrafts.length === 0 && (
           <div style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)", padding: "0 4px" }}>
-            暂无保存的草稿。初稿候选在对话中「保存为草稿」后出现在这里。
+            {filter.trim() ? "没有匹配的草稿。" : "在对话中保存初稿后会出现在这里，保存不等于采纳。"}
           </div>
         )}
         <ul className="ice-nav-list">
-          {(drafts.data ?? []).map(draft => (
+          {filteredDrafts.map(draft => (
             <DraftRowView key={draft.draft_id} draft={draft} />
           ))}
         </ul>
@@ -157,6 +168,7 @@ const READINESS: Record<string, { dot: string; label: string }> = {
   ready: { dot: "ok", label: "模型已就绪" },
   untested: { dot: "warn", label: "模型待测试" },
   missing: { dot: "bad", label: "未配置模型" },
+  unrouted: { dot: "warn", label: "需设置写作模型" },
   unknown: { dot: "", label: "模型设置" },
 };
 
@@ -170,7 +182,11 @@ function NavFooter({ version }: { version?: string }) {
         {readiness.label}
       </Button>
       <span style={{ flex: 1 }} />
-      <Button variant="ghost" size="sm" title="切换到经典界面：素材、版本、备份等完整功能"
+      <Button variant="ghost" size="sm" onClick={()=>void openGettingStarted().catch(error=>toast.error({title:'暂时无法返回指南',detail:(error as Error).message}))}>开始指南</Button>
+      <Button variant="ghost" size="sm" onClick={() => openWebsite('tapnow')}>网页工作台</Button>
+      <Button variant="ghost" size="sm" onClick={()=>editorialStore.set(true)}>选题与排期</Button>
+      <Button variant="ghost" size="sm" onClick={()=>backupSettingsStore.set(true)}>备份与恢复</Button>
+      <Button variant="ghost" size="sm" title="切换到经典界面：更多管理工具"
               onClick={() => switchToClassic().catch(error =>
                 toast.error({ title: "无法切换界面", detail: (error as Error).message }))}>
         经典界面
@@ -260,6 +276,7 @@ function RowAction({ label, title, onClick }: { label: string; title: string; on
 
 function DraftRowView({ draft }: { draft: DraftRow }) {
   const [open, setOpen] = React.useState(false);
+  const [source, setSource] = React.useState(false);
   const detail = useAccountQuery<DraftRow>("drafts.get", { draft_id: draft.draft_id },
     { enabled: open, staleTime: 0 });
   const statusLabel = draft.status === "accepted" ? "已采纳" :
@@ -272,29 +289,36 @@ function DraftRowView({ draft }: { draft: DraftRow }) {
         <span className="ice-nav-row__title">{draft.title}</span>
         <span className="ice-nav-row__meta">{statusLabel}</span>
       </button>
-      <Dialog open={open} onOpenChange={setOpen} title={draft.title}
+      <Dialog open={open} onOpenChange={setOpen} title={draft.title} width={820}
+              description="已保存草稿 · 保存不等于采纳或发布"
               footer={<Button onClick={() => setOpen(false)}>关闭</Button>}>
         <p style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)", marginTop: 0 }}>
           状态：{statusLabel} · 草稿保存在草稿库，不等于采纳或发布。
           {draft.series ? ` · ${draft.series}${draft.episode ? `-${String(draft.episode).padStart(3, "0")}` : ""}` : ""}
         </p>
-        <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--ice-font-ui)",
-                      background: "var(--ice-surface-muted)", padding: 12, borderRadius: 8,
-                      maxHeight: "50vh", overflowY: "auto", fontSize: "var(--ice-font-size-sm)" }}>
-          {detail.isLoading ? "正在读取草稿…" : detail.error
-            ? "读取失败：" + (detail.error as RpcError).message
-            : detail.data?.body ?? draft.body ?? ""}
-        </pre>
+        {detail.isLoading ? <SkeletonRows rows={5} /> : detail.error ? <div role="alert" className="ice-error-text">
+          读取失败：{(detail.error as RpcError).message} <Button size="sm" onClick={() => detail.refetch()}>重试</Button>
+        </div> : <>
+          <div className="ice-draft-view-controls"><div className="ice-segmented" role="group" aria-label="草稿阅读模式">
+            <button type="button" aria-pressed={!source} onClick={() => setSource(false)}>排版预览</button>
+            <button type="button" aria-pressed={source} onClick={() => setSource(true)}>Markdown</button>
+          </div><CopyButton text={detail.data?.body ?? draft.body ?? ""} label="复制草稿" /></div>
+          <div className="ice-draft-reading">{source ? <pre>{detail.data?.body ?? draft.body ?? ""}</pre>
+            : <MarkdownContent text={detail.data?.body ?? draft.body ?? ""} />}</div>
+        </>}
       </Dialog>
     </li>
   );
 }
 
-function AccountSwitcher({ accounts, activeAccountId }: {
+function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }: {
   accounts: BootstrapAccount[]; activeAccountId: string;
 }) {
   const [switching, setSwitching] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const boot=useBootstrap().data;
+  const current=useSyncExternalStore(accountStore.subscribe,accountStore.get);
+  const accounts=boot?.accounts??initialAccounts,activeAccountId=current||initialId;
   return (
     <div style={{ padding: "var(--ice-space-3)", display: "grid", gap: "var(--ice-space-2)" }}>
       <label className="ice-sr-only" htmlFor="ice-account-select">切换公众号</label>
@@ -310,10 +334,9 @@ function AccountSwitcher({ accounts, activeAccountId }: {
           try {
             // R04：切换前把全部脏对象（编辑器草稿）立即落盘到当前账号域。
             await flushAllDirty();
-            await rpc("accounts.switch", { account_id: nextId });
+            const result=await rpc<{account:{id:string}}>("accounts.switch", { account_id: nextId });
             // 整体清缓存 + 更新账号域（防串公众号）。
-            resetForAccountSwitch(nextId);
-            window.location.reload();
+            if(accountStore.get()===activeAccountId)applyAccountBootstrap(result);
           } catch (error) {
             setError((error as Error).message);
           } finally {
@@ -329,6 +352,7 @@ function AccountSwitcher({ accounts, activeAccountId }: {
           <option key={account.id} value={account.id}>{account.name}</option>
         ))}
       </select>
+      <Button variant="ghost" size="sm" disabled={switching} onClick={()=>publicationSettingsStore.set(true)}>公众号与品牌</Button>
       {error && <div role="alert" style={{ color: "var(--ice-danger)", fontSize: 12 }}>{error}</div>}
     </div>
   );

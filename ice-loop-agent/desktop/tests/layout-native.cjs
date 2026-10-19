@@ -1,0 +1,128 @@
+'use strict';
+// Actual renderer clicks, resize and key events. No browser/model/OS-dialog mocks.
+const fs=require('node:fs'),path=require('node:path');
+const {openNativeSession,wait}=require('./native-session.cjs');
+const repo=path.resolve(__dirname,'../..'),out=path.join(repo,'docs/上线准备');
+const fixture=JSON.parse(fs.readFileSync(path.join(out,'layout-fixture.json'),'utf8'));
+const attempt=path.join(out,'layout-attempts',path.basename(path.dirname(fixture.runtime))+'-'+Date.now());
+fs.mkdirSync(attempt,{recursive:true});
+const report={state:'running',runtime:fixture.runtime,evidence_dir:attempt,checks:{},errors:[]};
+const save=()=>{const body=JSON.stringify(report,null,2);fs.writeFileSync(path.join(out,'layout-native.json'),body);fs.writeFileSync(path.join(attempt,'result.json'),body);};
+const assert=(name,value)=>{report.checks[name]=Boolean(value);save();if(!value)throw Error(name+' failed');};
+(async()=>{
+ save();const session=await openNativeSession(repo,fixture.runtime,{entryPath:fixture.entry}),{call,evaluate,until}=session;
+ const visible=`e=>!e.closest('[hidden]')&&!e.disabled&&e.getBoundingClientRect().width>0`;
+ const button=(text,scope='document')=>`[...${scope}.querySelectorAll('button')].filter(${visible}).find(e=>e.innerText.trim()===${JSON.stringify(text)})`;
+ const click=async(text,scope='document')=>{
+  await until(`Boolean(${button(text,scope)})`);
+  const point=await evaluate(`(()=>{const b=${button(text,scope)};b.scrollIntoView({block:'center',inline:'nearest'});const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  for(const type of ['mouseMoved','mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,...(type==='mouseMoved'?{}:{button:'left',clickCount:1})});
+ };
+ const select=async title=>{
+  const selector='button[title='+JSON.stringify(title)+']';
+  await until(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
+  const point=await evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)});b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  for(const type of ['mousePressed','mouseReleased'])await call('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+ };
+ const field=(selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing input');Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ const size=async width=>{await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await until(`document.querySelector('.ice-shell')?.clientWidth===${width}`);await wait(180);};
+ const rpc=(method,params={})=>evaluate(`window.ice.request(${JSON.stringify(method)},${JSON.stringify(params)})`);
+ const shot=async name=>{const r=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(attempt,name),Buffer.from(r.data,'base64'));};
+ const escape=async()=>{for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});};
+ try{
+  await size(1280);await until(`Boolean(document.querySelector('[aria-label="搜索会话或草稿"]'))`);
+  assert('large_window_docked_panes',await evaluate(`!document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await click('会话与草稿');
+  assert('left_can_collapse_independently',await evaluate(`document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await click('专注写作');
+  assert('focus_mode_gives_center_full_width',await evaluate(`document.querySelector('#ice-writing-pane').getBoundingClientRect().width===1280`));
+  await click('恢复侧栏');
+  assert('focus_restore_remembers_independent_choices',await evaluate(`document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await size(800);
+  assert('small_window_opens_with_full_writing_surface',await evaluate(`document.querySelector('.ice-shell').dataset.compact==='true'&&document.querySelector('#ice-writing-pane').clientWidth===800`));
+  await click('会话与草稿');await field('[aria-label="搜索会话或草稿"]','布局');
+  assert('navigation_uses_whole_small_window',await evaluate(`document.querySelector('#ice-navigation-pane').clientWidth===800&&document.querySelector('#ice-writing-pane').hidden`));
+  await select('布局验收对话');await until(`document.querySelector('.ice-conversation-header h1')?.innerText==='布局验收对话'&&!document.querySelector('#ice-writing-pane').hidden`);
+  assert('selecting_conversation_returns_to_writing',true);
+  await field('textarea[aria-label="消息输入"]','尚未发送的布局验收消息');
+  await evaluate(`void(window.__layoutComposer=document.querySelector('textarea[aria-label="消息输入"]'))`);
+  await click('任务与资料');
+  assert('tasks_use_whole_small_window',await evaluate(`document.querySelector('#ice-task-pane').clientWidth===800&&document.querySelector('#ice-navigation-pane').hidden`));
+  await click('写作区');
+  assert('unsent_input_and_same_dom_survive_panel_switch',await evaluate(`window.__layoutComposer===document.querySelector('textarea[aria-label="消息输入"]')&&window.__layoutComposer.value==='尚未发送的布局验收消息'`));
+  await click('会话与草稿');
+  assert('navigation_filter_is_preserved',await evaluate(`document.querySelector('[aria-label="搜索会话或草稿"]').value==='布局'`));
+  await evaluate(`document.querySelector('[aria-label="搜索会话或草稿"]').focus()`);await escape();
+  assert('first_escape_clears_filter_without_hiding_navigation',await evaluate(`!document.querySelector('#ice-navigation-pane').hidden&&document.querySelector('[aria-label="搜索会话或草稿"]').value===''`));
+  await escape();await until(`!document.querySelector('#ice-writing-pane').hidden`);
+  assert('second_escape_returns_focus_to_visible_center',await evaluate(`document.activeElement===document.querySelector('#ice-writing-pane')`));
+  await click('任务与资料');await click('编辑正文');
+  await until(`Boolean(document.querySelector('.tiptap h1'))&&!document.querySelector('#ice-writing-pane').hidden`);
+  await click('源模式');await until(`Boolean(document.querySelector('.cm-content'))`);
+  await evaluate(`window.__layoutEditor=document.querySelector('.cm-content');window.__layoutEditor.focus()`);
+  for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:'End',code:'End',modifiers:2,windowsVirtualKeyCode:35});
+  await call('Input.insertText',{text:'\n\nPRESERVED_UNSAVED_LAYOUT_EDIT'});
+  await click('任务与资料');await click('写作区');
+  assert('editor_is_not_recreated_or_lost',await evaluate(`window.__layoutEditor===document.querySelector('.cm-content')&&window.__layoutEditor.innerText.includes('PRESERVED_UNSAVED_LAYOUT_EDIT')`));
+  assert('layout_switch_does_not_publish_unsaved_body',!(await rpc('articles.document',{job_id:fixture.job})).markdown.includes('PRESERVED_UNSAVED_LAYOUT_EDIT'));
+  await until(`window.ice.request('articles.editor_draft_get',{job_id:${JSON.stringify(fixture.job)}}).then(r=>r.draft?.content.includes('PRESERVED_UNSAVED_LAYOUT_EDIT'))`);
+  assert('autosave_keeps_recovery_after_layout_change',true);
+  for(const width of [1024,800,620,500]){
+   await size(width);
+   assert('center_fills_available_width_'+width,await evaluate(`document.querySelector('#ice-writing-pane').clientWidth===window.innerWidth`));
+   assert('no_horizontal_page_overflow_'+width,await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`));
+   assert('hidden_panes_are_inert_'+width,await evaluate(`[...document.querySelectorAll('.ice-pane[hidden], .ice-pane--center[hidden]')].every(e=>e.inert&&e.getBoundingClientRect().width===0)`));
+   if(width===800)await shot('compact-editor.png');
+  }
+  await evaluate(`document.querySelector('.ice-shell-toolbar button').focus()`);
+  for(let n=0;n<12;n++){
+   for(const type of ['keyDown','keyUp'])await call('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+   if(await evaluate(`Boolean(document.activeElement?.closest('[hidden]'))`))throw Error('Keyboard focus entered a hidden surface');
+  }
+  assert('actual_tab_navigation_skips_hidden_controls',true);
+  await size(1280);
+  assert('wide_return_restores_previous_dock_choices',await evaluate(`document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await shot('wide-editor.png');
+  await click('保存新版本');
+  await until(`window.ice.request('articles.document',{job_id:${JSON.stringify(fixture.job)}}).then(r=>r.markdown.includes('PRESERVED_UNSAVED_LAYOUT_EDIT'))`);
+  await until(`document.querySelector('.ice-editor-bar')?.innerText.includes('正文已加载')&&!document.querySelector('.ice-editor-bar button[title="Ctrl+S"]')?.disabled`);
+  assert('explicit_save_after_layout_switch_keeps_body',true);
+  await click('任务与资料');await until(`localStorage.getItem('ice.ui.panels')==='{"left":false,"right":false}'`);
+  await evaluate(`window.__layoutReloadMarker=true`);await call('Page.reload');
+  await until(`!window.__layoutReloadMarker&&Boolean(document.querySelector('.ice-shell-toolbar'))`);
+  assert('collapsed_choices_survive_reload',await evaluate(`document.querySelector('#ice-navigation-pane').hidden&&document.querySelector('#ice-task-pane').hidden`));
+  await evaluate(`localStorage.setItem('ice.ui.panels','{bad json');window.__layoutReloadMarker=true`);await call('Page.reload');
+  await until(`!window.__layoutReloadMarker&&Boolean(document.querySelector('.ice-shell-toolbar'))`);
+  assert('corrupt_preferences_recover_safely',await evaluate(`!document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await click('专注写作');await wait(500);
+  const methods=['chat.list','chat.drafts','jobs.list','downloads.list'];
+  const readCounts=()=>JSON.parse(fs.readFileSync(fixture.counts,'utf8'));
+  const before=readCounts();
+  await wait(21500);
+  const after=readCounts();
+  report.hidden_poll_observation_ms=21500;
+  report.hidden_list_calls=Object.fromEntries(methods.map(name=>[name,(after[name]||0)-(before[name]||0)]));
+  assert('hidden_sidebars_do_not_poll_lists',Object.values(report.hidden_list_calls).every(count=>count===0));
+  await rpc('chat.create',{title:'隐藏时新增的会话'});
+  await click('任务与资料');
+  await until(`document.querySelector('#ice-task-pane')?.innerText.includes('布局验收文章')`);
+  await wait(9000);
+  const reopened=readCounts();
+  assert('reopening_tasks_refreshes_and_resumes_download_polling',(reopened['jobs.list']||0)>(after['jobs.list']||0)&&(reopened['downloads.list']||0)>=(after['downloads.list']||0)+2);
+  await click('会话与草稿');
+  await until(`Boolean(document.querySelector('button[title="隐藏时新增的会话"]'))`);
+  await wait(250);
+  const nav=readCounts();
+  assert('reopening_navigation_refreshes_retained_lists',(nav['chat.list']||0)>(after['chat.list']||0)&&(nav['chat.drafts']||0)>(after['chat.drafts']||0));
+  assert('reopened_navigation_contains_new_server_record',true);
+  await evaluate(`void(window.__layoutStorageSet=Storage.prototype.setItem);Storage.prototype.setItem=function(){throw new Error('Fixture storage unavailable')};void 0;`);
+  await click('专注写作');await wait(500);
+  assert('layout_still_works_when_preference_storage_is_unavailable',await evaluate(`document.querySelector('#ice-writing-pane').clientWidth===1280&&document.querySelector('#ice-navigation-pane').hidden&&document.querySelector('#ice-task-pane').hidden`));
+  await click('恢复侧栏');await wait(150);
+  assert('restore_still_works_without_storage',await evaluate(`!document.querySelector('#ice-navigation-pane').hidden&&!document.querySelector('#ice-task-pane').hidden`));
+  await evaluate(`Storage.prototype.setItem=window.__layoutStorageSet;void 0;`);
+  assert('no_model_calls',(await rpc('tools.diagnostics')).report.counts.model_invocations===0);
+  assert('no_unhandled_javascript_errors',session.errors.length===0);
+ }catch(error){report.errors.push(error.stack||String(error));try{await shot('failure.png');report.debug=await evaluate(`({text:document.body.innerText.slice(-3500),focus:document.activeElement?.outerHTML?.slice(0,500)})`);}catch{}}
+ finally{report.state='finished';report.success=!report.errors.length&&Object.values(report.checks).every(Boolean);save();await session.close();console.log(JSON.stringify(report,null,2));if(!report.success)process.exitCode=1;}
+})().catch(error=>{report.state='finished';report.success=false;report.errors.push(error.stack||String(error));save();console.error(error);process.exitCode=1;});
