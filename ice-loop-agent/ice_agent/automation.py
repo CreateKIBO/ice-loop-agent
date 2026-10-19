@@ -7,7 +7,10 @@ def delivery_hash(state: dict, slots: list) -> str:
     from .domain.types import sha256_json
     return sha256_json({'body':state.get('integrated_md',state.get('draft_md','')),
         'title':state.get('final_title',''),
-        'images':[(s['slot_id'],s.get('selected_candidate')) for s in slots]})
+        'images':[(s['slot_id'],s.get('selected_candidate')) for s in slots],
+        'run_evidence':{key:{field:record.get(field) for field in
+            ('code_sha256','stdin_hash','output_sha256','verdict','exit_code','timed_out','expected_failure')}
+            for key,record in (state.get('runs') or {}).items()}})
 
 
 def editorial_decision(scope: str, payload: dict):

@@ -1,9 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = []
 datas += collect_data_files('ice_agent')
 datas += collect_data_files('pydantic')
+datas += collect_data_files('certifi')
 
 
 a = Analysis(
@@ -11,7 +12,7 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=collect_submodules('markdown_it')+collect_submodules('mdurl')+collect_submodules('httpx')+collect_submodules('httpcore')+collect_submodules('anyio'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

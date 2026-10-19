@@ -11,6 +11,18 @@ export type StreamEvent = {
 
 /** 单个流在内存里保留的事件上限；更早的事件仍在引擎库里，可按游标重取。 */
 export const MAX_STREAM_EVENTS = 400;
+export const MAX_STREAM_BYTES = 512 * 1024;
+
+/** Bound retained payloads too: a few huge tool results must not defeat the event-count cap. */
+export function boundStreamEvents(events: StreamEvent[], maxBytes = MAX_STREAM_BYTES): StreamEvent[] {
+  let bytes = 0, start = events.length;
+  for (let index = events.length - 1; index >= 0; index--) {
+    const size = JSON.stringify(events[index]).length * 2;
+    if (bytes + size > maxBytes) break;
+    bytes += size; start = index;
+  }
+  return start === 0 ? events : events.slice(start);
+}
 
 export function mergeEvents(existing: StreamEvent[], incoming: StreamEvent[],
                             cap = MAX_STREAM_EVENTS): StreamEvent[] {

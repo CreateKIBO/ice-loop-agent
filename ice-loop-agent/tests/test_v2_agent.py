@@ -18,7 +18,7 @@ from tests import temp_dir
 
 def _service():
     dir_ = temp_dir("v2-agent-")
-    service = DesktopService(dir_ / "projects", runtime_root=dir_ / "runtime")
+    service = DesktopService(dir_ / "projects", runtime_root=dir_ / "runtime",auto_consumer=False)
     return service, dir_
 
 
@@ -226,9 +226,9 @@ class TestBoundedLoop(unittest.TestCase):
         self.assertEqual(result["mode"], "fts5")
         # create_production_task 幂等
         first = executor.execute(ctx, "create_production_task", {
-            "kind": "export", "payload": {"rev": "r1"}, "idempotency_key": "exp-r1"})
+            "kind": "production", "payload": {"spec":{"series":"PY","episode":1,"topic":"幂等任务"}}, "idempotency_key": "task-r1"})
         second = executor.execute(ctx, "create_production_task", {
-            "kind": "export", "payload": {"rev": "r1"}, "idempotency_key": "exp-r1"})
+            "kind": "production", "payload": {"spec":{"series":"PY","episode":1,"topic":"幂等任务"}}, "idempotency_key": "task-r1"})
         self.assertEqual(first["task_id"], second["task_id"])
         listing = executor.execute(ctx, "list_task_status", {})
         self.assertEqual(len(listing["tasks"]), 1)

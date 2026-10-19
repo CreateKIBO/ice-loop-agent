@@ -162,14 +162,16 @@ class TestBackupRestoreDrill(unittest.TestCase):
         articles = root / 'articles'
         articles.mkdir()
         (articles / '005-demo.md').write_text('# Demo\n\n正文', encoding='utf-8')
-        settings = {
-            'accounts': {'ice-loop': {'id': 'ice-loop', 'name': 'ICE Loop',
-                                      'article_root': str(articles)}},
-            'article_root': str(articles),
-            'vision': {'status': 'ok'},
-            'profiles': {'qwen': {'adapter': 'mock', 'status': 'ok'}},
-        }
-        # Real Store creates the full v9 schema (backup validation expects it).
+        # Use real desktop settings: the earlier hand-written stub omitted
+        # active account/routes/brand fields and could not drive the desktop.
+        from ice_agent.desktop_service import DesktopService
+        from tests import REPO
+        service = DesktopService(REPO, runtime, articles, auto_consumer=False)
+        try:
+            settings = service.settings
+        finally:
+            service.close()
+        # Real Store creates the full schema and migration history.
         store = Store(runtime / 'app.db')
         spec = json.dumps({'article_root': str(articles)})
         store.conn.execute(

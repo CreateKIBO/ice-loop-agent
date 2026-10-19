@@ -5,6 +5,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { registerToastHost } from './toastHost';
 
 import "../styles/tokens.css";
 import "../styles/base.css";
@@ -131,14 +132,20 @@ export function SkeletonRows({ rows = 4, height = 14, gap = 12 }: { rows?: numbe
   );
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, footer, width = 560, initialFocus }: {
+export function Dialog({ open, onOpenChange, title, description, children, footer, width = 560, initialFocus, className }: {
   open: boolean; onOpenChange: (open: boolean) => void;
   title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode;
   width?: number;
   /** 打开时聚焦的元素选择器；默认 Radix 会聚焦并全选第一个输入框。 */
   initialFocus?: string;
+  className?: string;
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const notificationCleanup = React.useRef<(() => void) | undefined>(undefined);
+  const notificationRef = React.useCallback((node: HTMLDivElement | null) => {
+    notificationCleanup.current?.();
+    notificationCleanup.current = node ? registerToastHost(node) : undefined;
+  }, []);
   const focusInitial = (event: Event) => {
     const target = initialFocus ? contentRef.current?.querySelector<HTMLElement>(initialFocus) : null;
     if (!target) return;
@@ -150,7 +157,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="ice-dialog-overlay" />
         <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial}
-                                 className="ice-dialog" style={{ width: `min(${width}px, calc(100vw - 48px))` }}
+                                 className={'ice-dialog' + (className ? ' ' + className : '')} style={{ width: `min(${width}px, calc(100vw - 48px))` }}
                                  {...(description ? {} : { "aria-describedby": undefined })}>
           <DialogPrimitive.Title style={{ margin: 0, fontSize: "var(--ice-font-size-lg)",
                                           marginBottom: description ? 4 : "var(--ice-space-3)" }}>{title}</DialogPrimitive.Title>
@@ -160,7 +167,8 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
                 {description}
               </DialogPrimitive.Description>
             : null}
-          <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
+          <div ref={notificationRef} className="ice-dialog-notifications" />
+          <div className="ice-dialog-body" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
           {footer && (
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "var(--ice-space-2)",
                           marginTop: "var(--ice-space-4)", flexShrink: 0, flexWrap: "wrap" }}>{footer}</div>

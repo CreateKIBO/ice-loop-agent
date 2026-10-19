@@ -6,6 +6,36 @@
 // 窗口临时缩小只影响 sizes，不会把用户保存的布局永久缩小。
 
 export interface PaneSizes { left: number; right: number }
+export interface PaneVisibility { left: boolean; right: boolean }
+export type CompactPane = "left" | "center" | "right";
+export const COMPACT_WIDTH = 1080;
+
+export function normalizeVisibility(raw: Partial<PaneVisibility> | null): PaneVisibility {
+  return { left: typeof raw?.left === "boolean" ? raw.left : true,
+           right: typeof raw?.right === "boolean" ? raw.right : true };
+}
+
+/** Compact windows show one full-width surface; narrowing never overwrites dock preferences. */
+export function resolveLayout(preferred: PaneSizes, width: number, docked: PaneVisibility, selected: CompactPane) {
+  const compact = width > 0 && width < COMPACT_WIDTH;
+  if (compact) return { compact, left: selected === "left", right: selected === "right",
+    center: selected === "center", sizes: { left: width, right: width } };
+  const sizes = fitSizes(preferred, width);
+  const normalized = normalizeSizes(preferred);
+  if (!docked.right) sizes.left = Math.min(normalized.left, Math.max(MIN_LEFT, width - 5 - COMFORT_CENTER));
+  if (!docked.left) sizes.right = Math.min(normalized.right, Math.max(MIN_RIGHT, width - 5 - COMFORT_CENTER));
+  return { compact, left: docked.left, right: docked.right, center: true, sizes };
+}
+
+export function resizeVisiblePane(previous: PaneSizes, side: "left" | "right", delta: number,
+                                  width: number, docked: PaneVisibility): PaneSizes {
+  if (docked.left && docked.right) return resizePane(previous, side, delta, width);
+  const current = resolveLayout(previous, width, docked, "center").sizes;
+  const room = width - 5 - COMFORT_CENTER;
+  return side === "left"
+    ? { ...previous, left: clamp(current.left + delta, MIN_LEFT, Math.min(MAX_LEFT, Math.max(MIN_LEFT, room))) }
+    : { ...previous, right: clamp(current.right - delta, MIN_RIGHT, Math.min(MAX_RIGHT, Math.max(MIN_RIGHT, room))) };
+}
 
 export const PANE_DEFAULTS: PaneSizes = { left: 260, right: 380 };
 export const MIN_LEFT = 200, MIN_RIGHT = 280;

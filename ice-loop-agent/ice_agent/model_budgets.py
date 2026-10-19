@@ -33,6 +33,12 @@ def chat_budget(settings) -> int:
     return raw
 
 
+def default_limits(settings):
+    return {'max_model_calls': settings['max_model_calls'],
+            'max_image_model_calls': settings.get('max_image_model_calls', 12),
+            'max_chat_calls': chat_budget(settings)}
+
+
 class ModelBudgets:
     def __init__(self, service):
         self.s = service
@@ -42,13 +48,13 @@ class ModelBudgets:
             raise ValueError('公众号已切换，请重新打开预算设置')
 
     def get(self, params):
-        self.check_account(params)
-        chat_limit = chat_budget(self.s.settings)
-        result = {'max_model_calls': self.s.settings['max_model_calls'],
-                  'max_image_model_calls': self.s.settings.get('max_image_model_calls', 12),
-                  'max_chat_calls': chat_limit,
-                  'chat_unlimited': chat_limit == 0,
-                  'chat_configured': 'max_chat_calls' in self.s.settings}
+        with self.s._settings_guard:
+            self.check_account(params)
+            limits = default_limits(self.s.settings)
+            chat_limit = limits['max_chat_calls']
+            result = {**limits, 'defaults_hash': sha256_json(limits),
+                      'chat_unlimited': chat_limit == 0,
+                      'chat_configured': 'max_chat_calls' in self.s.settings}
         if params.get('job_id'):
             _, _, store = self.s._job_app(params['job_id'])
             try:
@@ -97,9 +103,13 @@ class ModelBudgets:
         if params.get('scope') == 'defaults':
             normal = validate_limit(params.get('max_model_calls'))
             images = validate_limit(params.get('max_image_model_calls'))
-            chat = chat_budget({'max_chat_calls': params.get('max_chat_calls', DEFAULT_CHAT_CALLS)})
             with self.s._settings_guard:
                 self.check_account(params)
+                if params.get('defaults_hash') is not None and params['defaults_hash'] != sha256_json(default_limits(self.s.settings)):
+                    raise ValueError('全局预算已在别处修改，请载入最新预算后再保存；当前输入已保留')
+                # Older clients edit article limits only. An omitted chat field
+                # must preserve the configured limit, including explicit zero.
+                chat = chat_budget(self.s.settings) if 'max_chat_calls' not in params else chat_budget({'max_chat_calls':params['max_chat_calls']})
                 updated = copy.deepcopy(self.s.settings)
                 updated.update(max_model_calls=normal, max_image_model_calls=images,
                                max_chat_calls=chat)

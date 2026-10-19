@@ -5,8 +5,9 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { Banner, Button, Dialog, SkeletonRows } from "../../components/ui";
 import { toast } from "../../components/toast";
-import { accountStore, queryClient, rpc, useAccountQuery, type RpcError } from "../../data/client";
+import { accountStore, queryClient, rpc, useAccountQuery, useCurrentAccount, type RpcError } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
+import { ImageThumbnail, ImageViewer, type ImageTarget } from '../assets/ImageViewer';
 
 type Blocker = { kind: "image" | "plan" | "rules" | "claims" | "evidence" | "body"; message: string;
                  figure_no?: number; filename?: string };
@@ -38,7 +39,7 @@ export function reviewBadge(snapshot: DeliverySnapshot | undefined) {
 }
 
 const FIX: Record<Blocker["kind"], { label: string; hint: string } | null> = {
-  image: { label: "去配图", hint: "在经典界面的配图页导入、审核并采纳图片" },
+  image: { label: "去配图", hint: "打开当前文章配图工作台，导入、审核并采纳图片" },
   claims: { label: "去核验", hint: "在经典界面的事实核验页逐条核验" },
   evidence: { label: "去运行", hint: "在经典界面的演示程序页运行当前代码，留下运行证据" },
   rules: null, plan: null, body: null,
@@ -46,11 +47,14 @@ const FIX: Record<Blocker["kind"], { label: string; hint: string } | null> = {
 
 const STATUS_TEXT: Record<string, string> = { accepted: "已采纳", pending: "待审核", rejected: "已否决" };
 
-export function DeliveryReviewDialog({ jobId, open, onOpenChange, dirty, onExportReady }: {
+export function DeliveryReviewDialog({ jobId, open, onOpenChange, dirty, onExportReady, onFixImages }: {
   jobId: string; open: boolean; onOpenChange: (open: boolean) => void;
   dirty: boolean; onExportReady: () => void;
+  onFixImages?: (figureNo?: number) => void;
 }) {
   const snapshot = useDeliverySnapshot(jobId);
+  const account=useCurrentAccount(),active=React.useRef(true);
+  React.useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
   const [confirming, setConfirming] = React.useState(false);
   const data = snapshot.data;
   React.useEffect(() => { if (open) void snapshot.refetch(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,26 +68,29 @@ export function DeliveryReviewDialog({ jobId, open, onOpenChange, dirty, onExpor
     if (!data || confirmBlockedBy) return;
     setConfirming(true);
     try {
-      await rpc("articles.delivery_confirm", { job_id: jobId, delivery_hash: data.delivery_hash });
+      await rpc("articles.delivery_confirm", { job_id: jobId, account_id:account, delivery_hash: data.delivery_hash });
+      if(!active.current||accountStore.get()!==account)return;
       toast.success({ title: "已确认交付审阅", detail: "再修改正文、标题或配图会使本次确认失效" });
-      await refreshDeliverySnapshot();
+      await queryClient.invalidateQueries({queryKey:['ice',account,'articles.delivery_snapshot']});
     } catch (error) {
+      if(!active.current||accountStore.get()!==account)return;
       toast.error({ title: "确认未完成", detail: (error as RpcError).message,
                     action: { label: "刷新快照", run: () => snapshot.refetch() } });
     } finally {
-      setConfirming(false);
+      if(active.current)setConfirming(false);
     }
   };
 
   const remaining = data?.blocking ?? [];
   const exportable = Boolean(data?.review.reviewed && remaining.length === 0);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} width={760} title="最终交付审阅"
+    <Dialog open={open} onOpenChange={next=>{if(!confirming)onOpenChange(next);}} width={760} title="最终交付审阅"
             description="核对将要交付的标题、正文、配图、运行证据与检查结果。确认后才能导出发布就绪包；之后任何修改都会让确认失效。"
             footer={<>
               <span style={{ flex: 1, fontSize: "var(--ice-font-size-sm)", color: "var(--ice-text-secondary)" }}>
                 {confirmBlockedBy && !data?.review.reviewed ? confirmBlockedBy : ""}
               </span>
+              <Button disabled={confirming} onClick={()=>onOpenChange(false)}>关闭审阅</Button>
               <Button variant="ghost" onClick={() => snapshot.refetch()} loading={snapshot.isFetching && !snapshot.isLoading}>刷新</Button>
               {exportable
                 ? <Button variant="primary" onClick={() => { onOpenChange(false); onExportReady(); }}>导出发布就绪包</Button>
@@ -105,8 +112,10 @@ export function DeliveryReviewDialog({ jobId, open, onOpenChange, dirty, onExpor
                             className="ice-review-item ice-review-item--danger">
                   <span style={{ flex: 1, minWidth: 0 }}>{item.message}</span>
                   {FIX[item.kind] && (
-                    <Button size="sm" title={FIX[item.kind]!.hint} onClick={() => switchToClassic().catch(error =>
-                      toast.error({ title: "无法切换界面", detail: (error as Error).message }))}>
+                    <Button size="sm" title={FIX[item.kind]!.hint} onClick={() => {
+                      if (item.kind === 'image' && onFixImages) { onFixImages(item.figure_no); return; }
+                      void switchToClassic().catch(error => toast.error({ title: "无法切换界面", detail: (error as Error).message }));
+                    }}>
                       {FIX[item.kind]!.label}
                     </Button>
                   )}
@@ -115,7 +124,7 @@ export function DeliveryReviewDialog({ jobId, open, onOpenChange, dirty, onExpor
             </AnimatePresence>
             {remaining.length === 0 && <div className="ice-review-empty">规则、事实、配图与运行证据均已就绪。</div>}
           </Section>
-          <FiguresSection jobId={jobId} figures={data.figures} />
+          <FiguresSection jobId={jobId} figures={data.figures} onFixImages={onFixImages} />
           {data.programs.length > 0 && (
             <Section title={`演示程序（${data.programs.filter(p => p.evidence).length}/${data.programs.length} 有当前运行证据）`}>
               {data.programs.map(program => (
@@ -178,8 +187,9 @@ function ReviewHeader({ data, dirty }: { data: DeliverySnapshot; dirty: boolean 
   );
 }
 
-function FiguresSection({ jobId, figures }: { jobId: string; figures: DeliverySnapshot["figures"] }) {
-  const [enlarged, setEnlarged] = React.useState<string | null>(null);
+function FiguresSection({ jobId, figures, onFixImages }: { jobId: string; figures: DeliverySnapshot["figures"]; onFixImages?: (figureNo?: number) => void }) {
+  const account = useCurrentAccount();
+  const [enlarged, setEnlarged] = React.useState<ImageTarget | null>(null);
   if (figures.length === 0) return null;
   return (
     <Section title={`配图（${figures.filter(f => f.valid).length}/${figures.length} 已采纳）`}>
@@ -187,8 +197,7 @@ function FiguresSection({ jobId, figures }: { jobId: string; figures: DeliverySn
         {figures.map(figure => (
           <figure key={figure.slot_id} className={"ice-review-figure" + (figure.valid ? "" : " ice-review-figure--missing")}>
             {figure.candidate
-              ? <Thumbnail jobId={jobId} candidateId={figure.candidate.candidate_id} alt={figure.caption}
-                           onOpen={url => setEnlarged(url)} />
+              ? <ImageThumbnail target={{ kind: 'candidate', accountId: account, jobId, candidateId: figure.candidate.candidate_id, caption: figure.caption }} onOpen={setEnlarged} />
               : <div className="ice-review-thumb ice-review-thumb--empty">待配图</div>}
             <figcaption>
               <strong>图{figure.figure_no}</strong> {figure.caption}
@@ -196,34 +205,13 @@ function FiguresSection({ jobId, figures }: { jobId: string; figures: DeliverySn
                 {figure.candidate ? `${figure.candidate.source} · ${STATUS_TEXT[figure.candidate.review_status] ?? figure.candidate.review_status}`
                   : figure.required ? "必需图位" : "可选图位"}
               </div>
+              {onFixImages && <Button size="sm" onClick={() => onFixImages(figure.figure_no)}>准备图{figure.figure_no}</Button>}
             </figcaption>
           </figure>
         ))}
       </div>
-      <AnimatePresence>
-        {enlarged && (
-          <motion.button type="button" className="ice-review-lightbox" onClick={() => setEnlarged(null)}
-                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                         aria-label="关闭大图">
-            <motion.img src={enlarged} alt="" initial={{ scale: 0.92 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {enlarged && <ImageViewer target={enlarged} onClose={() => setEnlarged(null)} />}
     </Section>
-  );
-}
-
-function Thumbnail({ jobId, candidateId, alt, onOpen }: {
-  jobId: string; candidateId: string; alt: string; onOpen: (url: string) => void;
-}) {
-  const preview = useAccountQuery<string>("assets.preview", { job_id: jobId, candidate_id: candidateId },
-                                          { staleTime: Infinity });
-  if (preview.error) return <div className="ice-review-thumb ice-review-thumb--empty" title={preview.error.message}>无法预览</div>;
-  if (!preview.data) return <div className="ice-review-thumb ice-skeleton" />;
-  return (
-    <button type="button" className="ice-review-thumb" onClick={() => onOpen(preview.data!)} title="点击放大">
-      <img src={preview.data} alt={alt} />
-    </button>
   );
 }
 

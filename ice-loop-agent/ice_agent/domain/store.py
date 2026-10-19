@@ -333,7 +333,7 @@ class Store:
             return number
 
     # ------------------------------------------------------------ 文章
-    def create_article(self, article: dict[str, Any]) -> None:
+    def create_article(self, article: dict[str, Any], *, commit: bool = True) -> None:
         self.conn.execute(
             "INSERT INTO articles (article_id, folder_no, folder_name, series, episode,"
             " topic, working_title, final_title, abstract, readiness, spec_json, created_at)"
@@ -346,7 +346,8 @@ class Store:
                 json.dumps(article.get("spec", {}), ensure_ascii=False), now_iso(),
             ),
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
 
     def get_article(self, article_id: str) -> dict[str, Any] | None:
         row = self.conn.execute(
@@ -438,7 +439,7 @@ class Store:
         return dict(row) if row else None
 
     # ------------------------------------------------------------ 任务
-    def create_job(self, job: dict[str, Any]) -> None:
+    def create_job(self, job: dict[str, Any], *, commit: bool = True) -> None:
         ts = now_iso()
         self.conn.execute(
             "INSERT INTO jobs (job_id, article_id, workflow, state, current_node, mode,"
@@ -449,7 +450,8 @@ class Store:
              json.dumps(job.get("model_route_snapshot", {}), ensure_ascii=False),
              json.dumps(job.get("limits", {}), ensure_ascii=False), "", ts, ts),
         )
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         row = self.conn.execute(
@@ -461,7 +463,7 @@ class Store:
         d["limits"] = json.loads(d["limits_json"] or "{}")
         return d
 
-    def update_job(self, job_id: str, **fields: Any) -> None:
+    def update_job(self, job_id: str, *, commit: bool = True, **fields: Any) -> None:
         _reject_unknown_columns("jobs", self._JOB_COLS, fields)
         if "state" in fields:
             self.conn.execute(
@@ -482,7 +484,8 @@ class Store:
                 (fields["pause_reason"], job_id))
         self.conn.execute(
             "UPDATE jobs SET updated_at=? WHERE job_id=?", (now_iso(), job_id))
-        self.conn.commit()
+        if commit:
+            self.conn.commit()
 
     # ------------------------------------------------------------ 步骤
     def upsert_step(self, step: dict[str, Any], *, commit: bool = True) -> None:

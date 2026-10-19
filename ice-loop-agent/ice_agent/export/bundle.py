@@ -15,13 +15,12 @@ from __future__ import annotations
 
 import json
 import shutil
-from hashlib import sha256
+from hashlib import file_digest
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from ..domain.types import now_iso
-from ..editorial import parse_document
 from ..domain.types import sha256_text
 from ..paths import assert_not_c_drive
 
@@ -65,108 +64,20 @@ def _cleanup_owned_staging(staging: Path, parent: Path, token: str,
 
 
 def plain_text_from_markdown(markdown: str) -> str:
-    """Markdown → 纯文本：标题去井号、代码块原样保留、图片占位转为说明行。
-
-    用文档模型而非全文正则——代码内容与占位符语义不丢。
-    """
-    lines: list[str] = []
-    for block in parse_document(markdown)["blocks"]:
-        kind = block["type"]
-        if kind == "heading":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "paragraph":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "code":
-            lines.extend(block["lines"])
-            lines.append("")
-        elif kind == "image_slot":
-            lines.append(f"[图{block['figure_no']}：{block['caption']}——待配图：{block['kind']}｜{block.get('obtain', '')}]")
-            lines.append("")
-        elif kind == "image":
-            lines.append("[图片]" + block["source"])
-            lines.append("")
-        elif kind == "run_output":
-            lines.append(f"[运行输出 {block['run_ref']}]")
-            lines.append("")
-        elif kind == "quote":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "list":
-            lines.extend(block.get("items") or [])
-            lines.append("")
-        elif kind == "hr":
-            lines.append("———")
-            lines.append("")
-        else:
-            lines.append(block.get("text") or block.get("source") or "")
-            lines.append("")
-    return "\n".join(lines).strip() + "\n"
+    from .markdown_content import plain_text
+    return plain_text(markdown)
 
 
-def plain_text_with_images(markdown: str, figure_names: dict[int, str]) -> str:
-    """导出 TXT：图位替换为指向 图片/ 的说明行；代码原样。"""
-    lines: list[str] = []
-    for block in parse_document(markdown)["blocks"]:
-        kind = block["type"]
-        if kind == "heading":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "paragraph":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "code":
-            lines.extend(block["lines"])
-            lines.append("")
-        elif kind == "image_slot":
-            name = figure_names.get(int(block["figure_no"]))
-            if name:
-                lines.append(f"[图{block['figure_no']}：{block['caption']}——见 图片/{name}]")
-            else:
-                lines.append(f"[图{block['figure_no']}：{block['caption']}——待配图：{block['kind']}｜{block.get('obtain', '')}]")
-            lines.append("")
-        elif kind == "image":
-            lines.append("[图片]" + block["source"])
-            lines.append("")
-        elif kind == "run_output":
-            lines.append(f"[运行输出 {block['run_ref']}]")
-            lines.append("")
-        elif kind == "quote":
-            lines.append(block["text"])
-            lines.append("")
-        elif kind == "list":
-            lines.extend(block.get("items") or [])
-            lines.append("")
-        elif kind == "hr":
-            lines.append("———")
-            lines.append("")
-        else:
-            lines.append(block.get("text") or block.get("source") or "")
-            lines.append("")
-    return "\n".join(lines).strip() + "\n"
+def plain_text_with_images(markdown: str, figure_names: dict[int, str], *,
+                           runs: dict | None = None, run_refs_status: dict | None = None) -> str:
+    from .markdown_content import export_markdown, plain_text
+    return plain_text(export_markdown(markdown, figure_names, runs, run_refs_status))
 
 
-def export_markdown_with_images(markdown: str, figure_names: dict[int, str]) -> str:
-    """仅把 image_slot 块改写为 ../图片/ 相对引用；其他块字节保真。
-
-    文档模型保证代码块/引用是独立块，图位替换不会波及演示代码。
-    """
-    blocks = []
-    for block in parse_document(markdown)["blocks"]:
-        if block["type"] == "image_slot":
-            figure_no = int(block["figure_no"])
-            name = figure_names.get(figure_no)
-            if name:
-                relative = "../图片/" + name
-                line = f"![图{figure_no}：{block['caption']}]({relative})"
-                blocks.append({"block_id": block["block_id"], "type": "paragraph",
-                               "text": line, "source": line})
-                continue
-        blocks.append(block)
-    document = {"schema_version": 1, "blocks": blocks}
-    from ..editorial import serialize_document
-    return serialize_document(document)
+def export_markdown_with_images(markdown: str, figure_names: dict[int, str], *,
+                                runs: dict | None = None, run_refs_status: dict | None = None) -> str:
+    from .markdown_content import export_markdown
+    return export_markdown(markdown, figure_names, runs, run_refs_status)
 
 
 def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
@@ -202,7 +113,8 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
     identity: tuple[int, int] | None = None
     checks: dict[str, Any] = {"missing_images": [], "pending_placeholders": 0,
                               "run_refs_unresolved": [], "blocking": list(blocking)}
-    doc = parse_document(body)
+    from .markdown_content import unmanaged_images,managed_placeholders,run_references
+    checks['unmanaged_images']=[{'caption':image['caption'][:200]} for image in unmanaged_images(body)]
     figure_names: dict[int, str] = {}
     for figure in figures:
         source = Path(figure["path"])
@@ -214,20 +126,19 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
             checks["missing_images"].append(figure["figure_no"])
             continue
         figure_names[int(figure["figure_no"])] = f"{figure['order']:02d}-{figure['figure_no']:02d}{suffix}"
-    for block in doc["blocks"]:
-        if block["type"] == "image_slot" and int(block["figure_no"]) not in figure_names:
+    for block in managed_placeholders(body):
+        if int(block["figure_no"]) not in figure_names:
             checks["pending_placeholders"] += 1
             if block["figure_no"] not in checks["missing_images"]:
                 checks["missing_images"].append(block["figure_no"])
-        if block["type"] == "run_output":
-            ref = block["run_ref"]
-            status = run_refs_status.get(ref)
-            if not status or not status.get("ok"):
-                checks["run_refs_unresolved"].append(ref)
+    for ref in run_references(body):
+        status = run_refs_status.get(ref)
+        if not status or not status.get("ok"):
+            checks["run_refs_unresolved"].append(ref)
     if mode == "ready" and (checks["missing_images"] or checks["pending_placeholders"]
-                            or checks["run_refs_unresolved"]):
+                            or checks["run_refs_unresolved"] or checks['unmanaged_images']):
         raise ExportBlocked("发布就绪包存在阻断项：" + json.dumps(checks, ensure_ascii=False))
-    exported_markdown = export_markdown_with_images(body, figure_names)
+    exported_markdown = export_markdown_with_images(body, figure_names, runs=runs, run_refs_status=run_refs_status)
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         _assert_no_links(destination.parent)
@@ -240,9 +151,9 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
         text_dir.mkdir()
         image_dir.mkdir()
         md_target = text_dir / MD_NAME
-        md_target.write_text(exported_markdown, encoding="utf-8")
+        md_target.write_text(exported_markdown, encoding="utf-8", newline='\n')
         txt_target = text_dir / TXT_NAME
-        txt_target.write_text(plain_text_with_images(body, figure_names), encoding="utf-8")
+        txt_target.write_text(plain_text_with_images(body, figure_names, runs=runs, run_refs_status=run_refs_status), encoding="utf-8", newline='\n')
         # 原字节复制：来源在解析时已通过 selected_asset 的 hash/MIME 校验。
         image_manifest: list[dict[str, Any]] = []
         for figure in figures:
@@ -251,7 +162,7 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
             if not name:
                 continue
             source = Path(figure["path"])
-            current_sha = sha256(source.read_bytes()).hexdigest()
+            current_sha = _file_sha256(source)
             if current_sha != figure["sha256"]:
                 raise ValueError(f"图{figure_no}的来源文件在导出期间发生变化，请重新校验后导出")
             target = image_dir / name
@@ -267,6 +178,7 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
         manifest = {
             "format": "ice-export-v2", "mode": mode,
             "article_title": title, "body_sha256": content_hash,
+            "exported_body_sha256":sha256_text(exported_markdown),
             "revision_id": revision_id, "asset_set_hash": asset_set_hash,
             "exported_at": now_iso(),
             "files": _tree_hashes(staging),
@@ -275,7 +187,7 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
         }
         if include_manifest:
             (staging / "manifest.json").write_text(
-                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline='\n')
         # staging 核对：清单与实际文件一致才提交（manifest.json 自身不进自校验——
         # 自含 hash 不可能；其余文件逐一核对）。
         written = _tree_hashes(staging)
@@ -298,7 +210,8 @@ def export_bundle(*, job_id: str, title: str, body: str, content_hash: str,
 
 
 def _file_sha256(path: Path) -> str:
-    return sha256(path.read_bytes()).hexdigest()
+    with path.open('rb') as stream:
+        return file_digest(stream, 'sha256').hexdigest()
 
 
 def _tree_hashes(root: Path) -> dict[str, str]:

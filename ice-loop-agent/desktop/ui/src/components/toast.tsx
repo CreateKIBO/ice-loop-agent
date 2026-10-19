@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { createPortal } from 'react-dom';
+import { toastHost } from './toastHost';
 
 type Tone = "info" | "success" | "warning" | "danger";
 type ToastAction = { label: string; run: () => unknown };
@@ -44,13 +46,15 @@ const snapshot = () => items;
 
 export function Toaster() {
   const list = useSyncExternalStore(subscribe, snapshot);
-  return (
-    <div className="ice-toaster" role="region" aria-label="通知">
+  const host = useSyncExternalStore(toastHost.subscribe, toastHost.get);
+  const content = (
+    <div className={'ice-toaster' + (host ? ' ice-toaster--modal' : '')} role="region" aria-label="通知">
       <AnimatePresence initial={false}>
         {list.map(item => <ToastCard key={item.id} item={item} />)}
       </AnimatePresence>
     </div>
   );
+  return host ? createPortal(content, host) : content;
 }
 
 const ICON: Record<Tone, string> = { info: "i", success: "✓", warning: "!", danger: "×" };

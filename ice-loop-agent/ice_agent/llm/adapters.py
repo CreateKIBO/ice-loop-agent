@@ -73,6 +73,10 @@ class BaseModelAdapter:
              on_delta=None, timeout: float = 120.0) -> ChatResult:
         notes = self.preflight(thinking_policy)
         extra: dict[str, Any] = self.default_extra_body()
+        from .limits import output_limit
+        maximum = output_limit(self.profile)
+        if maximum is not None:
+            extra['max_tokens'] = maximum
         if self.thinking_capability() != 'unknown':
             extra.update(self.thinking_extra_body(thinking_policy))
         if want_json:

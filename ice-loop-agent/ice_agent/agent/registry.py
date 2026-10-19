@@ -12,9 +12,10 @@
 from __future__ import annotations
 
 import json
+import copy
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -128,7 +129,7 @@ class RequestInputArgs(StrictArgs):
 
 
 class CreateTaskArgs(StrictArgs):
-    kind: str = Field(min_length=1, max_length=60)
+    kind: Literal['production'] = 'production'
     payload: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = Field(default=None, max_length=120)
     priority: int = Field(default=5, ge=1, le=9)
@@ -354,11 +355,21 @@ def _t_request_user_input(ctx: AgentContext, args: RequestInputArgs) -> dict:
 
 
 def _t_create_production_task(ctx: AgentContext, args: CreateTaskArgs) -> dict:
+    payload = copy.deepcopy(args.payload)
+    spec = payload.get('spec')
+    if not isinstance(spec,dict) or not spec:
+        raise ValueError('生产任务需提供spec；缺少栏目、期号或主题时先向用户澄清')
+    if (payload.get('account_id') not in (None,ctx.account_id)
+            or spec.get('account_id') not in (None,ctx.account_id)):
+        raise ValueError('只能创建当前会话所属公众号的任务')
     store = ctx.store_factory()
     try:
+        from ..application.task_specs import production_spec
+        spec = production_spec(ctx.service,store,ctx.account_id,spec)
+        payload.update(spec=spec,account_id=ctx.account_id)
         from ..tasks import TaskQueue
         queue = TaskQueue(store)
-        task = queue.enqueue(ctx.account_id, args.kind, args.payload,
+        task = queue.enqueue(ctx.account_id, args.kind, payload,
                              priority=args.priority, idempotency_key=args.idempotency_key)
         return {"task_id": task["task_id"], "state": task["state"],
                 "idempotent": bool(args.idempotency_key)}
@@ -374,9 +385,12 @@ def _t_prepare_execution(ctx: AgentContext, args: PrepareExecutionArgs) -> dict:
             raise PermissionError("只能准备当前公众号的文章")
     finally:
         store.close()
-    engine, _, _ = ctx.service._job_app(args.job_id)
-    state = engine._load_state(args.job_id)
-    body = state.get("integrated_md", "")
+    engine, _, connection = ctx.service._job_app(args.job_id)
+    try:
+        state = engine._load_state(args.job_id)
+        body = state.get('integrated_md','')
+    finally:
+        connection.close()
     from ..editorial import parse_document
     blocks = [b for b in parse_document(body)["blocks"] if b["type"] == "code"]
     return {"code_blocks": [{"lang": b["lang"], "lines": len(b["lines"]),
@@ -442,9 +456,19 @@ def _t_list_task_status(ctx: AgentContext, args: ListTasksArgs) -> dict:
         queue = TaskQueue(store)
         rows = queue.list_for_account(ctx.account_id,
                                       include_terminal=args.include_finished, limit=20)
-        return {"tasks": [{"task_id": t["task_id"], "kind": t["kind"], "state": t["state"],
-                           "attempt": t["attempt"], "cancel_requested": t["cancel_requested"]}
-                          for t in rows],
+        tasks = []
+        for task in rows:
+            job_id = queue.bound_job(task['task_id'])
+            job = store.get_job(job_id) if job_id else None
+            if job and _article_for_job(store,job_id)['spec'].get('account_id','ice-loop') != ctx.account_id:
+                job_id,job = None,None
+            tasks.append({'task_id':task['task_id'],'kind':task['kind'],'state':task['state'],
+                'attempt':task['attempt'],'cancel_requested':task['cancel_requested'],
+                'job_id':job_id,'engine_state':job['state'] if job else None,
+                'current_node':job['current_node'] if job else None,
+                'reason':job.get('pause_reason','') if job else task.get('error_code'),
+                'error_code':task.get('error_code')})
+        return {"tasks": tasks,
                 "note": "只读查询；不提供预计完成时间"}
     finally:
         store.close()
@@ -480,7 +504,7 @@ def _build_registry() -> dict[str, RegisteredTool]:
          _t_compose_image_prompt),
         (ToolSpec("request_user_input", "提出澄清问题并持久化", "propose", RequestInputArgs),
          _t_request_user_input),
-        (ToolSpec("create_production_task", "创建制作任务（幂等键）", "action", CreateTaskArgs),
+        (ToolSpec("create_production_task", "创建文章任务：kind只能为production；payload.spec需含series、已确认期号episode和主题topic；运行代码仍需用户批准", "action", CreateTaskArgs),
          _t_create_production_task),
         (ToolSpec("prepare_execution", "准备演示代码执行摘要（不批准）", "read", PrepareExecutionArgs),
          _t_prepare_execution),

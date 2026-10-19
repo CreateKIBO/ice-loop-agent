@@ -33,7 +33,11 @@ class DesktopService:
         self.settings_file = self.runtime / "settings.json"
         self.workers = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ice-job")
         self.running: dict[str, Any] = {}
-        self.guard = threading.Lock()
+        # Future.cancel() may synchronously invoke a completion callback while a
+        # lifecycle operation already holds this guard.
+        self.guard = threading.RLock()
+        self.chat_guard = threading.RLock()
+        self.chat_cancel = {}
         self._settings_guard = threading.Lock()
         self.settings = self._load_settings()
         if not self.settings_file.exists():
@@ -45,6 +49,8 @@ class DesktopService:
         # The previous sidecar is gone; inherited leases have no live owner here.
         store.conn.execute("UPDATE jobs SET lease=NULL, state='paused', pause_reason='程序重新启动，可继续任务' WHERE state='running' OR lease IS NOT NULL")
         store.conn.commit()
+        from .tasks import TaskQueue
+        TaskQueue(store).recover_after_restart()
         from .creative_chat import initialize_chat
         initialize_chat(store)
         from .task_lifecycle import initialize_tasks
@@ -112,12 +118,14 @@ class DesktopService:
             raise ValueError("公众号配置不存在，请刷新后重试")
         return copy.deepcopy(account)
 
-    def _app(self, *, demo: bool = False, article_root: str | None = None):
-        account = self._account("ice-loop" if demo else None)
+    def _app(self, *, demo: bool = False, article_root: str | None = None,
+             account_id: str | None = None):
+        # Background tasks keep their persisted owner even after the UI switches.
+        account = self._account(account_id if account_id is not None else "ice-loop" if demo else None)
         engine, cfg, store = build_app(
             Path(article_root or account["article_root"]), self.runtime,
             provider="mock" if demo else "qwen-deepseek", allow_local_exec=True)
-        if not demo:
+        if not demo or account['id'] != 'ice-loop':
             cfg.profile = profile_from_account(account)
             from .workspace_assets import WorkspaceAssets
             cfg.profile['brand']['visual_references']=WorkspaceAssets(store,self.runtime,account['id']).style_context()
@@ -128,29 +136,41 @@ class DesktopService:
             routes = {role: RouteConfig(**r) for role, r in self.settings["routes"].items()}
             engine.router = RoleRouter(profiles, routes, store=store)
         cfg.profile.setdefault('limits', {})['per_image_model_calls'] = self.settings.get('max_image_model_calls', 12)
+        engine.should_stop = lambda: bool(getattr(self,'_consumer_stop',None) and self._consumer_stop.is_set())
         return engine, cfg, store
 
-    def _job_app(self, job_id: str, *, allow_hidden: bool = False, background: bool = False):
-        engine, cfg, store = self._app()
-        job = store.get_job(job_id)
-        if not job:
-            store.close()
-            raise KeyError("任务不存在")
-        article = store.get_article(job["article_id"])
-        if not background and article['spec'].get('account_id', 'ice-loop') != self._account()['id']:
-            store.close()
-            raise ValueError('当前公众号没有该任务，请刷新任务列表')
+    def _job_app(self, job_id: str, *, allow_hidden: bool = False, background: bool = False,
+                 expected_owner: str | None = None):
+        from .domain.store import Store
         from .task_lifecycle import task_is_hidden
-        if not allow_hidden and task_is_hidden(store, job_id):
+        from .application.job_context import desktop_context
+        # Read ownership before constructing profiles/resources for an account.
+        # The foreground selection is not the background task's execution domain.
+        metadata = Store(self.runtime / 'app.db')
+        try:
+            job = metadata.get_job(job_id)
+            if not job:
+                raise KeyError("任务不存在")
+            if not allow_hidden and task_is_hidden(metadata, job_id):
+                raise ValueError('任务已归档或删除，请先在任务列表恢复')
+            context = desktop_context(self, metadata, job_id, expected_owner=expected_owner, background=background)
+            article = metadata.get_article(job['article_id'])
+            owner = context['account_id']
+            frozen_root = context['article_root']
+        finally:
+            metadata.close()
+        engine, cfg, store = self._app(demo=bool(article['spec'].get('demo')),
+                                      account_id=owner, article_root=frozen_root)
+        try:
+            state = engine._load_state(job_id)
+            if state.get('spec',{}).get('account_id') not in (None,owner):
+                raise ValueError('任务检查点与公众号归属不一致')
+            if state.get('rules_profile_snapshot'):
+                cfg.profile = copy.deepcopy(state['rules_profile_snapshot'])
+            return engine, cfg, store
+        except BaseException:
             store.close()
-            raise ValueError('任务已归档或删除，请先在任务列表恢复')
-        frozen_root = article["spec"].get("article_root", self.settings["article_root"])
-        cfg.article_root = normalize(frozen_root)
-        engine.exporter.article_root = cfg.article_root
-        state = engine._load_state(job_id)
-        if state.get("rules_profile_snapshot"):
-            cfg.profile = state["rules_profile_snapshot"]
-        return engine, cfg, store
+            raise
 
     def _start(self, job_id: str) -> dict:
         with self.guard:
@@ -162,8 +182,17 @@ class DesktopService:
                     store.update_job(job_id, state='queued', pause_reason='')
             finally:
                 store.close()
-            self.running[job_id] = self.workers.submit(self._advance, job_id)
+            future = self.workers.submit(self._advance, job_id)
+            self.running[job_id] = future
+        # A completed future may retain its result/exception traceback and engine.
+        # Register outside guard: add_done_callback runs synchronously if already done.
+        future.add_done_callback(lambda completed: self._release_completed(job_id, completed))
         return {"started": True, "job_id": job_id}
+
+    def _release_completed(self, job_id: str, future) -> None:
+        with self.guard:
+            if self.running.get(job_id) is future:
+                self.running.pop(job_id, None)
 
     def _advance(self, job_id: str):
         engine, _, store = self._job_app(job_id, allow_hidden=True, background=True)
@@ -175,6 +204,11 @@ class DesktopService:
             store.close()
 
     def call(self, method: str, params: dict | None = None) -> Any:
+        from .llm.http_io import request_control
+        with request_control(lambda: self._consumer_stop.is_set()):
+            return self._dispatch_call(method,params)
+
+    def _dispatch_call(self, method: str, params: dict | None = None) -> Any:
         params = params or {}
         if params.get('job_id') and params.get('account_id') and params['account_id'] != self._account()['id']:
             raise ValueError('公众号已切换，请刷新任务列表')
@@ -193,7 +227,8 @@ class DesktopService:
             'outlines.preview':self.outlines_preview,'outlines.save':self.outlines_save,
             'outlines.update':self.outlines_update,'outlines.match':self.outlines_match,
             "accounts.save": self.accounts_save, "accounts.switch": self.accounts_switch,
-            "accounts.import": self.accounts_import, "accounts.export": self.accounts_export,
+            "accounts.import": self.accounts_import, "accounts.preview_import": self.accounts_preview_import,
+            "accounts.export": self.accounts_export,
             "resources.list": self.resources_list, "resources.import": self.resources_import,
             "resources.preview": self.resources_preview, "resources.analyze": self.resources_analyze,
             "resources.apply": self.resources_apply, "drafts.list": self.drafts_list,
@@ -214,6 +249,7 @@ class DesktopService:
             "assets.review":self.assets_review,
             "backup.create": self.backup_create, "backup.inspect": self.backup_inspect,
             "backup.restore": self.backup_restore,
+            "backup.queue": self.backup_queue, "backup.resume_queue": self.backup_resume_queue,
             "assets.import": self.assets_import, "assets.select": self.assets_select,
             "assets.preview": self.assets_preview,
             "assets.capture_context":self.assets_capture_context,"assets.capture_finish":self.assets_capture_finish,
@@ -223,6 +259,8 @@ class DesktopService:
             'execution.policy_save':self.execution_policy_save,
             "claims.verify": self.claims_verify,
             "models.save": self.models_save, "models.probe": self.models_probe,
+            "models.routes_save": self.models_routes_save,
+            'models.limits_save':self.models_limits_save, 'models.window_refresh':self.models_window_refresh,
             "secrets.set": self.secrets_set, "library.list": self.library_list,
             "library.read": self.library_read,
             "events.poll": self.events_poll, "events.latest": self.events_latest,
@@ -245,13 +283,18 @@ class DesktopService:
         return dispatch[method](params)
 
     def bootstrap(self, params):
+        account = self._account()
         profiles = []
         for aid, profile in self.settings["profiles"].items():
+            from .llm.limits import revision
             profiles.append({**profile, "provider": aid,
+                             'limits_hash':revision(profile),
                              "has_key": bool(os.environ.get(profile["api_key_env"]))})
         from . import __version__
-        return {"version": __version__, "brand": self._account()["name"], "runtime_root": str(self.runtime),
-                "account": self._account(), "accounts": list(self.settings["accounts"].values()),
+        return {"version": __version__, "brand": account["name"], "runtime_root": str(self.runtime),
+                "account_hash":sha256_json(account),
+                "routes_hash":sha256_json(self.settings["routes"]),
+                "account": account, "accounts": list(self.settings["accounts"].values()),
                 "settings": {**self.settings, "profiles": profiles},
                 "tapnow": {"url": "https://app.tapnow.media/home", "automation_ready": False},
                 "jobs": self.jobs_list({})}
@@ -289,23 +332,27 @@ class DesktopService:
         return PublicationHistory(store, self._account())
 
     def history_list(self, params):
+        if params.get('account_id', self._account()['id']) != self._account()['id']:
+            raise ValueError('公众号已切换，请刷新历史记录')
         _, _, store = self._app()
         try:
+            if 'page_size' in params:return self._history(store).page(params)
             return self._history(store).records()
         finally:
             store.close()
 
     def history_get(self, params):
+        if params.get('account_id', self._account()['id']) != self._account()['id']:
+            raise ValueError('公众号已切换，请刷新历史记录')
         _, _, store = self._app()
         try:
-            record = next((row for row in self._history(store).records(bodies=True) if row["history_id"] == params.get("history_id")), None)
-            if not record:
-                raise ValueError("当前公众号没有这篇历史文章")
-            return record
+            return self._history(store).get(params.get('history_id'))
         finally:
             store.close()
 
     def history_update(self, params):
+        if params.get('account_id', self._account()['id']) != self._account()['id']:
+            raise ValueError('公众号已切换，请刷新后登记发布记录')
         _, _, store = self._app()
         try:
             return self._history(store).update(params)
@@ -313,9 +360,11 @@ class DesktopService:
             store.close()
 
     def history_progress(self, params):
+        if params.get('account_id', self._account()['id']) != self._account()['id']:
+            raise ValueError('公众号已切换，请刷新后登记发布进度')
         _, _, store = self._app()
         try:
-            return self._history(store).progress(params.get("series"), params.get("episode"))
+            return self._history(store).progress(params.get("series"), params.get("episode"), params.get('context_hash'))
         finally:
             store.close()
 
@@ -331,7 +380,7 @@ class DesktopService:
                 try:episode=int(value)
                 except (ValueError,TypeError):raise ValueError('请输入1–9999期号') from None
                 if isinstance(value,(bool,float)) or not 1<=episode<=9999:raise ValueError('请输入1–9999期号')
-            return self._history(store).context(params.get("series", account["columns"][0]["code"]),episode)
+            return self._history(store).context(params.get("series", account["columns"][0]["code"]),episode,include_titles=params.get('include_titles',True))
         finally:
             store.close()
 
@@ -342,8 +391,8 @@ class DesktopService:
         _,_,store=self._app()
         try:
             box=EditorialTopics(store,account)
-            if method=='list':return {'rows':box.list(),'example':example(account)}
-            if method=='match':return box.match(params.get('series'),params.get('episode'))
+            if method=='list':return box.page(params) if 'page_size' in params else {'rows':box.list(),'example':example(account)}
+            if method=='match':return box.match(params.get('series'),params.get('episode'),include_available=params.get('include_available',True))
             return getattr(box,method)(params)
         finally:store.close()
 
@@ -449,6 +498,8 @@ class DesktopService:
             raise ValueError("请选择当前公众号并确认本期标题")
         if len(fields["topic"])>30:
             raise ValueError("本期标题不能超过30字，请修改后确认")
+        if any(char in fields['topic'] for char in ('\r', '\n', '\x00')):
+            raise ValueError('本期标题必须为单行文字，不能包含换行或空字符')
         _, _, store = self._app()
         try:
             history = self._history(store).context(fields["series"],fields['episode'])
@@ -644,7 +695,10 @@ class DesktopService:
             if not demo:
                 if not any(p.credential() for p in engine.router.profiles.values()):
                     raise ValueError("请先在模型设置中配置国内模型 Key，或选择离线演示")
-            job_id, article_id = engine.create_job(spec, limits={"max_model_calls": self.settings["max_model_calls"]})
+            from .application.job_context import record_context
+            job_id, article_id = engine.create_job(spec, limits={"max_model_calls": self.settings["max_model_calls"]},
+                on_created=lambda job: record_context(store,job,account['id'],engine.cfg.article_root,
+                                                      allow_demo_exec=demo))
             if plan and mode=='auto_prepare':
                 payload={"directions":[{"文章类型":account['positioning'] or '公众号文章',"核心角度":spec['content_angle'] or spec['topic'],"标题候选":spec['topic']}],"working_title":spec['topic'],"recommended":0}
                 state=engine._load_state(job_id)
@@ -830,7 +884,9 @@ class DesktopService:
         engine,_,store=self._app()
         try:
             from .supplements import create
-            return create(engine,store,account,Path(params['file_path']),params.get('source_hash'))
+            from .application.job_context import record_context
+            return create(engine,store,account,Path(params['file_path']),params.get('source_hash'),
+                on_created=lambda job: record_context(store,job,account['id'],Path(account['article_root'])/'补图候选'))
         finally:store.close()
 
     def supplements_from_library(self, params):
@@ -904,18 +960,73 @@ class DesktopService:
 
     def backup_create(self, params):
         from .backup import create_backup
-        with self.guard, self._settings_guard:
+        with self.guard, self.chat_guard, self._settings_guard:
             if any(not future.done() for future in self.running.values()):
                 raise ValueError('请等待当前任务停止后再备份')
+            if self.chat_cancel:
+                raise ValueError('请等待创作回复停止后再备份')
+            from .domain.store import Store
+            store = Store(self.runtime / 'app.db')
+            try:
+                if store.conn.execute("SELECT 1 FROM tasks WHERE state='running' LIMIT 1").fetchone():
+                    raise ValueError('队列正在执行，请等待任务停止后再备份')
+            finally:
+                store.close()
             return create_backup(self.runtime, self.settings, normalize(params['file_path']))
 
     def backup_inspect(self, params):
         from .backup import inspect_backup
-        return inspect_backup(normalize(params['file_path']))
+        return inspect_backup(normalize(params['file_path']), temporary_root=self.runtime / 'staging')
 
     def backup_restore(self, params):
         from .backup import restore_backup
         return restore_backup(normalize(params['file_path']), normalize(params['destination']), params['package_hash'])
+
+    def backup_queue(self, params):
+        from .domain.store import Store
+        account = self._account(params.get('account_id'))
+        store = Store(self.runtime / 'app.db')
+        try:
+            rows = store.conn.execute("SELECT task_id,account_id,input_hash,payload FROM tasks WHERE account_id=? AND state='paused' AND error_code='RESTORE_REVIEW' ORDER BY created_at LIMIT 100", (account['id'],)).fetchall()
+            total = store.conn.execute("SELECT COUNT(*) FROM tasks WHERE account_id=? AND state='paused' AND error_code='RESTORE_REVIEW'", (account['id'],)).fetchone()[0]
+            return {'runtime_root':str(self.runtime), 'total':total, 'tasks':[{
+                'task_id':r['task_id'], 'input_hash':r['input_hash'], 'account_id':r['account_id'],
+                'title':str((json.loads(r['payload']).get('spec') or {}).get('topic') or '待恢复的制作任务')[:200],
+            } for r in rows]}
+        finally:
+            store.close()
+
+    def backup_resume_queue(self, params):
+        from .domain.store import Store
+        from .task_lifecycle import task_is_hidden
+        with self.guard:
+            if not isinstance(params.get('account_id'), str) or not params['account_id']:
+                raise ValueError('请明确指定要恢复的公众号')
+            account = self._account(params.get('account_id'))
+            if account['id'] != self.settings['active_account_id']:
+                raise ValueError('公众号已切换，请刷新后继续')
+            store = Store(self.runtime / 'app.db')
+            try:
+                with store.transaction():
+                    row = store.conn.execute("SELECT account_id,input_hash,state,error_code FROM tasks WHERE task_id=?", (params.get('task_id'),)).fetchone()
+                    if not row or row['account_id'] != account['id'] or row['input_hash'] != params.get('input_hash'):
+                        raise ValueError('恢复任务已变化或不属于当前公众号，请刷新')
+                    if row['state'] != 'paused' or row['error_code'] != 'RESTORE_REVIEW':
+                        raise ValueError('此任务已处理，请刷新列表')
+                    bound = store.conn.execute('SELECT job_id FROM task_job_bindings WHERE task_id=?', (params['task_id'],)).fetchone()
+                    if bound:
+                        if task_is_hidden(store, bound['job_id']):
+                            raise ValueError('绑定的文章已归档或删除，请先恢复文章')
+                        job = store.get_job(bound['job_id'])
+                        article = store.get_article(job['article_id']) if job else None
+                        if not article or article['spec'].get('account_id', 'ice-loop') != account['id']:
+                            raise ValueError('恢复任务的文章归属无效')
+                        if job['state'] == 'paused':
+                            store.update_job(job['job_id'], state='queued', pause_reason='', commit=False)
+                    store.conn.execute("UPDATE tasks SET state='queued',error_code=NULL,updated_at=? WHERE task_id=?", (now_iso(), params['task_id']))
+                return {'ok':True}
+            finally:
+                store.close()
 
     def articles_finalize(self, params):
         engine, _, store = self._job_app(params["job_id"])
@@ -1007,13 +1118,8 @@ class DesktopService:
             if hashlib.sha256(path.read_bytes()).hexdigest()!=candidate['sha256']:
                 raise ValueError('图片已改变，请重新导入')
             if params.get('original') is not True:
-                import io
-                from PIL import Image, ImageOps
-                with Image.open(path) as source:
-                    image=ImageOps.exif_transpose(source).convert('RGBA')
-                    image.thumbnail((1000,700))
-                    output=io.BytesIO();image.save(output,format='PNG')
-                return 'data:image/png;base64,'+base64.b64encode(output.getvalue()).decode('ascii')
+                from .image_memory import thumbnail_data_url
+                return thumbnail_data_url(path)
             return "data:" + mime + ";base64," + base64.b64encode(path.read_bytes()).decode("ascii")
         finally:
             store.close()
@@ -1200,7 +1306,7 @@ class DesktopService:
             evidence = str(params.get("evidence", "")).strip()
             if urlparse(url).scheme != "https" or not urlparse(url).hostname or len(evidence) < 10:
                 raise ValueError("请填写 HTTPS 官方来源和至少 10 字的原文核验片段")
-            source_id = "src-" + sha256_json({"url": url, "evidence": evidence})[:16]
+            source_id = "src-" + sha256_json({"article_id":job['article_id'],"url": url, "evidence": evidence})[:16]
             store.add_source({"source_id": source_id, "article_id": job["article_id"], "url": url,
                               "title": "用户核验来源", "tier": 1, "summary": evidence,
                               "content_hash": sha256_text(evidence)})
@@ -1212,13 +1318,92 @@ class DesktopService:
         finally:
             store.close()
 
+    def models_routes_save(self, params):
+        """Change text routing without rewriting model IDs, budgets or visual capabilities."""
+        with self._settings_guard:
+            if params.get('account_id') != self.settings['active_account_id']:
+                raise ValueError('公众号已切换，请重新打开模型分工')
+            if params.get('routes_hash') != sha256_json(self.settings['routes']):
+                raise ValueError('模型分工已在别处修改，请载入最新分工后再保存；当前选择已保留')
+            routes = params.get('routes')
+            text_roles = {'planner', 'researcher', 'writer', 'reviewer', 'title_editor', 'code_helper'}
+            if not isinstance(routes, dict) or not routes or not set(routes) <= text_roles:
+                raise ValueError('请选择有效的文字模型分工，视觉模型需单独配置')
+            ids = {profile['profile_id'] for profile in self.settings['profiles'].values()}
+            updated = copy.deepcopy(self.settings)
+            for role, route in routes.items():
+                if role not in self.settings['routes'] or not isinstance(route, dict):
+                    raise ValueError('角色路由引用无效')
+                if set(route) != {'primary', 'fallbacks', 'thinking_policy'}:
+                    raise ValueError('模型分工字段无效，请重新载入')
+                primary, fallbacks = route.get('primary'), route.get('fallbacks')
+                if not isinstance(primary, str) or primary not in ids or not isinstance(fallbacks, list):
+                    raise ValueError('角色路由引用无效')
+                if (len(fallbacks) > len(ids) or any(not isinstance(pid, str) or pid not in ids for pid in fallbacks)
+                        or primary in fallbacks or len(set(fallbacks)) != len(fallbacks)):
+                    raise ValueError('回退模型引用无效或重复')
+                if route.get('thinking_policy') not in ('prefer_off', 'prefer_on', 'required_off', 'required_on', 'provider_default'):
+                    raise ValueError('思考策略无效')
+                updated['routes'][role] = copy.deepcopy(route)
+            atomic_write_text(self.settings_file, json.dumps(updated, ensure_ascii=False, indent=2))
+            self.settings = updated
+        return self.bootstrap({})
+
+    def _limits_profile(self, params):
+        from .llm.limits import revision
+        if params.get('account_id') != self.settings['active_account_id']:
+            raise ValueError('公众号已切换，请重新打开模型设置')
+        profile=self.settings['profiles'].get(params.get('provider'))
+        if not profile:
+            raise ValueError('未知国内供应商')
+        if params.get('limits_hash') != revision(profile):
+            raise ValueError('模型或输出设置已变化，请载入已保存设置；当前输入已保留')
+        return profile
+
+    def models_limits_save(self, params):
+        from .llm.limits import output_limit
+        if 'max_output_tokens' not in params:
+            raise ValueError('请选择最大输出Token或明确留空')
+        with self._settings_guard:
+            self._limits_profile(params)
+            updated=copy.deepcopy(self.settings)
+            profile=updated['profiles'][params['provider']]
+            profile.setdefault('extra',{})['max_output_tokens']=params['max_output_tokens']
+            output_limit(ModelProfile(**profile))
+            atomic_write_text(self.settings_file,json.dumps(updated,ensure_ascii=False,indent=2))
+            self.settings=updated
+        return self.bootstrap({})
+
+    def models_window_refresh(self, params):
+        from .llm.limits import window_metadata
+        from .llm.transport import OpenAIChatTransport
+        with self._settings_guard:
+            profile=copy.deepcopy(self._limits_profile(params))
+        key=ModelProfile(**profile).credential()
+        if not key:
+            raise ValueError('请先保存该供应商Key，再读取模型窗口')
+        rows=OpenAIChatTransport().models(profile['base_url'],key)
+        metadata=window_metadata(profile,rows)
+        with self._settings_guard:
+            self._limits_profile(params)  # Account/endpoint/model/output changes during GET invalidate it.
+            updated=copy.deepcopy(self.settings)
+            updated['profiles'][params['provider']].setdefault('extra',{})['model_window']=metadata
+            atomic_write_text(self.settings_file,json.dumps(updated,ensure_ascii=False,indent=2))
+            self.settings=updated
+        return self.bootstrap({})
+
     def models_save(self, params):
         with self._settings_guard:
+            if params.get('account_id') not in (None,self.settings['active_account_id']):
+                raise ValueError('公众号已切换，请重新打开模型设置')
             aid = params.get("provider")
             if aid not in self.settings["profiles"]:
                 raise ValueError("未知国内供应商")
             updated = copy.deepcopy(self.settings)
             profile = updated["profiles"][aid]
+            previous_identity=(profile['base_url'],profile['model_id'])
+            if params.get('expected_model_id') is not None and params['expected_model_id'] != profile['model_id']:
+                raise ValueError('模型配置已在别处修改，请载入已保存模型后再修改；当前输入已保留')
             model = str(params.get("model_id", "")).strip()
             if not model or len(model) > 160:
                 raise ValueError("请输入控制台可用的模型 ID")
@@ -1233,6 +1418,9 @@ class DesktopService:
             if endpoint.rstrip('/')!=profile['base_url'].rstrip('/'):
                 profile['capabilities']={key:('unknown' if key!='evidence_date' else '') for key in profile['capabilities']};profile['status']='requires_probe'
             profile['base_url']=endpoint.rstrip('/')
+            if previous_identity != (profile['base_url'],profile['model_id']):
+                profile.setdefault('extra',{}).pop('model_window',None)
+                profile['extra'].pop('max_output_tokens',None)
             for field in ('service','region'):
                 if field in params:
                     value=params[field]
@@ -1281,15 +1469,42 @@ class DesktopService:
         aid = data.get("id") if isinstance(data, dict) else None
         if aid and aid not in self.settings["accounts"]:
             raise ValueError("公众号配置不存在")
-        account = normalize_account(data, self.runtime, account_id=aid)
+        request_id = params.get('request_id') if not aid else None
+        if request_id is not None and (not isinstance(request_id,str) or
+                not 1 <= len(request_id) <= 100 or not all(c.isascii() and (c.isalnum() or c in '_-') for c in request_id)):
+            raise ValueError('新增公众号的请求标识无效')
+        input_hash = sha256_json(data)
+        replayed = False
         with self._settings_guard:
-            updated = copy.deepcopy(self.settings)
-            updated["accounts"][account["id"]] = account
-            updated["active_account_id"] = account["id"]
-            updated["article_root"] = account["article_root"]
-            atomic_write_text(self.settings_file, json.dumps(updated, ensure_ascii=False, indent=2))
-            self.settings = updated
-        return self.bootstrap({})
+            requests = self.settings.get('account_create_requests',{})
+            prior = requests.get(request_id) if request_id else None
+            if prior:
+                if prior['input_hash'] != input_hash:
+                    raise ValueError('这次新增请求的资料已变化，请重新发起新增')
+                if prior['account_id'] not in self.settings['accounts']:
+                    raise ValueError('已保存的公众号不存在，请刷新后重试')
+                saved_id = prior['account_id']
+                replayed = True
+            else:
+                if params.get('expected_account_id') not in (None,self.settings['active_account_id']):
+                    raise ValueError('公众号已切换，请重新打开品牌设置后保存')
+                if aid and params.get('account_hash') is not None and params['account_hash'] != sha256_json(self._account(aid)):
+                    raise ValueError('公众号资料已在别处修改，当前输入已保留，请重新载入后合并')
+                account = normalize_account(data, self.runtime, account_id=aid)
+                saved_id = account['id']
+            if not replayed:
+                updated = copy.deepcopy(self.settings)
+                updated["accounts"][saved_id] = account
+                updated["active_account_id"] = saved_id
+                updated["article_root"] = account["article_root"]
+                if request_id:
+                    saved_requests = updated.setdefault('account_create_requests',{})
+                    saved_requests[request_id] = {'account_id':saved_id,'input_hash':input_hash}
+                    while len(saved_requests)>128:
+                        saved_requests.pop(next(iter(saved_requests)))
+                atomic_write_text(self.settings_file, json.dumps(updated, ensure_ascii=False, indent=2))
+                self.settings = updated
+        return {**self.bootstrap({}),'saved_account_id':saved_id,'replayed':replayed}
 
     def _box_call(self, method, *args):
         from .workspace_assets import WorkspaceAssets
@@ -1470,12 +1685,20 @@ class DesktopService:
             self.settings = updated
         return self.bootstrap({})
 
-    def accounts_import(self, params):
+    def _account_import_data(self, params):
         text = params.get("text", "")
         if not isinstance(text, str) or len(text) > 60000:
             raise ValueError("导入文件过大，请使用精简的品牌说明或配置")
-        if params.get("format") == "json":
-            bundle = json.loads(text)
+        if not text.strip():
+            raise ValueError('导入资料不能为空')
+        import_format = params.get('format','txt')
+        if import_format not in ('json','md','txt'):
+            raise ValueError('请选择JSON配置、Markdown或文本品牌说明')
+        if import_format == "json":
+            try:
+                bundle = json.loads(text)
+            except json.JSONDecodeError:
+                raise ValueError('JSON配置无法读取，请检查格式后重试') from None
             if not isinstance(bundle, dict) or bundle.get("format") != "publication-profile-v1":
                 raise ValueError("请选择工作台导出的 publication-profile-v1 配置文件")
             data = copy.deepcopy(bundle.get("account", {}))
@@ -1487,6 +1710,17 @@ class DesktopService:
         else:
             data = {"name": str(params.get("name", "新公众号"))[:100], "audience": "请设置你的目标读者",
                     "brand_document": text}
+        return data
+
+    def accounts_preview_import(self, params):
+        data = self._account_import_data(params)
+        account = normalize_account(data,self.runtime,account_id='preview')
+        account.pop('id',None)
+        account.update(preset='general',article_root='',library_root='')
+        return {'account':account,'saved':False,'requires_audience_confirmation':account['audience']=='请设置你的目标读者'}
+
+    def accounts_import(self, params):
+        data = self._account_import_data(params)
         return self.accounts_save({"account": data})
 
     def accounts_export(self, params):
@@ -1496,9 +1730,9 @@ class DesktopService:
         return {"format": "publication-profile-v1", "account": account}
 
     def library_list(self, params):
-        from .article_library import library_entries
+        from .article_library import iter_library_entries
         return [{k: v for k, v in entry.items() if k != 'body'}
-                for entry in library_entries(self._account(params.get('account_id')))]
+                for entry in iter_library_entries(self._account(params.get('account_id')))]
 
     def library_read(self, params):
         from .article_library import read_library
@@ -1537,6 +1771,9 @@ class DesktopService:
             store.close()
 
     def close(self):
+        with self.chat_guard:
+            for token in self.chat_cancel.values():
+                token.set()
         # 批次A：先停队列消费者（停止调度并退出自有子进程），再关工作线程池。
         if hasattr(self, '_consumer_stop'):
             self._consumer_stop.set()
@@ -1568,9 +1805,10 @@ class DesktopService:
 # 重操作路由（M1-04）：这些方法在池内串行执行，不阻塞 stdin 读循环。
 # 判定标准：涉及模型调用/演示程序执行/备份恢复/资源分析等可感知的长操作。
 HEAVY_METHODS = frozenset({
+    'articles.export_bundle',
     'jobs.create', 'jobs.resume', 'supplements.prepare', 'supplements.execute',
     'chat.send', 'assets.analyze', 'assets.import', 'resources.vision',
-    'models.probe', 'vision.probe', 'backup.create', 'backup.restore',
+    'models.probe', 'models.catalog', 'models.window_refresh', 'vision.probe', 'backup.create', 'backup.inspect', 'backup.restore', 'backup.resume_queue',
     'accounts.import', 'articles.finalize', 'planning.propose',
     'outlines.preview', 'brief.suggest',
 })

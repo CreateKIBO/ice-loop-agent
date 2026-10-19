@@ -10,4 +10,6 @@ module.exports = Object.freeze([
   'articles.export_bundle',
   // 批次 B：交付审阅快照只读；确认需带快照摘要，内容变化即拒绝。
   'articles.delivery_snapshot', 'articles.delivery_confirm',
+  'backup.queue', 'backup.resume_queue',
+  'models.limits_save', 'models.window_refresh',
 ]);

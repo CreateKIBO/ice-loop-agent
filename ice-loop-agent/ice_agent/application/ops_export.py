@@ -40,6 +40,9 @@ def _delivery_gate(cfg: Any, store: Any, article: dict, state: dict, body: str, 
     from ..providers.tapnow import selected_asset, validate_image_file
     figures: list[dict[str, Any]] = []
     blocking: list[dict[str, Any]] = []
+    from ..export.markdown_content import unmanaged_images,managed_placeholders,run_references,program_fences,output_reference_errors
+    for image in unmanaged_images(body):
+        blocking.append({'kind':'image','message':'正文图片「'+(image['caption'] or '未命名图片')[:80]+'」尚未归档到本篇配图，请导入图位并在正文使用对应图位。'})
     slots = store.article_slots(article["article_id"])
     for slot in slots:
         figure_no = slot.get("figure_no")
@@ -61,6 +64,11 @@ def _delivery_gate(cfg: Any, store: Any, article: dict, state: dict, body: str, 
     figures.sort(key=lambda f: f["figure_no"])
     for order, figure in enumerate(figures, start=1):
         figure["order"] = order
+    resolved={figure['figure_no'] for figure in figures}
+    for placeholder in managed_placeholders(body):
+        number=placeholder['figure_no']
+        if number not in resolved and not any(item.get('figure_no')==number for item in blocking):
+            blocking.append({'kind':'image','figure_no':number,'message':f'正文图{number}还没有已采纳的配图，请先准备这张图片'})
     # R06：ready 统一校验——规则、事实、审批基线、运行证据有效性。
     allow_ready = True
     run_refs_status: dict[str, dict[str, Any]] = {}
@@ -77,19 +85,28 @@ def _delivery_gate(cfg: Any, store: Any, article: dict, state: dict, body: str, 
             allow_ready = False
             blocking.append({"kind": "plan", "message": "无法验证当前执行计划：" + str(exc)[:120]})
     runs = state.get("runs") or {}
+    for ref in output_reference_errors(body,runs):
+        blocking.append({'kind':'evidence','message':f'正文中的运行结果（{ref[:12]}）与当前执行记录不一致，请重新回填真实输出'})
+    planned={block['code_sha256'] for block in blocks}
+    if any(program['code_sha256'] not in planned for program in program_fences(body)):
+        blocking.append({'kind':'plan','message':'正文中的Python或Java代码尚未纳入当前执行计划，请检查代码围栏格式并重新准备程序'})
     for run_id, record in runs.items():
         block = next((b for b in blocks if b["code_sha256"] == record.get("code_sha256")
                       and b["stdin_hash"] == record.get("stdin_hash")), None)
         run_refs_status[run_id] = _run_evidence_status(record, block)
+    for ref in run_references(body):
+        if not run_refs_status.get(ref,{}).get('ok'):
+            blocking.append({'kind':'evidence','message':'正文包含尚未解析或已失效的运行输出，请重新运行后核对'})
     reviewed = None
     if mode == "ready":
         from ..rules import run_all_checks
-        claims = store.article_claims(article["article_id"])
+        from ..rules.facts import evidenced_claims,claim_verified
+        claims = evidenced_claims(store,article['article_id'])
         rules_report = run_all_checks(body, cfg.profile, claims=claims)
         if not rules_report["passed"]:
             allow_ready = False
             blocking.append({"kind": "rules", "message": "程序化规则检查未通过"})
-        unverified = [c for c in claims if c.get("status") != "verified"]
+        unverified = [c for c in claims if not claim_verified(c)]
         if unverified:
             allow_ready = False
             blocking.append({"kind": "claims", "message": f"存在 {len(unverified)} 条未核验事实断言"})
@@ -250,6 +267,8 @@ class OpsExportHandler(Handler):
 
     # ------------------------------------------------------------- 最终交付审阅（批次 B）
     def _delivery_job(self, params: dict):
+        if params.get('account_id') not in (None,self._account()['id']):
+            raise ValueError('公众号已切换，请重新打开交付审阅')
         job_id = params.get("job_id")
         if not isinstance(job_id, str) or not job_id:
             raise ValueError("缺少任务标识")
@@ -360,13 +379,22 @@ class OpsExportHandler(Handler):
         destination = params.get("destination")
         if not isinstance(destination, str) or not destination.strip():
             raise ValueError("请先通过目录选择器选择导出位置")
-        mode = "ready" if params.get("mode") == "ready" else "draft"
+        mode = params.get('mode','draft')
+        if mode not in ('draft','ready'):
+            raise ValueError('导出模式只能是draft或ready')
+        if params.get('account_id') not in (None,self._account()['id']):
+            raise ValueError('公众号已切换，请重新打开文章后导出')
         try:
             engine, cfg, store = self.service._job_app(job_id)
         except KeyError as exc:
             raise ValueError(str(exc.args[0] if exc.args else exc)) from None
         try:
-            article = store.get_article(store.get_job(job_id)["article_id"])
+            job=store.get_job(job_id)
+            if mode=='ready':
+                future=self.service.running.get(job_id)
+                if job['lease'] or future and not future.done():
+                    raise ValueError('任务正在运行，请停止后重新审阅并导出')
+            article = store.get_article(job["article_id"])
             if article["spec"].get("account_id", "ice-loop") != self._account()["id"]:
                 raise ValueError("只能导出当前公众号的文章")
             state = engine._load_state(job_id)
@@ -375,8 +403,16 @@ class OpsExportHandler(Handler):
                 raise ValueError("正文还没有可导出的内容")
             from ..domain.types import sha256_text
             body_hash = sha256_text(body)
+            if params.get('body_hash') is not None and params['body_hash']!=body_hash:
+                raise ValueError('正文已变化，请重新载入文章并确认导出版本')
+            if params.get('delivery_hash') is not None:
+                from ..automation import delivery_hash
+                if params['delivery_hash']!=delivery_hash(state,store.article_slots(article['article_id'])):
+                    raise ValueError('交付内容已变化，请重新审阅后导出')
             title = article.get("final_title") or article.get("topic") or "文章"
-            gate = _delivery_gate(cfg, store, article, state, body, mode)
+            # Drafts remain exportable, but must report the same outstanding
+            # checks as the review screen rather than pretending to be ready.
+            gate = _delivery_gate(cfg, store, article, state, body, 'ready')
             figures = gate["figures"]
             from ..domain.types import sha256_json
             asset_set_hash = sha256_json(

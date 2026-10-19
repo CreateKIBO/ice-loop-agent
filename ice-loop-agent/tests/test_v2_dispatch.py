@@ -23,6 +23,27 @@ class TestPooledDispatch(unittest.TestCase):
         with self.lock:
             return [json.loads(line) for line in self.out_lines]
 
+    def test_export_does_not_block_stdio_reader_and_light_budget_queries(self):
+        from ice_agent.desktop_service import HEAVY_METHODS
+        started=threading.Event();release=threading.Event();reader_done=threading.Event()
+        def dispatch(method,params):
+            if method=='articles.export_bundle':started.set();release.wait(5);return {'exported':True}
+            return {'light':method}
+        pool=ThreadPoolExecutor(max_workers=2)
+        channel=RpcChannel(dispatch,write=self._write,executor=pool,route=lambda method:'pool' if method in HEAVY_METHODS else 'inline')
+        def reader():
+            channel.handle_raw(json.dumps({'id':'export','method':'articles.export_bundle','params':{}}).encode())
+            channel.handle_raw(json.dumps({'id':'budget','method':'budgets.get','params':{}}).encode())
+            reader_done.set()
+        thread=threading.Thread(target=reader);thread.start()
+        try:
+            self.assertTrue(started.wait(2))
+            self.assertTrue(reader_done.wait(1),'导出不应占住stdin读循环，预算查询应先返回')
+            messages={row.get('id'):row for row in self._parsed()}
+            self.assertIn('budget',messages);self.assertNotIn('export',messages)
+        finally:
+            release.set();thread.join(5);pool.shutdown(wait=True)
+
     def test_light_query_responds_while_heavy_call_in_flight(self):
         started = threading.Event()
         release = threading.Event()

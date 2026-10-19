@@ -139,6 +139,7 @@ class TestWorkflowE2E(unittest.TestCase):
         engine, cfg, store = build_app(
             self.articles, self.dir / "runtime2", provider="mock",
             allow_local_exec=True)
+        self.addCleanup(store.close)
         job_id, _ = engine.create_job(spec)
 
         def approve_all(scope, payload):
@@ -146,7 +147,13 @@ class TestWorkflowE2E(unittest.TestCase):
         job = engine.run(job_id, auto_approver=approve_all)
         # 应停在 verify_code 的用户动作
         self.assertEqual(job["state"], "awaiting_user")
-        self.assertIn("approve_local_exec", job["pause_reason"])
+        self.assertEqual(job['current_node'],'verify_code')
+        self.assertIn('代码运行面板',job['pause_reason'])
+        self.assertIn('--allow-local-exec',job['pause_reason'])
+        from ice_agent.execution.plan import execution_plan
+        state = engine._load_state(job_id)
+        self.assertFalse(execution_plan(state)['approved'])
+        self.assertFalse(state.get('runs'))
 
 
 class TestExportConflict(unittest.TestCase):

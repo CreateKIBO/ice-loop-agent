@@ -11,6 +11,7 @@ from PIL import Image, ImageOps
 from .domain.types import now_iso
 from .llm.adapters import extract_json_block, make_adapter
 from .llm.router import LLMRequest, image_message, validate_simple_schema
+from .image_memory import serialized_image_decode
 
 USES = ('cover','illustration','screenshot','reference')
 VISUAL_SCHEMA = {'type':'object','fields':{
@@ -20,6 +21,7 @@ VISUAL_SCHEMA = {'type':'object','fields':{
     'theme_colors':{'type':'list','min_items':1,'item':'str'},'color_explanation':{'type':'str','nonempty':True}}}
 
 
+@serialized_image_decode
 def image_data(source: Image.Image) -> str:
     """EXIF orientation retained; metadata discarded; transparency on warm white."""
     image=ImageOps.exif_transpose(source).convert('RGBA')
@@ -32,6 +34,7 @@ def image_data(source: Image.Image) -> str:
     return data
 
 
+@serialized_image_decode
 def resource_image(box, resource: dict) -> str:
     with Image.open(box.checked_path(resource)) as image:
         return image_data(image)

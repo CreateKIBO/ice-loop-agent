@@ -9,6 +9,7 @@
     "workbench-methods.cjs",
     "ui-mode.cjs",
     "export-approval.cjs",
+    "backup-actions.cjs",
     "preload.cjs",
     "tools.cjs",
     "clipboard.cjs",

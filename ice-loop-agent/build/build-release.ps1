@@ -11,7 +11,7 @@ if($LASTEXITCODE -ne 0){throw 'New UI build failed'}
 # verify_release 的"无生成缓存"审计会失败）。
 $stalePycache = Get-ChildItem -LiteralPath (Join-Path $taskRoot 'ice_agent') -Recurse -Directory -Filter '__pycache__'
 if($stalePycache){$stalePycache | Remove-Item -Recurse -Force}
-& '.venv/Scripts/python.exe' -m PyInstaller --noconfirm --onedir --name ice-engine --distpath dist --workpath .test-tmp/pyinstaller --specpath build --paths . --collect-data ice_agent --collect-data pydantic build/engine_entry.py
+& '.venv/Scripts/python.exe' -m PyInstaller --noconfirm --onedir --name ice-engine --distpath dist --workpath .test-tmp/pyinstaller --specpath build --paths . --collect-data ice_agent --collect-data pydantic --collect-data certifi --collect-submodules markdown_it --collect-submodules mdurl --collect-submodules httpx --collect-submodules httpcore --collect-submodules anyio build/engine_entry.py
 if($LASTEXITCODE -ne 0){throw 'Python engine build failed'}
 # PyInstaller 会把源码树的 __pycache__/*.pyc 当数据收进引擎（audit 零缓存要求）；
 # 且命令行参数会回写 spec 文件，故排除逻辑只能放这里——冻结后清理 dist。

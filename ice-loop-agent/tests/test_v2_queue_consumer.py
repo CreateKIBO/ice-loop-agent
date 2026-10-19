@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import threading
 import unittest
+from unittest.mock import patch
 
 from ice_agent.desktop_service import DesktopService
 from ice_agent.tasks import TaskQueue, TaskInputConflict
@@ -49,7 +50,9 @@ class TestQueueConsumerStrict(unittest.TestCase):
         # demo 引擎在审批门暂停；循环批准直到完成，drain 之间复用绑定 job
         for _ in range(10):
             summary = drain(self.service)
-            record = next((e for e in summary["executed"]
+            # Reconciliation may emit a requeued row before the actual worker
+            # outcome for the same task. Review its latest persisted outcome.
+            record = next((e for e in reversed(summary["executed"])
                            if e["task_id"] == task["task_id"]), None)
             if record is None:
                 break  # 无可认领（任务已是终态）
@@ -58,7 +61,13 @@ class TestQueueConsumerStrict(unittest.TestCase):
                 bound_job = json_job_id(queue.get(task["task_id"])["result"])
                 approval = self.store.pending_approval(bound_job)
                 if approval is None:
-                    break
+                    data = self.service.call('jobs.get',{'job_id':bound_job})
+                    self.assertEqual(data['job']['current_node'],'verify_code',data['job'])
+                    self.assertEqual(data['job']['state'],'awaiting_user',data['job'])
+                    with patch.object(self.service,'_start',return_value={'started':False}):
+                        self.service.call('execution.approve',{'job_id':bound_job,
+                            'content_hash':data['execution_hash'],'stdin_by_filename':data['stdin_by_filename']})
+                    continue
                 engine, _, estore = self.service._app(demo=True)
                 try:
                     engine.decide(bound_job, approval["approval_id"], "approve",
@@ -73,26 +82,24 @@ class TestQueueConsumerStrict(unittest.TestCase):
                 return
             if record["status"] == "failed":
                 self.fail(f"demo 任务不应失败：{record}")
-        # 10 轮内到审批门是合法中间态
-        final = TaskQueue(self.store).get(task["task_id"])
-        self.assertIn(final["state"], ("waiting_user", "queued", "succeeded"))
+        self.fail('逐门批准后仍未完成，不能用中间态代替成功验收')
 
     def test_engine_failed_never_succeeded(self):
         """引擎 failed 必须映射 task failed，绝不 succeeded。"""
         task = self._enqueue_production("ice-loop", key="f1")
-        # 强制引擎失败：topic 为空触发节点校验失败
+        # Schema-invalid input is now rejected before creating a job. Exercise
+        # a real engine-node failure, rather than confusing it with admission.
         queue = TaskQueue(self.store)
-        self.store.conn.execute(
-            "UPDATE tasks SET payload=? WHERE task_id=?",
-            (json_dumps({"spec": {**_spec("ice-loop"), "topic": ""}}), task["task_id"]))
-        self.store.conn.commit()
-        drain(self.service)
+        from ice_agent.workflow.nodes import NODE_FUNCS,NodeFailed
+        def fail(_ctx): raise NodeFailed('topic','FIXTURE_NODE_FAILURE','controlled engine failure')
+        with patch.dict(NODE_FUNCS,{'topic':fail}):
+            drain(self.service)
         final = queue.get(task["task_id"])
         self.assertNotEqual(final["state"], "succeeded",
                             "引擎失败的任务不得标 succeeded")
-        self.assertIn(final["state"], ("failed", "queued"))
-        if final["state"] == "failed":
-            self.assertEqual(final["error_code"], "ENGINE_FAILED")
+        self.assertEqual(final['state'],'failed')
+        self.assertEqual(final['error_code'],'ENGINE_FAILED')
+        self.assertEqual(self.store.get_job(queue.bound_job(task['task_id']))['state'],'failed')
 
     def test_waiting_user_binds_job_and_approve_continues(self):
         """审批门 waiting_user 持久化 job_id；人工批准后 drain 继续复用绑定 job。"""

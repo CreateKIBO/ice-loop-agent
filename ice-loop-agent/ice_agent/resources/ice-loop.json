@@ -151,8 +151,8 @@
     "min_body_figures": 2
   },
   "storage": {
-    "article_root_win": "G:/05-兴趣项目/gonzhonhao/output/文章",
-    "runtime_root_win": "G:/05-兴趣项目/gonzhonhao/.iceloop-agent",
+    "article_root_win": "../.desktop-articles",
+    "runtime_root_win": "../.desktop-runtime",
     "forbid_c_drive": true
   },
   "limits": {

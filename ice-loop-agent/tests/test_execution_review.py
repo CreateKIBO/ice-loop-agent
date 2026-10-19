@@ -12,6 +12,9 @@ class TestExecutionReview(unittest.TestCase):
         self.root=temp_dir('execution-review-');self.service=DesktopService(REPO,self.root/'runtime',self.root/'articles')
         self.engine,_,self.store=self.service._app(demo=True)
         self.job,self.article=self.engine.create_job({'series':'PY','episode':111,'topic':'验证示例输入','approve_local_exec':False,'demo':True})
+        # This suite starts with the same admitted context the review UI reads.
+        # Dedicated legacy-context tests separately exercise the upgrade itself.
+        _,_,connection=self.service._job_app(self.job);connection.close()
     def tearDown(self):self.store.close();self.service.close()
     def prepare(self,body,inputs=None,approved=False):
         state=self.engine._load_state(self.job);state.update(series='PY',draft_md=body)

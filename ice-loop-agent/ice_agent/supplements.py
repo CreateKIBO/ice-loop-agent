@@ -79,7 +79,8 @@ def image_prompt(account: dict, title: str, caption: str, kind: str, series: str
     return assemble({'kind':kind,'caption':caption},title,series,episode,brand)
 
 
-def create(engine: Any, store: Any, account: dict, file: Path, expected: str | None = None) -> dict:
+def create(engine: Any, store: Any, account: dict, file: Path, expected: str | None = None,
+           *, on_created=None) -> dict:
     from .image_prompts import frozen_brand
     account=copy.deepcopy(account)
     account['visual_references']=frozen_brand(account,store,engine.cfg.runtime_root)['visual_references']
@@ -102,7 +103,8 @@ def create(engine: Any, store: Any, account: dict, file: Path, expected: str | N
             'article_root':article_root,'series':series,'episode':episode,'topic':title,
             'target_words':account['words_range'],'image_provider':'manual_import','approve_local_exec':False}
     job_id, article_id = engine.create_job(spec,limits={'max_model_calls':0,
-        'max_image_model_calls':engine.cfg.profile.get('limits',{}).get('per_image_model_calls',12)})
+        'max_image_model_calls':engine.cfg.profile.get('limits',{}).get('per_image_model_calls',12)},
+        on_created=on_created)
     snapshot = engine.cfg.job_dir(job_id)/'original-source.md'
     snapshot.write_bytes(raw)
     store.register_artifact(new_id('artifact'),'source_snapshot',snapshot,digest)

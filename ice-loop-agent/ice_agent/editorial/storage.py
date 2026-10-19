@@ -20,9 +20,9 @@ def save_editor_draft(store, account_id: str, article_id: str, content: str,
     """
     with store.transaction():
         row = store.conn.execute(
-            "SELECT content_hash FROM editor_drafts WHERE account_id=? AND article_id=?",
+            "SELECT content_hash, base_revision FROM editor_drafts WHERE account_id=? AND article_id=?",
             (account_id, article_id)).fetchone()
-        if row and row["content_hash"] == content_hash:
+        if row and row["content_hash"] == content_hash and row["base_revision"] == base_revision:
             return False
         store.conn.execute(
             "INSERT INTO editor_drafts (account_id, article_id, content, base_revision,"

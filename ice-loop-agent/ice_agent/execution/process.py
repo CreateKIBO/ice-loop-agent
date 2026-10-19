@@ -10,6 +10,14 @@ import time
 OUTPUT_LIMIT = 2 * 1024 * 1024  # combined stdout/stderr, per execution stage
 
 
+class BoundedResult(subprocess.CompletedProcess):
+    """Completed output, with cancellation distinct from timeout or runtime error."""
+    def __init__(self, args, returncode, stdout, stderr, *, cancelled=False, started=True):
+        super().__init__(args, returncode, stdout, stderr)
+        self.cancelled = cancelled
+        self.started = started
+
+
 class WindowsTree:
     """Assign a suspended child to a private kill-on-close Job before it can fork."""
     def __init__(self):
@@ -96,8 +104,16 @@ class WindowsTree:
             self.handle = None
 
 
-def execute_bounded(argv, *, cwd, env, stdin=b'', timeout=30, output_limit=OUTPUT_LIMIT):
-    """Return CompletedProcess + timeout/limit flags; reap owned tree on every exit."""
+def execute_bounded(argv, *, cwd, env, stdin=b'', timeout=30, output_limit=OUTPUT_LIMIT,
+                    should_stop=None):
+    """Return BoundedResult + timeout/limit flags; reap owned tree on every exit.
+
+    Cancellation is checked before launch and while waiting. The callback runs
+    on the caller's thread, so a Store-backed cancellation check stays on its
+    owning thread. Cleanup itself must always finish, even after cancellation.
+    """
+    if should_stop and should_stop():
+        return BoundedResult(argv, -1, b'', b'', cancelled=True, started=False), False, False
     tree = WindowsTree() if os.name == 'nt' else None
     proc = None
     buffers = [bytearray(), bytearray()]
@@ -151,8 +167,12 @@ def execute_bounded(argv, *, cwd, env, stdin=b'', timeout=30, output_limit=OUTPU
             reader.start()
         writer = threading.Thread(target=write, daemon=True)
         writer.start()
-        timed_out = False
+        timed_out = cancelled = False
         while proc.poll() is None:
+            if should_stop and should_stop():
+                cancelled = True
+                stop()
+                break
             remaining = timeout - (time.monotonic() - started)
             if remaining <= 0:
                 timed_out = True
@@ -166,7 +186,7 @@ def execute_bounded(argv, *, cwd, env, stdin=b'', timeout=30, output_limit=OUTPU
         proc.wait(timeout=5)
         for thread in [*readers, writer]:
             thread.join(timeout=5)
-        return (subprocess.CompletedProcess(argv, proc.returncode, bytes(buffers[0]), bytes(buffers[1])),
+        return (BoundedResult(argv, proc.returncode, bytes(buffers[0]), bytes(buffers[1]), cancelled=cancelled),
                 timed_out, exceeded.is_set())
     finally:
         stop()

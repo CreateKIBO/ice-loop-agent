@@ -4,7 +4,8 @@
 import { QueryClient, useQuery, useMutation, type UseQueryOptions } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSyncExternalStore } from "react";
-import { advanceCursor, mergeEvents, needsBackfill, type StreamEvent } from "./eventStream";
+import { advanceCursor, boundStreamEvents, mergeEvents, needsBackfill, type StreamEvent } from "./eventStream";
+import { ResourceCache } from "./resourceCache";
 import { chatResult, jobRows } from "./workbenchResponses";
 import { createDirtyFlusher } from "./dirtyFlush";
 
@@ -87,7 +88,7 @@ export function useEditorJob(): string | null {
 
 // ------------------------------------------------------- 对象级 dirty（M2-06）
 // 每个对象一个键（如 job:{id}:editor）；不用全局布尔，互不覆盖。
-type DirtyEntry = { dirty: boolean; savedAt: number };
+type DirtyEntry = { dirty: boolean };
 const dirtyMap = new Map<string, DirtyEntry>();
 const dirtyListeners = new Set<() => void>();
 let dirtyVersion = 0;
@@ -103,12 +104,12 @@ export const dirtyStore = {
   markDirty(key: string) {
     const previous = dirtyMap.get(key);
     if (previous?.dirty) return;
-    dirtyMap.set(key, { dirty: true, savedAt: previous?.savedAt ?? 0 });
+    dirtyMap.set(key, { dirty: true });
     notifyDirty();
   },
   markClean(key: string) {
     if (!dirtyMap.get(key)?.dirty) return;
-    dirtyMap.set(key, { dirty: false, savedAt: Date.now() });
+    dirtyMap.delete(key);
     notifyDirty();
   },
   subscribe(listener: () => void) {
@@ -194,6 +195,10 @@ export const queryClient = new QueryClient({
 export function resetForAccountSwitch(nextAccount: string) {
   queryClient.cancelQueries();
   queryClient.clear();
+  citationStore.clear();
+  streamCache.clear();
+  editorStore.set(null);
+  conversationStore.set(null);
   accountStore.set(nextAccount);
 }
 
@@ -260,7 +265,8 @@ export function useAccountMutation<TVars, TData = unknown>(
 // ------------------------------------------------- 引擎事件流（M1-05 / C1）
 // 游标与已收事件按"账号|流"缓存在模块级：切换会话再回来不重复拉取，也不会串账号。
 type StreamCache = { cursor: number; events: StreamEvent[] };
-const streamCache = new Map<string, StreamCache>();
+const streamCache = new ResourceCache<StreamCache>(20, 5 * 1024 * 1024, 15 * 60 * 1000,
+  value => JSON.stringify(value).length * 2);
 const EVENT_POLL_MS = 500;
 const EVENT_FINAL_PASSES = [0, 700];
 const EVENT_PAGES_PER_TICK = 5;
@@ -288,9 +294,9 @@ export function useEventStream(streamId: string | null, active: boolean): Stream
         if (stopped) return;
         const current = streamCache.get(key) ?? before;
         const next = { cursor: Math.max(current.cursor, advanceCursor(before.cursor, data.events)),
-                       events: mergeEvents(current.events, data.events) };
+                       events: boundStreamEvents(mergeEvents(current.events, data.events)) };
         streamCache.set(key, next);
-        setState({ key, events: next.events });
+        setState(previous => previous.key === key && previous.events === next.events ? previous : { key, events: next.events });
         if (!data.events.length || !needsBackfill(next.cursor, data.latest)) return;
       }
     };

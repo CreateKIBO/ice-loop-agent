@@ -20,6 +20,7 @@ from ..domain.types import ModelProfile, new_id, sha256_text, sha256_json
 from .adapters import extract_json_block, make_adapter
 from .errors import ModelError, SchemaInvalidError, IncompleteResponseError, CapabilityMismatch
 from .transport import OpenAIChatTransport
+from .context import encode_context, validate_input, wire_context, MAX_INPUT_CHARACTERS
 
 ROLES = ("planner", "researcher", "writer", "reviewer",
          "title_editor", "code_helper", "visual_reviewer")
@@ -154,25 +155,7 @@ class RoleRouter:
 
     # -------------------------------------------------------------- 内部
     def _invoke(self, adapter, req: LLMRequest, route: RouteConfig, *, job_id=None, attempt=1) -> LLMResponse:
-        messages: list[dict[str, Any]] = []
-        if req.system:
-            messages.append({"role": "system", "content": req.system})
-        for message in req.history:
-            if message.get('role') not in ('user', 'assistant') or not isinstance(message.get('content'), str):
-                raise ValueError('对话历史格式无效')
-            messages.append({'role': message['role'], 'content': message['content']})
-        user_content = req.prompt
-        if req.schema is not None:
-            user_content += (
-                "\n\n<context>" + json.dumps(
-                    {**req.context, "node": req.node, "structured": True},
-                    ensure_ascii=False) + "</context>\n"
-                "请只输出符合以下 JSON 契约的 JSON 对象（不要输出其他文字）：\n"
-                + json.dumps(req.schema, ensure_ascii=False))
-        else:
-            user_content += ("\n\n<context>" + json.dumps(
-                {**req.context, "node": req.node}, ensure_ascii=False) + "</context>")
-        messages.append({"role": "user", "content": image_message(user_content, req.images)})
+        messages = request_messages(req)
 
         want_json = req.schema is not None
         chat = self._call(adapter, req, route, messages, job_id=job_id,
@@ -213,6 +196,11 @@ class RoleRouter:
               want_json=False, stream=False):
         if self.cancelled and self.cancelled():
             raise ModelError("CANCELLED", "任务已停止")
+        # Includes system, conversation and schema; applies to format repair too.
+        # Reject locally before reserving an invocation or consuming call budget.
+        validate_input(messages)
+        from .limits import output_limit
+        output_limit(adapter.profile)  # Invalid local settings must not reserve call budget.
         inv = {"invocation_id": new_id("inv"), "job_id": job_id,
                "node_key": req.node, "role": req.role, "profile_id": adapter.profile.profile_id,
                "model_id": adapter.profile.model_id, "adapter": adapter.adapter_id,
@@ -235,9 +223,11 @@ class RoleRouter:
                 self.on_delta(req.node, piece)
 
         try:
-            chat = adapter.chat(messages, thinking_policy=route.thinking_policy,
-                                want_json=want_json, stream=stream, on_delta=delta,
-                                timeout=req.timeout)
+            from .http_io import request_control
+            with request_control(self.cancelled):
+                chat = adapter.chat(messages, thinking_policy=route.thinking_policy,
+                                    want_json=want_json, stream=stream, on_delta=delta,
+                                    timeout=req.timeout)
             chat.invocation_id = inv['invocation_id']
             if self.cancelled and self.cancelled():
                 raise ModelError("CANCELLED", "任务已停止，未采纳本次候选")
@@ -322,6 +312,32 @@ class RoleRouter:
             self.store.add_invocation(inv)
         if self.invocation_hook is not None:
             self.invocation_hook(inv)
+
+
+def request_messages(req: LLMRequest) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    if req.system:
+        messages.append({'role': 'system', 'content': req.system})
+    for message in req.history:
+        if message.get('role') not in ('user', 'assistant') or not isinstance(message.get('content'), str):
+            raise ValueError('对话历史格式无效')
+        messages.append({'role': message['role'], 'content': message['content']})
+    context = {**req.context, 'node': req.node}
+    if req.schema is not None:
+        context['structured'] = True
+    content = req.prompt + '\n\n<context>' + encode_context(context) + '</context>'
+    if req.schema is not None:
+        content += ('\n请只输出符合以下 JSON 契约的 JSON 对象（不要输出其他文字）：\n'
+                    + json.dumps(req.schema, ensure_ascii=False, separators=(',', ':')))
+    messages.append({'role': 'user', 'content': image_message(content, req.images)})
+    return messages
+
+
+def request_manifest(req: LLMRequest) -> dict[str, Any]:
+    messages = request_messages(req)
+    return {'version': 1, **validate_input(messages), 'request_hash': sha256_json(messages),
+            'limit': MAX_INPUT_CHARACTERS, 'limit_kind': 'local_text_characters',
+            'history_sources': wire_context(req.context)[1]}
 
 
 def image_message(text: str, images: list[str]) -> str | list[dict[str, Any]]:

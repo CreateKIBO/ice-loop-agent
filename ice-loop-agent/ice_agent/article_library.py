@@ -10,13 +10,12 @@ from .paths import assert_within, normalize
 BODY_NAMES = ('01-公众号正文-v2.md', '01-公众号正文.md', '正文.md')
 
 
-def library_entries(account: dict) -> list[dict]:
+def iter_library_entries(account: dict):
     value = account.get('library_root', '')
     if not value or not Path(value).is_dir():
-        return []
+        return
     root = normalize(value)
     columns = {c['code'] for c in account['columns']}
-    result: list[dict] = []
     # Only article folders and one level of configured columns, never a drive scan.
     folders = []
     for item in sorted(root.iterdir()):
@@ -45,16 +44,18 @@ def library_entries(account: dict) -> list[dict]:
             issue = re.match(r'^(\d{1,4})-', folder.name)
             episode = int(issue[1]) if issue and series else None
             relative = folder.relative_to(root).as_posix()
-            result.append({'folder': relative, 'title': title, 'has_body': True,
+            yield {'folder': relative, 'title': title, 'has_body': True,
                            'series': series, 'episode': episode, 'file_path': str(file),
-                           'body': body, 'source_hash': sha256_text(body)})
+                           'body': body, 'source_hash': sha256_text(body)}
         except (OSError, UnicodeError, ValueError):
             continue
-    return result
+
+def library_entries(account: dict) -> list[dict]:
+    return list(iter_library_entries(account))
 
 
 def read_library(account: dict, folder: str) -> dict:
-    entry = next((r for r in library_entries(account) if r['folder'] == folder), None)
+    entry = next((r for r in iter_library_entries(account) if r['folder'] == folder), None)
     if not entry:
         raise ValueError('存稿不存在或超出当前公众号目录')
     # Preserve the original raw-byte hash used by supplement source verification.
