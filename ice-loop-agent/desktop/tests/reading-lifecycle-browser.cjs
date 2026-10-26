@@ -176,6 +176,122 @@ async function run() {
   }
   const comparePoll = count('chat.get'); await until(() => count('chat.get') > comparePoll, 'compare open over live poll');
   check('compare_survives_live_poll_without_writes', await e(`Boolean(${dialog})&&Boolean(window.__compareScroll.isConnected)&&Boolean(window.__compareScroll.querySelector('pre'))`) && !requests.slice(compareStart).some(r => /^(articles\.(save|editor_draft_save)|chat\.(update|save_draft|submit)|prompts\.(save|generate))$/.test(r.method)));
+  // 目标一（2026-10-26）：目录 Markdown 边界——setext、重复标题按条目定位、CRLF 严格保留。
+  // 定位断言用有界收敛轮询等待平滑滚动停止（稳定条件断言，不用固定 sleep）；判定阈值与既有检查一致。
+  const flexRoot = `${dialog}.querySelector('.ice-dialog-body > div')`;
+  const paneRootA = `${flexRoot}.children[0]`, paneRootB = `${flexRoot}.children[1]`;
+  const positionIn = (scopeExpr, matcher) => e(`(()=>{const n=${scopeExpr};const target=${matcher};if(!target)return null;return {scroll:n.scrollTop,offset:target.getBoundingClientRect().top-n.getBoundingClientRect().top};})()`);
+  const settleTo = async (scopeExpr, matcher) => {
+    const end = Date.now() + 5000; let pos = null;
+    while (Date.now() < end) {
+      pos = await positionIn(scopeExpr, matcher);
+      if (pos && pos.scroll > 30 && pos.offset >= 0 && pos.offset < 40) return { pos, settled: true };
+      await wait(120);
+    }
+    return { pos, settled: false };
+  };
+  for (const view of ['reading', 'source']) {
+    const isSource = view === 'source';
+    await click(`[...${paneRootA}.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(isSource ? 'Markdown 原文' : '阅读预览')})`);
+    // setext：目录包含且定位到真实标题（阅读视图元素 / 原文锚点片段按标记查找，不取首个锚点）。
+    await e(`window.__compareScroll.scrollTop=0`);
+    await click(`[...${paneRootA}.querySelectorAll('nav button')].find(b=>b.textContent==='Setext 小节')`);
+    const setextMatcher = isSource
+      ? `[...window.__compareScroll.querySelectorAll('[data-compare-heading]')].find(sp=>sp.textContent.startsWith('Setext 小节'))`
+      : `[...window.__compareScroll.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent==='Setext 小节')`;
+    const setext = await settleTo('window.__compareScroll', setextMatcher);
+    (report.comparePositions ??= {})[view + ':setext'] = setext.pos;
+    check('compare_' + view + '_toc_setext', setext.settled);
+    if (isSource) {
+      // 锚点片段开头与编号带回 Node 侧比较（模板串内反斜杠会被吞，正则/换行不再内嵌页面代码）。
+      const anchor = await e(`(()=>{const sp=[...window.__compareScroll.querySelectorAll('[data-compare-heading]')].find(sp=>sp.textContent.startsWith('Setext 小节'));return sp?{head:sp.textContent.slice(0,14),anchor:sp.dataset.compareHeading}:null;})()`);
+      (report.setextAnchor ??= {}).source = anchor;
+      check('compare_source_setext_anchor_keeps_underline', Boolean(anchor) && anchor.head.startsWith('Setext 小节\n-') && /^[0-9]+$/.test(String(anchor.anchor)));
+    }
+    // 重复标题：两个同名目录项各自定位到对应出现（按锚点内文区分第一/第二处）。
+    const dupButtons = `[...${paneRootA}.querySelectorAll('nav button')].filter(b=>b.textContent==='重复标题')`;
+    check('compare_' + view + '_toc_lists_both_duplicates', await e(`${dupButtons}.length===2`));
+    for (let occurrence = 0; occurrence < 2; occurrence++) {
+      await e(`window.__compareScroll.scrollTop=0`);
+      await click(`(${dupButtons})[${occurrence}]`);
+      const marker = occurrence === 0 ? '第一处重复内容' : '第二处重复内容';
+      const dupMatcher = isSource
+        ? `[...window.__compareScroll.querySelectorAll('[data-compare-heading]')].find(sp=>sp.textContent.includes(${JSON.stringify(marker)}))`
+        : `[...window.__compareScroll.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)&&c.textContent==='重复标题')[${occurrence}]`;
+      const dup = await settleTo('window.__compareScroll', dupMatcher);
+      (report.comparePositions ??= {})[view + ':duplicate' + occurrence] = dup.pos;
+      check('compare_' + view + '_toc_duplicate_' + occurrence, dup.settled);
+      if (isSource) {
+        const anchor = await e(`(()=>{const sp=[...window.__compareScroll.querySelectorAll('[data-compare-heading]')].find(sp=>sp.textContent.includes(${JSON.stringify(marker)}));return sp?sp.dataset.compareHeading:null;})()`);
+        check('compare_source_duplicate_' + occurrence + '_targets_own_section', anchor !== null && await e(`window.__compareScroll.querySelector('[data-compare-heading="${anchor}"]').textContent.includes(${JSON.stringify(marker)})`));
+      }
+    }
+  }
+  // CRLF 乙份（真实第二栏）：原文展示与复制都必须逐字符等于服务返回正文（不归一化 CR）。
+  const bodyB = (await rpc('chat.get', { account_id: fixture.account_a, conversation_id: fixture.conversations[0] })).candidates.find(c => c.id === fixture.compare_candidates[1]).body;
+  check('crlf_body_has_carriage_returns', bodyB.includes('\r'));
+  const paneBScroll = `[...${paneRootB}.querySelectorAll('div')].find(n=>n.style.maxHeight==='460px')`;
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
+  await ui(`Boolean(${paneRootB}.querySelector('pre'))`);
+  const crlfDisplay = await e(`(()=>{const pre=${paneRootB}.querySelector('pre');const expected=${JSON.stringify(bodyB)};let first=-1;for(let i=0;i<Math.min(pre.textContent.length,expected.length);i++)if(pre.textContent[i]!==expected[i]){first=i;break;}if(first<0&&pre.textContent.length!==expected.length)first=Math.min(pre.textContent.length,expected.length);return {exact:pre.textContent===expected,hasCR:pre.textContent.includes(String.fromCharCode(13)),shown:pre.textContent.length,expected:expected.length,firstDiff:first};})()`);
+  (report.crlf ??= {}).display = crlfDisplay;
+  check('crlf_source_display_exact_bytes', crlfDisplay.exact);
+  await click(`${paneRootB}.querySelector('button[aria-label="复制此份原文"]')`);
+  let crlfCopied = false;
+  try { await until(() => e(`window.__copies.at(-1)===${JSON.stringify(bodyB)}`), 'crlf copy exact', 3000); crlfCopied = true; } catch {}
+  check('crlf_copy_exact_bytes', crlfCopied);
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.trim()==='阅读预览')`);
+  await ui(`Boolean(${paneRootB}.querySelector('.ice-markdown'))`);
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.startsWith('目录（'))`);
+  await ui(`Boolean(${paneRootB}.querySelector('nav'))`);
+  await e(`${paneBScroll}.scrollTop=0`);
+  await click(`[...${paneRootB}.querySelectorAll('nav button')].find(b=>b.textContent==='tail-section')`);
+  const crlfTail = await settleTo(paneBScroll, `[...${paneBScroll}.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent==='tail-section')`);
+  (report.comparePositions)['reading:crlf-tail'] = crlfTail.pos;
+  check('crlf_reading_toc_locates_by_ast_line', crlfTail.settled);
+  // 目标二（2026-10-26）：同一打开的对照弹窗内宽→窄→宽视口响应；几何用两栏根节点（不受单栏目录展开影响），记录翻转时延。
+  const rootBox = async pane => e(`(()=>{const r=${pane}.getBoundingClientRect();return {top:r.top,left:r.left,right:r.right,bottom:r.bottom};})()`);
+  const innerWidth = () => e('window.innerWidth');
+  const sideBySide = (a, b) => b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2;
+  const stackedVertically = (a, b) => b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2;
+  const wideA = await rootBox(paneRootA), wideB = await rootBox(paneRootB);
+  (report.viewport ??= {}).wide1 = { inner: await innerWidth(), wideA, wideB };
+  check('viewport_wide_side_by_side', sideBySide(wideA, wideB));
+  await call('Emulation.setDeviceMetricsOverride', { width: 800, height: 900, deviceScaleFactor: 1, mobile: false });
+  const narrowStart = Date.now(); let narrowA = null, narrowB = null, narrowOk = false;
+  while (Date.now() - narrowStart < 4000) {
+    narrowA = await rootBox(paneRootA); narrowB = await rootBox(paneRootB);
+    if (stackedVertically(narrowA, narrowB)) { narrowOk = true; break; }
+    await wait(120);
+  }
+  report.viewport.narrow = { afterMs: Date.now() - narrowStart, inner: await innerWidth(), narrowA, narrowB };
+  check('viewport_narrow_stacks_vertically', narrowOk);
+  check('viewport_narrow_no_horizontal_overflow', await e(`${dialog}.scrollWidth<=${dialog}.clientWidth+2&&document.documentElement.scrollWidth<=window.innerWidth+2`));
+  // 窄屏下两栏仍各自可定位、可复制（甲栏定位不串到乙栏，乙栏复制仍是乙的正文）。
+  await click(`[...${paneRootA}.querySelectorAll('button')].find(b=>b.textContent.trim()==='阅读预览')`);
+  await ui(`Boolean(${paneRootA}.querySelector('.ice-markdown'))`);
+  await e(`window.__compareScroll.scrollTop=0`);
+  await click(`[...${paneRootA}.querySelectorAll('nav button')].find(b=>b.textContent==='level-five')`);
+  const narrowToc = await settleTo('window.__compareScroll', `[...window.__compareScroll.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent==='level-five')`);
+  (report.comparePositions)['reading:narrow-level-five'] = narrowToc.pos;
+  check('viewport_narrow_toc_still_targets_pane', narrowToc.settled);
+  await click(`${paneRootB}.querySelector('button[aria-label="复制此份原文"]')`);
+  let narrowCopied = false;
+  try { await until(() => e(`window.__copies.at(-1)===${JSON.stringify(bodyB)}`), 'narrow copy exact', 3000); narrowCopied = true; } catch {}
+  check('viewport_narrow_copy_still_exact', narrowCopied);
+  await call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
+  const wide2Start = Date.now(); let wide2A = null, wide2B = null, wide2Ok = false;
+  while (Date.now() - wide2Start < 4000) {
+    wide2A = await rootBox(paneRootA); wide2B = await rootBox(paneRootB);
+    if (sideBySide(wide2A, wide2B)) { wide2Ok = true; break; }
+    await wait(120);
+  }
+  report.viewport.wide2 = { afterMs: Date.now() - wide2Start, inner: await innerWidth(), wide2A, wide2B };
+  check('viewport_restored_side_by_side', wide2Ok);
+  // 恢复宽屏后乙栏内容逐字符不变（切回原文视图比较）。
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
+  await ui(`Boolean(${paneRootB}.querySelector('pre'))`);
+  check('viewport_restored_pane_b_body_unchanged', await e(`${paneRootB}.querySelector('pre').textContent===${JSON.stringify(bodyB)}`));
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', windowsVirtualKeyCode: 27 });
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
   await ui(`!${dialog}`);
@@ -201,7 +317,7 @@ async function run() {
       const id=n=>{if(!n)return null;if(!ids.has(n))ids.set(n,++seq);return ids.get(n);};
       const relevant=n=>n.nodeType===1?[...(n.matches('.ice-asset-tabs,[role="dialog"],.ice-editor')?[n]:[]),...n.querySelectorAll('.ice-asset-tabs,[role="dialog"],.ice-editor')]:[];
       const describe=n=>({id:id(n),kind:n.matches('.ice-asset-tabs')?'tabs':n.matches('.ice-editor')?'editor':'dialog',title:n.querySelector('h2')?.textContent});
-      const sample=()=>trace.samples.push({at:Date.now(),tabs:[...document.querySelectorAll('.ice-asset-tabs')].map(describe),dialogs:[...document.querySelectorAll('[role="dialog"]')].map(describe),editor:id(document.querySelector('.ice-editor')),account:document.querySelector('#ice-account-select')?.value,focus:{tag:document.activeElement?.tagName,text:document.activeElement?.getAttribute('aria-label')||document.activeElement?.textContent?.slice(0,60)},resetNote:document.body.textContent.includes('已恢复默认视图')});
+      const sample=()=>trace.samples.push({at:Date.now(),tabs:[...document.querySelectorAll('.ice-asset-tabs')].map(describe),dialogs:[...document.querySelectorAll('[role="dialog"]')].map(describe),editor:id(document.querySelector('.ice-editor')),account:document.querySelector('#ice-account-select')?.value,focus:{tag:document.activeElement?.tagName,text:document.activeElement?.getAttribute('aria-label')||document.activeElement?.textContent?.slice(0,60)},resetNote:document.body.textContent.includes('已恢复默认视图'),detailError:document.body.textContent.includes('图位读取失败')});
       window.__d6Observer=new MutationObserver(rows=>{for(const row of rows){for(const n of row.removedNodes)for(const t of relevant(n))trace.removals.push({at:Date.now(),...describe(t)});for(const n of row.addedNodes)for(const t of relevant(n))trace.insertions.push({at:Date.now(),...describe(t)});}sample();});
       window.__d6Observer.observe(document.body,{childList:true,subtree:true});
       window.__d6Sample=setInterval(sample,100);sample();

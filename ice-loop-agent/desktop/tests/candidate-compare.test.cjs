@@ -45,3 +45,31 @@ test('markdown headings exclude fenced pseudo headings and carry level/line',()=
   // 无标题诚实空态
   assert.equal(bridge.markdownHeadings('只有正文没有标题').length,0);
 });
+
+test('setext headings parse with correct level and source line',()=>{
+  const NL=String.fromCharCode(10);
+  const body='Setext 大标题'+NL+'='+NL+NL+'首段'+NL+NL+'Setext 小节'+NL+'-'+NL+NL+'尾段';
+  const headings=bridge.markdownHeadings(body);
+  assert.equal(headings.length,2);
+  assert.equal(headings[0].text,'Setext 大标题');assert.equal(headings[0].level,1);assert.equal(headings[0].line,1);
+  assert.equal(headings[1].text,'Setext 小节');assert.equal(headings[1].level,2);assert.equal(headings[1].line,6);
+});
+
+test('duplicate heading texts keep separate indexes and lines',()=>{
+  const NL=String.fromCharCode(10);
+  const body='## 重复标题'+NL+NL+'第一处内容'+NL+NL+'## 重复标题'+NL+NL+'第二处内容';
+  const headings=bridge.markdownHeadings(body);
+  assert.equal(headings.length,2);
+  assert.equal(headings[0].text,headings[1].text);
+  assert.notEqual(headings[0].line,headings[1].line);
+  assert.deepEqual(headings.map(h=>h.index),[0,1]);
+});
+
+test('CRLF bodies keep accurate heading lines for source anchors',()=>{
+  const CRLF=String.fromCharCode(13)+String.fromCharCode(10);
+  const body='# 对照正文标题乙'+CRLF+CRLF+'正文一'+CRLF+CRLF+'## tail-section'+CRLF+CRLF+'正文二';
+  const headings=bridge.markdownHeadings(body);
+  assert.equal(headings.length,2);
+  assert.equal(headings[0].line,1);
+  assert.equal(headings[1].text,'tail-section');assert.equal(headings[1].line,5);
+});
