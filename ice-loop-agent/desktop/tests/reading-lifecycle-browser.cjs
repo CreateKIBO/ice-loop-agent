@@ -150,12 +150,14 @@ async function run() {
   for (const id of fixture.compare_candidates) {
     await click(`[...document.getElementById('candidate-expand-${id}').parentElement.querySelectorAll('button')].find(b=>b.textContent.trim()==='加入对照')`);
   }
+  // 合成 click 不聚焦按钮；显式聚焦触发键等价真实用户点击的焦点前态（关闭焦点返回断言依赖它）。
+  await e(`[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='打开对照')?.focus()`);
   await click(btn('打开对照'));
   const dialog = `document.querySelector('[role="dialog"]')`;
   const pane = `${dialog}.querySelector('.ice-dialog-body > div > div')`;
   await ui(`${pane}.querySelectorAll('h1').length===1`);
   await click(`[...${pane}.querySelectorAll('button')].find(b=>b.textContent.startsWith('目录（'))`);
-  await e(`(()=>{const p=${pane};window.__compareScroll=[...p.querySelectorAll('div')].find(n=>n.style.maxHeight==='460px');window.__compareOther=[...${dialog}.querySelectorAll('div')].filter(n=>n.style.maxHeight==='460px')[1];window.__compareOuter=document.querySelector('.ice-chat-messages')?.scrollTop;})()`);
+  await e(`(()=>{const p=${pane};window.__compareScroll=[...p.querySelectorAll('div')].find(n=>n.style.maxHeight==='460px');window.__compareOther=[...${dialog}.querySelectorAll('div')].filter(n=>n.style.maxHeight==='460px')[1];window.__compareOuter=document.querySelector('.ice-chat-log')?.scrollTop;})()`);
   check('compare_toc_excludes_quoted_and_fenced_headings', await e(`${pane}.querySelector('nav').textContent.includes('level-five')&&!${pane}.querySelector('nav').textContent.includes('quoted-not-heading')&&!${pane}.querySelector('nav').textContent.includes('fence-not-heading')`));
   for (const view of ['reading', 'source']) {
     if (view === 'source') await click(`[...${pane}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
@@ -249,6 +251,8 @@ async function run() {
   const crlfTail = await settleTo(paneBScroll, `[...${paneBScroll}.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent==='tail-section')`);
   (report.comparePositions)['reading:crlf-tail'] = crlfTail.pos;
   check('crlf_reading_toc_locates_by_ast_line', crlfTail.settled);
+  // 目录点击全程聊天区不滚动（另一栏不动已由既有 other 字段覆盖，这里补聊天区）。
+  check('compare_toc_chat_area_not_scrolled', await e(`(()=>{const s=document.querySelector('.ice-chat-log')?.scrollTop;return s===window.__compareOuter;})()`));
   // 目标二（2026-10-26）：同一打开的对照弹窗内宽→窄→宽视口响应；几何用两栏根节点（不受单栏目录展开影响），记录翻转时延。
   const rootBox = async pane => e(`(()=>{const r=${pane}.getBoundingClientRect();return {top:r.top,left:r.left,right:r.right,bottom:r.bottom};})()`);
   const innerWidth = () => e('window.innerWidth');
@@ -267,6 +271,9 @@ async function run() {
   report.viewport.narrow = { afterMs: Date.now() - narrowStart, inner: await innerWidth(), narrowA, narrowB };
   check('viewport_narrow_stacks_vertically', narrowOk);
   check('viewport_narrow_no_horizontal_overflow', await e(`${dialog}.scrollWidth<=${dialog}.clientWidth+2&&document.documentElement.scrollWidth<=window.innerWidth+2`));
+  // 视口切换会让虚拟列表重测量聊天滚动位置；以窄屏稳定后的值为基线，断言后续目录/复制交互不再移动它。
+  await e(`window.__compareOuterNarrow=document.querySelector('.ice-chat-log')?.scrollTop`);
+  report.viewport.chatScroll = { wide: await e('window.__compareOuter'), narrowBaseline: await e('window.__compareOuterNarrow') };
   // 窄屏下两栏仍各自可定位、可复制（甲栏定位不串到乙栏，乙栏复制仍是乙的正文）。
   await click(`[...${paneRootA}.querySelectorAll('button')].find(b=>b.textContent.trim()==='阅读预览')`);
   await ui(`Boolean(${paneRootA}.querySelector('.ice-markdown'))`);
@@ -275,6 +282,13 @@ async function run() {
   const narrowToc = await settleTo('window.__compareScroll', `[...window.__compareScroll.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent==='level-five')`);
   (report.comparePositions)['reading:narrow-level-five'] = narrowToc.pos;
   check('viewport_narrow_toc_still_targets_pane', narrowToc.settled);
+  check('viewport_narrow_chat_area_not_scrolled', await e(`(()=>{const s=document.querySelector('.ice-chat-log')?.scrollTop;return s===window.__compareOuterNarrow;})()`));
+  // 窄屏下两栏各自复制都仍取自己的正文（选中候选不串错）。
+  const bodyA = (await rpc('chat.get', { account_id: fixture.account_a, conversation_id: fixture.conversations[0] })).candidates.find(c => c.id === fixture.compare_candidates[0]).body;
+  await click(`${paneRootA}.querySelector('button[aria-label="复制此份原文"]')`);
+  let narrowCopyA = false;
+  try { await until(() => e(`window.__copies.at(-1)===${JSON.stringify(bodyA)}`), 'narrow pane A copy exact', 3000); narrowCopyA = true; } catch {}
+  check('viewport_narrow_pane_a_copy_exact', narrowCopyA);
   await click(`${paneRootB}.querySelector('button[aria-label="复制此份原文"]')`);
   let narrowCopied = false;
   try { await until(() => e(`window.__copies.at(-1)===${JSON.stringify(bodyB)}`), 'narrow copy exact', 3000); narrowCopied = true; } catch {}
@@ -295,6 +309,12 @@ async function run() {
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', windowsVirtualKeyCode: 27 });
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
   await ui(`!${dialog}`);
+  // 关闭后焦点按既有约定返回触发按钮（B5），有界收敛等待；记录最终焦点去向留证。
+  (report.closeFocus ??= {}).after = await e(`(()=>{const a=document.activeElement;return {tag:a?a.tagName:null,text:a?(a.textContent||'').trim().slice(0,24):null};})()`);
+  let focusReturned = false;
+  try { await until(() => e(`document.activeElement===[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='打开对照')`), 'compare close focus return', 2000); focusReturned = true; } catch {}
+  report.closeFocus.returned = focusReturned;
+  check('compare_close_focus_returns_to_trigger', focusReturned);
   // Historical page also stays mounted while the independent live query fails.
   for (let page = 0; page < 8; page++) {
     await ui(`document.querySelectorAll('[id^="candidate-expand-"]').length>0`);
