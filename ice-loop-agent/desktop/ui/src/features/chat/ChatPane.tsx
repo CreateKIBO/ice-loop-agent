@@ -167,7 +167,10 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   const toolSeq = toolSignal(events);
 
   if (!conversationId) return null;
-  if (messages.error && !position && !readingSnapshot) {
+  // A background read error still carries the last successful result. Replacing
+  // the pane here would unmount CandidateHistory and discard expanded/source
+  // state (including its independently loaded historical candidate page).
+  if (messages.error && !messages.data && !position && !readingSnapshot) {
     return <div style={{ padding: "var(--ice-space-4)" }}>
       <ErrorPanel title="会话加载失败" detail={(messages.error as RpcError).message}
                   onRetry={() => messages.refetch()} />
@@ -176,6 +179,10 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
 
   return (
     <div data-chat-pane style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", minHeight: 0 }}>
+      {latest.error && latest.data && <div style={{ padding: "var(--ice-space-3)" }}>
+        <ErrorPanel title="会话刷新失败，已保留当前内容" detail={latest.error.message}
+                    onRetry={() => latest.refetch()} />
+      </div>}
       <ConversationHeader conversation={latest.data?.conversation} streaming={streaming || sending}
                          findOpen={findOpen} onFind={() => { if (findOpen) closeFind(); else setFindOpen(true); }} />
       {findOpen && (

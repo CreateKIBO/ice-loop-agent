@@ -49,12 +49,14 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
   };
   return <section className="ice-asset-card" aria-label="生图提示词">
     <h4>提示词与品牌参考</h4><p className="ice-asset-muted">参考图需要在 TapNow 按顺序手动上传，复制文字不会附带图片；生成后的图片请回到「下载待归档」绑定到对应图位。AI 重拟会读取本文和当前公众号视觉规范，可能计费。</p>
-    {references.error && <ErrorNote error={references.error} onRetry={() => references.refetch()} retryLabel="重新读取参考图" />}
+    {references.error && <ErrorNote error={references.error} onRetry={() => references.refetch()} retryLabel="重新读取参考图"
+      note={references.data ? '已保留上次读取的参考图；当前读取失败，请核对后重试。' : undefined} />}
     <section aria-label="品牌参考图" className="ice-asset-card" style={{ padding: 8, gap: 6 }}>
       {/* 批C（2026-10-25 候选对照轮）：未读取/读取失败/本图位暂无参考三者分明（C1）；
           折叠标题保留数量与上传说明（C2）；行身份用 data-reference-image（C3）。 */}
       {references.isLoading && <span className="ice-asset-muted" role="status">正在读取本图位参考…</span>}
-      {!references.isLoading && !references.error && (references.data?.references.length
+      {!references.isLoading && !references.error && !references.data && <span className="ice-asset-muted">参考图尚未读取</span>}
+      {references.data && (references.data.references.length
         ? <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <button type="button" className="ice-link-btn" aria-expanded={referencesOpen}
                     onClick={() => setReferencesOpen(value => !value)}>
