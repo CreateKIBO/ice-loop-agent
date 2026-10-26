@@ -118,3 +118,186 @@ v1.1.0最终837个应用文件与独立测试版一致；ASAR与源码、ZIP与�
 早期静默安装测试超时，不是成功结果。NSIS/D官方要求不加引号，而本地StdUtils/D还会拆分空格；测试改用E盘短ASCII路径、独立GUID/缓存名，中文路径数据保护单独测。安装载荷采用ZIP直接解压、关闭未使用的差分载荷，保留解压结果校验。不将早期超时直接归因于用户问题，也不声称所有中文/长安装路径均实测成功。
 
 最终完整NSIS测试通过旧关闭/卸载模板基线安装→运行中升级→自动关闭→原路径工作区与文章哈希保留→重启原数据库bootstrap→独立首次安装→测试卸载。测试身份7419f5e9-6d04-4ef4-9c1b-d2e2c3de1581，未操作用户23c96aa4-bc77-5664-8abf-1fa0a0d33342安装。29项Node通过，文章引擎业务代码未改/未重跑全量。安装器中的应用载荷、ZIP、当前源码与最后引擎一致，无用户数据。v1.1.1安装包183021248字节，SHA256 08ddb26fff9487eb577832b968728ca83a73e34bfe4f62dd6e9c7b2f18660ff2；ZIP182589025字节，SHA256 3dfbf326d1fa974520be8150cc027b0e7585332417f5529bdf70a2af5cd775cb。docs/v1.1.1-验收结果.json含实测边界，使用说明docs/v1.1.1-安装升级修复.md；实际签名NotSigned。
+
+## GLM 验收观察（2026-10-20）
+
+- GLM实际修改10个已跟踪前端文件，新增4个组件/工具和1个Node测试；交接包含多处沿用旧证据。
+- 优先验证：查找首次命中是否定位、轮询后选择是否被重置、自动追尾与虚拟列表交互；帮助的预算0语义及真实快捷键；错误映射是否支持真实RPC形状。
+- 计划在docs/迭代任务/Codex-GLM验收与收尾-2026-10-20.md记录复现/修复/检查，不改写GLM原报告。
+
+- 新增原生复现：修复前6项失败（首次/下次定位、轮询保持、关闭焦点、预算文案、tab语义）。修复后初轮12项全过。
+- 扩大浏览器验收时发现测试预期错误：BrowserWindow默认内容不算contentView.children；实际附加WebContentsView为[2]，而非2个child。已按真实额外视图身份及隐藏前后数量修正断言，保留失败记录。HTTP(S)请求由夹具阻止，未测试站点服务。
+
+## GLM组件审计后续观察（2026-10-20）
+
+已实际拆分4个组件，ChatPane654→232行，组件体仅改export/import且保存逐块hash。设置重包的根因是useBootstrap/useModelReadiness被首屏从ModelSettings静态引入；已独立modelBootstrap与保留访问身份的ModelSettingsHost。其余几个宿主的内容原已lazy，无需重复改造。
+
+官方Rolldown codeSplitting接口核对后只分离React/ReactDOM/scheduler，未照抄不存在的radix-ui包名。入口584988→354418B，静态JS闭包597688→573974B；所有JS/CSS及动态CSS预加载引用校验无缺失、无远程资源，不宣称RAM或首屏减少39%。类型与构建过，Node212过。
+
+新增资产检查器测试第一次2项失败，原因是Windows路径未统一为/；已修正工具，保留node-failed-path-separators.log。无生产功能回退。
+
+2026-10-20 六批复验：Python715/Node233、首次30/综合24/焦点5/宽度4通过。修复真实刷新不reject、原文secret回显、固定延时焦点及跨账号撤销；验收器拒绝不完整绿色结果和非自有路径。PS回归曾捕获Get-FileHash及LASTEXITCODE问题，失败日志保留。见最新复验报告及GLM四批16项。
+
+
+## 2026-10-21 独立交互复验
+发现 seed_interaction_lists_native.py 生成的 IPC 包装器在非 ice:request 分支没有执行 fn，且返回块作用域外的 result；browser-show 失败不能归因为产品主进程挂起。request 日志只在成功后写入，缺少开始与真实拒绝证据。先修复夹具并保留原始复现记录。
+
+终态：所谓挂起实为测试包装器与缺检查点。另修复通知动作3写→1写及原图关闭焦点；帮助4目标实测。Node239与七组原生196项、统一入口7步通过，报告及后续GLM任务均已登记。
+
+
+## 2026-10-22 GLM三批十二项独立复验
+
+修复命令面板3次创建→1次创建；验收拒绝旧夹具/缺旧错结果；补StrictMode打开态卸载和opener前置、timer转发及进程收尾；编辑器多旅程逐项留证；图片必要夹具不足不再伪绿。实际Node244、PS9（含于Node）、统一24步complete且源码未变、原生累计209（有交叉），所属进程0残留。Python未跑，715历史；后端Git无变化。报告docs/迭代任务/Codex-后续工程独立验收与修复-2026-10-22.md，证据.test-tmp/codex-engineering-audit-20261022/final-result.json。保留既有改动，未提交/推送/提版/打包。
+
+
+## 制作流程继续开发（2026-10-22）
+
+真实修复下载切目标旧图位、已写操作二次提交、交付确认读败重放风险；补queued筛选/范围/动作语义/原因脱敏/预览memo/窄栏可访问性。真实完整夹具确认与ready/draft导出28过。最终Node252，统一22步源码未变；8原生172+大纲31=203累计（有交叉）。PS5.1多行stdout元数据误判路径已修，测试转义失败记录保留；旧大纲按钮文案已同步。后端无Git改动，Python715历史，本轮未跑；真实云/网页服务/安装/物理DPI/RSS未验。未提交打包。报告docs/迭代任务/Codex-制作流程闭环与交付完善-2026-10-22.md，证据.test-tmp/codex-workflow-continuation-20261022/final-result.json。
+
+
+## 下载归属与浏览器生命周期（2026-10-22）
+- 真正缺陷：await 保存框后 setSavePath 不符合 Electron 同步回调契约；真实图片留在 .pending 文件。改同步 setSaveDialogOptions，完成后 getSavePath 归档。官方：https://www.electronjs.org/docs/latest/api/download-item 。
+- downloads.stage 原来完成时取当前号；现在 native 显式传来源 account_id，后端固定该有效账号，缺参数兼容旧调用，非法显式参数不得回落当前号。
+- reset/close 取消未完成项、释放自己的 session listener；隐藏给弹窗让位保留下载与原页面，登录 cookie 不清除。旧命令晚到不再操作新页面。
+- stage_download 原 read_bytes 两次且无大小限：现在单文件句柄、1MiB 分块、32MiB 上限和前后 stat 检查。32MiB 合成文件哈希 traced peak=2106979B，非解码或总 RSS；测试文件已删。
+- 原生验收用真实 DownloadItem+真实 Python RPC+本地 HTTPS protocol；选择的保存位置在 will-download 同步注入，不声称测试了 Windows 原生保存框。初版 GUI 返回0但无结果，已丢弃；runner 必须校验 fresh passed 结果/engine_exited/源摘要。
+- 首个真实测试发现已销毁 View.webContents getter 不再返回对象，测试改持有旧 WebContents 引用；另一次发现 pending 文件正是产品异步路径缺陷，未靠更改预期掩盖。
+
+
+## Token 预检与模型设置（2026-10-22）
+- 官方契约 https://docs.bigmodel.cn/api-reference/模型-api/文本分词器 已读：POST /api/paas/v4/tokenizer，model+完整messages，采用usage.total_tokens；枚举10个模型，不用模型名前缀猜测，GLM-5.3-Flash不在该页支持表内。Kimi旧docs路径返回not-found，未据第三方猜接口。
+- 已加入RoleRouter生成/格式修复前计数、输出预留、生成预算只读前检+事务内二次保留、同一总时限和取消。32条5分钟LRU仅digest与整数；Key变更或消息变更不复用。
+- 模型设置新增手动窗口、auto/required/off；手动源与端点/模型绑定，清空回到端点报告值；主模型required会要求备用模型同等核验。未知不冒充通过，未裁剪前五篇全文/所有标题。
+- 回执入创作消息和调用usage_json；成功、未完成、拦截、未接通/关闭分开显示；数字损坏不能渲染为通过。
+- 实际故障：TanStack invalidate默认不抛错，包装refreshAfterWrite不足以证明读败恢复；只对该新表单启用throwOnError，并用写成功返回的bootstrap更新账号缓存、取消旧读取，修复旧props在busy结束后自动把已存新值退回旧值。真实故障注入复验17项过。
+- 首轮完整752发现40秒精确相等的旧断言（39.985）；单跑同tick可能仍40，修成正剩余时限/近40约束，另有真实HTTP .25s联合截止证据。第二轮752唯一ID全过、167.438s、禁外网、源摘要未变。
+- 第一版新chat持久化测试用complete而产品为completed，已改测试；原生初版定位第一供应商而非GLM，已按provider定位。失败日志均保留。
+- 新Token原生17/旧设置11已过；计数/生成响应为离线替身，HTTP另测真实回环socket取消/压缩上限/重定向拒绝，均不能替代真实云Key验收。旧profile/probe诊断入口仍是独立流程；新预检范围为RoleRouter的内容生成请求。无新依赖、无迁移、未打包推送。
+
+
+## 冻结候选与安装范围（2026-10-22）
+- 按目标和登记旧目录限定停止，不再扫描后停止全会话其他ICE实例；父子创建时间与PID身份双核。真实多实例13项过。
+- 默认release统一build-candidate，所有构建输出到新UUID目录，稳定spec和排缓存，禁止发布；自动ASAR/ZIP/NSIS及实际冻结20项。
+- 最终候选5469cf79-ae93-4a24-8b76-15dfca7c4086；8步退出0、289输入无漂移、Node261、完整冻结离线文章流实际运行3段代码并成功截图／导出，残留0。
+- package.json开发元数据正常精简，审计运行字段；NSIS在ZIP后添加elevate助手，仅该文件按缓存摘要允许差异，其他不放宽。测试UI路径及chat.list数组误写均修正并保留失败证据。
+- 未签名，正式身份安装新装／升级、真云、物理DPI、长期RSS仍待。未安装、未提版、未推送。汇总.test-tmp/codex-release-candidate-20261022/final-result.json。
+
+## 安全卸载与真实 NSIS（2026-10-22）
+- 旧卸载器真实误删自建文章；父进程返回0是观察假完成，终态probe确认数据丢失、注册/进程均为空。
+- 编译嵌入SHA文件清单，全条目预检，匹配才删、修改保留、无递归根目录删除；6组真实PS行为过。
+- 独立NSIS3447e57c：23项全过，运行中覆盖/卸载与另一个ICE存活、文章图片工作区保留；卸载后包内Python只读读回会话1、模型调用0。
+- ZIP-only不能等待未初始化NsisTargetOptions；已修复，实构建与20项冻结通过。Node267。
+- 两次冻结字节差异记录：engine.exe/base_library.zip/BUILD.json与NSIS可选helper；不冒称全包同字节。四份测试助手源码等于当前生产源码。
+- 正式身份/历史迁移/真实云/签名/长期RSS等未验，目标继续。
+- 收尾：292构建输入当前摘要不变，NSIS/ZIP生产源码一致；NSIS载荷测试后复审通过；实际签名NotSigned，自有进程/测试注册0。
+- 工具写入曾因NUL字符、文档反引号模板解析失败被拒，均未执行落盘；改为安全here-string后完成，非产品运行失败。
+
+- 后续真实缺口：旧卸载器仍递归，现Stage仅工作区；散落文件旧→新覆盖仍有删除风险。23只验证安全卸载器同版本覆盖，不能当历史升级证据。下轮先保护未知文件、复用保留的旧测试包走真实迁移。
+
+## 2026-10-23 旧版迁移批次收尾
+- 完整NSIS原生System.dll被PowerShell Add-Type误作托管引用，两个脚本改绝对框架引用，污染cwd回归先红后绿。
+- 配置对象合并可叠加extraResources混入旧dist，改独立配置文件并逐文件审计三个资源树。
+- 最终Node287、专项26、冻结20、真实NSIS35全过；295输入当前稳定，卸载后会话1/模型调用0，测试注册/进程0。
+- 候选2cebc60b、安装证据de6ab39b，路径/hash见旧版迁移报告。未签名/未覆盖个人安装/未推送。
+- 上次最后文档写入被自动审批额度阻断未执行，本次补齐。恢复点管理、正式身份/UAC/旧数据库迁移仍待。
+
+
+## 2026-10-23 GLM体验接手
+- 不同runtime偏好本已隔离（main设置userData/sessionData）；同runtime重开持久化是正常行为。移除列表/integrity测试清键reload，fresh seed复验通过。
+- 新目录用桥的remark解析，重复标题按序定位；导航不改文本和写入。Tiptap focus异步，原生检查须等准确selection，不盲重试。
+- 最终Node291/291+八步统一通过，目录8，其他四原生96此前通过；首轮统一失败证据保留。详Codex-GLM体验复验与文章目录报告。
+
+
+## 2026-10-23 提案真实契约与内存
+- list_edit_proposals漏解base_document_json，真实有提案时UI崩溃；补一行解码，RPC回归先红后绿。
+- 单提案单修改DOM，保留操作位置/决定；同步防重+弱确认对象引用，已处理项移除且读败只重读。
+- 字符diff先UTF16公共段裁剪、再有限codepoint/LCS；独立算法RSS 161→50MiB（公共段样本），非全应用。
+- Node293、Python9、原生11/8/9分轮过。首轮下拉Enter与任务就绪测试失败保留；最终统一8步过，其后仅修editor-debounce测试并独立9过。
+- 待：列表摘要分页、决定离页持久化/放弃提醒、默认接受摘要、长期RSS；详本轮报告。
+
+
+## 2026-10-23 提案页载荷
+- 不能只限制DOM：旧列表25份快照序列化约14.3MiB。新SQL投影metadata/keyset20，4470B；详情另取。
+- 新proposals_page/proposal_get白名单精确开放，账号文章scope核验；旧list保持兼容但新UI不调用。
+- 同timestamp+id排序，已处理游标仍可继续；UI跨页决定保留，详情读败不留旧正文。
+- 最终统一10步、Node293、Python11、原生21通过；没有全量Python/云/安装新证据。待决定离页恢复与整进程RSS。
+
+
+## 2026-10-23 审阅决定持久化与提交确认
+
+迁移20独立保存审阅选择与手改，账号/文章/基线及乐观版本检查，相同内容重试no-op；提交后事务性清理。前端串行自动保存、离页flush、失败保留/阻断、明确重新读取及提交摘要（未决定仍接受但明示，默认继续检查）。读失败不清空输入，已保存的旧决定按需释放。新UI提交带review_version，旧调用兼容。
+
+最终Python758、Node298、统一12步complete=true、原生20+12+10共42通过，最终后端运行前后479输入一致，三个桌面夹具进程0。首轮Python的250ms时序断言失败后改为记录实际剩余timeout+真实socket关闭，连续3次及最终全量通过，未改产品超时逻辑。统一后仅改变这一测试，未改产品代码。解释器退出BufferedReader警告仍待定位；不得将进程0等同长期内存无泄漏。
+
+证据根.test-tmp/codex-review-drafts-20261023，final-evidence.json/verified/report.json/python-final.log/process-audit.json；报告：[审阅可靠性报告](docs/迭代任务/Codex-审阅决定持久化与提交确认-2026-10-23.md)。旧构建回退需恢复升级前数据库备份；未改个人运行库、未打包提版推送。整体发行目标未完成；双草稿协调、远端已处理后的当前页提示、长期RSS和原发行边界继续待验收。
+
+
+## 2026-10-23 正文与审阅并发保护
+
+修复真实articles.proposal_decide误清正文工作草稿：save_body在正文写事务内检查未保存草稿，仅退役与旧正文完全相同的恢复副本，提交后新草稿保留；拒绝提案不改正文。UI应用与版本保存互斥，未保存正文/恢复稿有提示，全部拒绝可继续。远端已处理提案只读保留本地决定，可复制及明确移除，不能静默离页或重放提交。
+
+完整Python762通过后Python产品代码未变；协议夹具stdout漏关已定位且修复，补丁后关键Python28及独立释放探针3通过，无该ResourceWarning。首轮统一因目录聚焦超时为17/18，保留失败。rAF暂停能确定性复现，改timer+当前文档/焦点/挂载守卫后，最终统一18/18、Node299、六组原生76、源码摘要59f6f4f906775f2f30dc668c9375adb7344d99c24c120da06436ebf32ee59731，运行中未变。24桌面夹具审计进程0。证据根.test-tmp/codex-editor-coordination-20261023，最终final-verified和final-evidence.json。
+
+报告：[正文与审阅并发保护](docs/迭代任务/Codex-正文与审阅并发保护-2026-10-23.md)。未增加迁移、未提版打包推送，未改个人运行库。后续优先真实整进程内存长跑、正文版本刷新完成前的编辑协调、历史库/恢复点和原正式发行边界；不得将测试句柄修复等同于整体无泄漏或整体上线完成。
+
+
+## 2026-10-23 大图与网页整进程内存
+
+真实约18MB的3000×2000 PNG与离线HTTPS双画布，各20轮/10秒驻留+70秒自然空闲；20轮362.4秒、147检查通过。私有字节观测最高852.3MiB、自然空闲341.6MiB、单独GC338.9MiB；温机至后段中位数+34.2MiB，预设门128。最终图片租约/文件授权/远程网页0。9个受控目录审计残留进程0，不证明真实网站数小时无泄漏。
+
+原图改为私有路径解析→主进程受控流→fetch Blob显示；路径解析不进renderer allowlist，二进制读完释放FD、关闭撤销Blob，保留图片。先直接img加载授权URL的方案被解码缓存复用回归否决，改Blob后关闭/迟到回复/跨账号/外部已知令牌隔离均通过。缩略图先缩放后旋转/转换，8向EXIF/透明度/原始字节测试通过。网页新增全站点释放确认，保留登录和已保存文件，关闭未完成下载/监听器，旧账号迟到操作不会释放新页面。
+
+首轮统一15/15、Python768、Node311、四组原生210通过；同一基线PNG再补查12项，JS堆33.3→12.4MiB但整进程722→721MiB几乎相同，禁止宣称整体内存降低某百分比。发现新模块漏进发行清单，新增真实静态依赖闭包守护先红后绿；最终quick6/6、Node312、源码c1d2c554771670e2e4b53767e54191cb00ec6b3fa4a47a547e3dd2a0b186d1fa，运行中未变。期间244份运行文件不变，Python未在最后quick重跑。无迁移/依赖升级/提版/打包/推送，个人数据未动。
+
+证据根.test-tmp/codex-memory-workflow-20261023：verified、final-verified、optimized-long-result.json、python-full.json/log、final-same-image-smoke.json、package-closure-red/green.log、process-audit.json、final-evidence.json。报告：[大图与网页整进程内存](docs/迭代任务/Codex-大图与网页整进程内存-2026-10-23.md)。使用说明：[图片与网页释放](docs/使用指南-图片与网页释放.md)。仍待正式冻结包、真实站点/模型长跑、历史库与恢复点、正式身份/UAC/签名等发行边界。
+
+
+## 2026-10-23 工作区迁移准入与备份一致性
+
+Store在主动改库前只读审计，包括最新版；未知/较新/缺记录/v18+漂移拒绝，旧记录不改写。run_migrations拒绝调用方未提交事务，不再误回滚人工编辑；初始化失败与旧基线备份连接显式关闭。备份预览使用同一FD前后hash，实际解压逐文件SHA，发布前再校验源包；目标暂存区完成数据库迁移后才发布。UI显示19→20及早期算法范围，500宽度实看通过。
+
+实际历史提交6b5d63c的Store/TaskQueue生成schema11，副本升级20、内容/旧记录保留。由此发现旧数字hash导致同请求冲突；仅同域同负载已知格式转换，终态/结果/租约不变，异输入或新SHA漂移继续拒绝，并发仍复用原任务。可复用工具tools/verify-historical-store.py本地13检查通过，不是历史EXE或真实用户完整恢复。
+
+实际选定工作区只读备份、副本19→20，2文章/6修订/19调用账本/0任务的计数与聚合SHA保留；原快照SHA未变，原工作区复核仍19。没有在其上运行DesktopService/Engine或执行原输出路径。源数据total_changes=0；报告不输出正文/Key。
+
+首轮统一14/15：786Python、312Node通过，新native缺runtime被正确拒绝，未放宽验收器。补标识并修复真实旧任务后最终统一15/15、Python791唯一项/0跳过、Node312、四组原生82（28+26+16+12），源码dda1995df83b7128cb74d7a6eee47c00aea7743582c0785b4119a5d13966e76a前后不变。23新增后端回归、历史工具13、300连接采样中位3.4ms/P95 4.4ms；13受控目录审计残留0。
+
+证据根.test-tmp/codex-migration-admission-20261023：verified失败、final-verified、python-final、historical-replay-red/green、personal-workspace-copy、open-cost、process-audit、final-evidence；未迁移个人原库、未提版/打包/推送。报告：[本轮报告](docs/迭代任务/Codex-工作区迁移准入与备份一致性-2026-10-23.md)。使用说明：[备份与迁移](docs/使用指南-工作区备份与迁移.md)。后续优先启动失败的工作区/备份图形入口、迁移前恢复点与安装升级恢复点管理、完整实际工作区/外部文件路径覆盖、正式冻结发行与真实服务/数小时使用验收；整体上线目标继续开放。
+
+
+## 2026-10-24 启动恢复发现
+- GLM最新记录主要为入门/会话上下文及大纲预检性能，原启动恢复仍无界面。
+- 原main顶层JSON.parse/缺文件throw早于whenReady，启动失败又退出，现引入独立恢复控制器和无Service的恢复工具。
+- 新工作区fresh必须成功启动后消耗；否则日后DB缺失会错误重建空库。
+- 原生夹具先暴露wrapper转义错误，保留失败；进一步修正fallback配置未隔离导致的测试假阴性，增加正向目录存在检查。终轮source冻结回归运行中。
+
+- 统一首轮editorial超时，经截图和只读SQL确认其复用已推进到70期/存在100期草稿的旧夹具；该注册项缺prepare标记。计划在冻结检查结束后只增加prepare=true，保留失败而不调整产品期号语义。
+
+- 冻结EXE专项抓到真实缺陷：PyInstaller stdout保留ACP，中文JSON用print输出不是UTF8。旧候选常规20项绿但恢复0项失败；强制GBK源码测试亦红。统一_reply改buffer写UTF8，构建--verify-desktop强制追加冻结恢复专项，失败候选标failed。新801全量运行中。
+
+- 最终801全量0skip/0source变化；新候选a6e0579b完整10阶段构建、桌面20+冻结恢复10通过；旧2dccb843补记failed/recovery-failed避免误启动。源码原生22在utf8-native-final固定fixture/result。全局目标仍active，后续自动恢复点与安装发行。
+
+
+## 2026-10-25 状态动效
+- 用户明确要求持续打磨前端交互动效；复用已固定Motion14/Radix，不加新库。
+- 官方Motion指南：MotionConfig user仅自动抑制变换/布局，不替代无限动画的显式停止；新活动条在减少动态/隐藏/终态下不启动重复动画。
+- 发现公共Button注释称加载不变宽，但实际插入Spinner导致宽度增长；改绝对定位的库驱动不定进度条，原文字、按钮语义/尺寸保留。
+- TurnProgress终态原来仍取旧metadata+无条件计时/typing，补事件优先终态与隐藏页面暂停计时。
+
+- 本轮前端最终deep17/17/source不变/Node324、原生129；首轮返回类型遗漏16/17已修正复验。独立动效28含系统切换双向、手动根标记、hidden CSS/JS停调度，12次重挂计时/可见性监听/文档动画均0。前端未打包，后端801基线不重跑；恢复点管理待下一轮。
+
+
+## 2026-10-25 升级恢复点闭环
+- DesktopService在Store/worker前prepare_upgrade，只读在线快照保留完整受管资料；失败/取消不改原库，原恢复点不递归备份。
+- 私有RECOVERY_LIMITS为4GB单文件/32GB总量/10万文件/32MB清单，普通ZIP原有限制不变。所有权标记/记录hash/实际包与源文件摘要约束复用与删除，未知或未完成内容保留，无自动retention删除。
+- main以最小能力独立启动页显示真实阶段，4Hz节流、30分钟硬截止、写库阶段禁取消；错误以UTF8结构化回主进程。注意Electron44导航地址取event.url兼容旧参数，否则等待页被阻断。
+- 新recovery-points专项fixture必须family/<owner>/runtime，不能嵌套auto-upgrade/runtime；取消工作区仅辅助字段留在同owner。等待截图须等真实DOM/透明度到位。
+- 最终deep22/22/Python819/Node327/原生190，历史17，隔离新候选冻结35通过；source摘要均不变。候选028a2504为今日2.0.0-beta.2 ZIP-only，未安装/提版/推送；整体目标仍active。证据见.test-tmp/codex-upgrade-recovery-20261025。
+
+2026-10-25 GLM任务划分：优先界面一致性、真实状态动效、澄清/草稿/配图操作、键盘与文档，8批48项；后端schema21、请求幂等/回执、预算/Token、文件权限和安装器保留Codex审查。历史Node339与后续专项9分开记录；旧deferred须先读现码。任务书见docs/迭代任务/GLM-界面体验与流程打磨任务书-2026-10-25.md。
+
+2026-10-25 GLM审阅：最后Codex候选对照仅clipboard、CandidateHistory、DownloadStaging、PromptPanel四生产文件变化。原“轮询吞状态”探针为文字选择器跳到另一行；固定按钮成功正常，600ms refetch下也保留。真实共享CopyButton在成功后新失败仍显示旧成功。拒绝适配器下原ux-polish全部通过，需修正证据与断言。48项表计done23/reused23/done-1/deferred1与报告头不一致。审阅与下一轮任务书已落盘，产品未改。
+
+
+## 2026-10-25 GLM复制阅读复验与收尾
+源码修复CopyButton提交文本版本/操作回执失效和卸载后通知；任务复位清理定时器与账号通知，焦点改本地ref。GLM页面赋值copyText注入无效（冻结bridge），改受控主进程内存适配器+逐次ok/长度/hash。原reading专项跳过候选实际操作与未断言poll，改单一历史候选/品牌资源种子；复现未见轮询重挂载或配图自动关闭。另查到UX生成selector固定引号错误，已修正，未改native-session。状态ID精确校验、旧48表统计修正23/24/1。Node352、原生10+24+15+28+28=105、统一入口8步通过；先前两次入口失败（reload上下文、退出动画未等待）与UX语法失败均保留。14受控根目录进程0，保护快照110文件不变，Python未重跑。报告与新GLM六批36项对照阅读任务书见docs/迭代任务；未提版打包安装提交推送。

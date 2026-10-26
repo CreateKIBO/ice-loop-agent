@@ -43,8 +43,19 @@ function plainText(node: unknown): string {
   return (n.children ?? []).map(plainText).join("");
 }
 
+export type MarkdownHeading = { index: number; level: number; text: string; line: number };
+const markdownParser = unified().use(remarkParse).use(remarkGfm);
+/** Top-level headings match the editor bridge; fenced code and quoted examples stay out. */
+export function markdownHeadings(markdown: string): MarkdownHeading[] {
+  const tree = markdownParser.parse(markdown) as Root;
+  return tree.children.filter(node => node.type === "heading").map((node, index) => ({
+    index, level: node.type === "heading" ? node.depth : 1,
+    text: plainText(node) || "未命名章节", line: node.position?.start.line ?? 1,
+  }));
+}
+
 export function markdownToDoc(markdown: string): EditorBlockJSON {
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as Root;
+  const tree = markdownParser.parse(markdown) as Root;
   const content: EditorBlockJSON[] = [];
   for (const child of tree.children as unknown as Array<Record<string, unknown> & { type: string }>) {
     switch (child.type) {

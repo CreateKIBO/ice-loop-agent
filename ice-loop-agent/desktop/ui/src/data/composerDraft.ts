@@ -1,7 +1,7 @@
 /** Account/thread-scoped, bounded input recovery. A draft never sends itself. */
 export const COMPOSER_MODES = ["discuss", "draft", "edit", "images"] as const;
 export type ComposerMode = typeof COMPOSER_MODES[number];
-export type ComposerDraft = { text: string; mode: ComposerMode };
+export type ComposerDraft = { text: string; mode: ComposerMode; editId?: string };
 
 // One bounded handoff survives a view change even if localStorage is unavailable.
 // Peek is repeatable because React StrictMode may run the state initializer twice.
@@ -39,7 +39,7 @@ function decode(raw: string | null, account: string, conversation: string, now: 
 export function loadComposerDraft(storage: DraftStorage, account: string, conversation: string, now = Date.now()): ComposerDraft {
   try {
     const value = decode(storage.getItem(composerKey(account, conversation)), account, conversation, now);
-    return value ? { text: value.text, mode: value.mode } : { ...EMPTY };
+    return value ? { text: value.text, mode: value.mode, ...(typeof value.editId==="string"&&/^[A-Za-z0-9_-]{1,100}$/.test(value.editId)?{editId:value.editId}:{}) } : { ...EMPTY };
   } catch { return { ...EMPTY }; }
 }
 

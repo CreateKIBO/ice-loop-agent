@@ -4,7 +4,7 @@ import { toast } from '../components/toast';
 import { accountStore,queryClient,rpc,useCurrentAccount } from '../data/client';
 import { useSettingsDraft } from './SettingsDraftGuard';
 import { assignPrimary,textRoutes,TEXT_ROLES,type ModelRoute } from './modelRoutes';
-import type { BootstrapSettings } from './ModelSettings';
+import type { BootstrapSettings } from './modelBootstrap';
 
 export function TextModelRoutes({snapshot,onRefresh}:{snapshot?:BootstrapSettings;onRefresh:()=>Promise<unknown>}) {
   const account=useCurrentAccount();

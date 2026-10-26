@@ -191,6 +191,26 @@
 }
 .ice-engine-banner .ice-btn { background: #fff; color: var(--ice-danger); }
 
+/* ---------------------------------------------------------------- 内联错误（批次A-03）
+   统一各模块的行内错误：标题/原因/下一步 + 可展开脱敏诊断；危险语义同时用
+   边框与背景表达，不只靠颜色。 */
+.ice-error-note {
+  display: grid; gap: 4px; padding: var(--ice-space-2) var(--ice-space-3);
+  background: var(--ice-danger-bg); border: 1px solid var(--ice-danger);
+  border-left-width: 3px; border-radius: var(--ice-radius-md);
+  font-size: var(--ice-font-size-sm); min-width: 0;
+}
+.ice-error-note__title { font-weight: 600; color: var(--ice-danger); overflow-wrap: anywhere; }
+.ice-error-note__detail { color: var(--ice-text-secondary); overflow-wrap: anywhere; }
+.ice-error-note__next { color: var(--ice-text); overflow-wrap: anywhere; }
+.ice-error-note__actions { display: flex; gap: var(--ice-space-2); flex-wrap: wrap; margin-top: 2px; }
+.ice-error-note__diagnostic {
+  font-family: var(--ice-font-mono); font-size: var(--ice-font-size-sm);
+  color: var(--ice-text-secondary); background: var(--ice-surface-muted);
+  padding: 4px 6px; border-radius: var(--ice-radius-sm);
+  white-space: pre-wrap; word-break: break-all;
+}
+
 /* ---------------------------------------------------------------- 减弱动效 */
 @media (prefers-reduced-motion: reduce) {
   .ice-dialog-overlay, .ice-dialog, .ice-skeleton, .ice-typing > span, .ice-toast__progress, .ice-caret,
@@ -199,4 +219,30 @@
 }
 [data-reduce-motion="true"] .ice-dialog-overlay, [data-reduce-motion="true"] .ice-dialog,
 [data-reduce-motion="true"] .ice-skeleton, [data-reduce-motion="true"] .ice-typing > span,
-[data-reduce-motion="true"] .ice-turn-step__dot { animation: none !important; }
+[data-reduce-motion="true"] .ice-turn-step__dot,
+[data-reduce-motion="true"] .ice-toast__progress { animation: none !important; }
+
+
+/* Functional activity: a pending button keeps its text and exact geometry.
+   Motion owns the moving transform; static/reduced/hidden states have no loop. */
+.ice-btn { position: relative; }
+.ice-activity-rail { display:block;position:relative;width:100%;height:3px;overflow:hidden;
+  border-radius:999px;background:var(--ice-info-bg);color:var(--ice-signal-blue);pointer-events:none; }
+.ice-activity-rail__fill { display:block;height:100%;border-radius:inherit;background:currentColor; }
+.ice-activity-rail--compact { position:absolute;inset:auto 0 0;width:100%;height:2px;border-radius:0 0 var(--ice-radius-md) var(--ice-radius-md);background:transparent;color:inherit; }
+.ice-activity-rail--success { color:var(--ice-success);background:var(--ice-success-bg); }
+.ice-activity-rail--warning { color:var(--ice-warning);background:var(--ice-warning-bg); }
+.ice-activity-rail--danger { color:var(--ice-danger);background:var(--ice-danger-bg); }
+.ice-turn-progress { padding:12px 14px;border:1px solid var(--ice-border);border-radius:var(--ice-radius-lg);background:var(--ice-surface-muted); }
+.ice-turn-progress__label { min-width:0;overflow-wrap:anywhere; }
+.ice-turn-progress__elapsed { margin-left:auto;flex-shrink:0; }
+.ice-turn-progress__signal { width:8px;height:8px;border-radius:50%;background:var(--ice-success);flex:none; }
+.ice-turn-progress[data-tone="danger"] .ice-turn-progress__signal { background:var(--ice-danger); }
+.ice-turn-progress[data-tone="warning"] .ice-turn-progress__signal { background:var(--ice-warning); }
+@media (prefers-reduced-motion:reduce) {
+  .ice-activity-rail__fill { transform:none !important;width:100% !important; }
+}
+[data-reduce-motion="true"] .ice-activity-rail__fill { transform:none !important;width:100% !important; }
+
+.ice-turn-progress[data-active="false"] .ice-typing > span,
+.ice-turn-progress[data-active="false"] .ice-turn-step__dot { animation:none; }

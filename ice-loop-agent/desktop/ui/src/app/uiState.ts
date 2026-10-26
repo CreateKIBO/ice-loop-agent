@@ -21,6 +21,7 @@ function createValueStore<T>(initial: T) {
 
 export const paletteStore = createValueStore(false);
 export const settingsStore = createValueStore(false);
+export const shortcutHelpStore = createValueStore(false);
 export const backupSettingsStore = createValueStore(false);
 export const editorialStore = createValueStore(false);
 export const publicationSettingsStore = createValueStore(false);

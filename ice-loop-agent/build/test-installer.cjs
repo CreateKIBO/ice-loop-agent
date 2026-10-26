@@ -36,12 +36,12 @@ async function fixture(name,recognized,hang){
 async function unit(){
   const foreign=await fixture('unrelated',false,false);
   const regular=await fixture('graceful',true,false);
-  const first=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-GraceSeconds','2','-ForceSeconds','5','-ReportPath',path.join(area,'graceful.json')]);
+  const first=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-InstallRoot',path.join(area,'graceful'),'-GraceSeconds','2','-ForceSeconds','5','-ReportPath',path.join(area,'graceful.json')]);
   assert.equal(first.code,0,first.err);const firstResult=JSON.parse(fs.readFileSync(path.join(area,'graceful.json')));
   assert(firstResult.discovered.includes(regular.main));assert(!firstResult.force_stopped.includes(regular.main),'WM_CLOSE should quit the normal hidden Electron window');
   assert(!alive(regular.main)&&!alive(regular.child));assert(alive(foreign.main)&&alive(foreign.child));
   const hung=await fixture('hung',true,true);
-  const forced=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-GraceSeconds','1','-ForceSeconds','5','-ReportPath',path.join(area,'forced.json')]);
+  const forced=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-InstallRoot',path.join(area,'hung'),'-GraceSeconds','1','-ForceSeconds','5','-ReportPath',path.join(area,'forced.json')]);
   assert.equal(forced.code,0,forced.err);const forcedResult=JSON.parse(fs.readFileSync(path.join(area,'forced.json')));
   assert(forcedResult.force_stopped.includes(hung.main));assert(!alive(hung.main)&&!alive(hung.child));assert(alive(foreign.main)&&alive(foreign.child));
   const fakeAppData=path.join(area,'appdata');fs.mkdirSync(fakeAppData,{recursive:true});
@@ -78,7 +78,7 @@ async function integration(){
   assert.equal(sha(path.join(install,'resources/app.asar')),sha(path.join(root,'release/win-unpacked/resources/app.asar')));
   // Restart with the same real database, then test the no-longer-needed running-app shutdown.
   const restarted=spawn(executable,[],{cwd:install,windowsHide:true,env:testEnv,stdio:'ignore'});owned.push(restarted.pid);await delay(2500);assert(alive(restarted.pid));
-  const stopped=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-ReportPath',path.join(area,'after-upgrade.json')]);assert.equal(stopped.code,0,stopped.err);assert(!alive(restarted.pid));
+  const stopped=await ps(path.join(root,'desktop/installer/stop-agent.ps1'),['-InstallRoot',install,'-ReportPath',path.join(area,'after-upgrade.json')]);assert.equal(stopped.code,0,stopped.err);assert(!alive(restarted.pid));
   assert.equal(sha(sentinel),hash);
   const probe=await run(executable,['--provider-smoke'],testEnv,60000);assert.equal(probe.code,0,probe.err);
   const providerFile=path.join(runtime,'provider-smoke.json');assert(fs.existsSync(providerFile));

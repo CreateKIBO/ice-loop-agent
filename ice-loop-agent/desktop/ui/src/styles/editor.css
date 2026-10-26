@@ -161,3 +161,13 @@
   max-width: 100%; max-height: 100%; object-fit: contain;
   border-radius: var(--ice-radius-md); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
+
+/* Collapsible chapter navigation; no IDs or changes are inserted into article content. */
+.ice-article-outline { border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); background: var(--ice-surface); flex-shrink: 0; }
+.ice-article-outline summary { padding: 10px 12px; cursor: pointer; font-size: var(--ice-font-size-sm); }
+.ice-article-outline nav { max-height: 240px; overflow: auto; display: grid; padding: 0 8px 8px; }
+.ice-article-outline button { text-align: start; background: transparent; color: var(--ice-ink); border: 0; padding: 8px 12px; border-radius: var(--ice-radius-sm); cursor: pointer; overflow-wrap: anywhere; font: inherit; }
+.ice-article-outline button:hover { background: var(--ice-surface-sunken); }
+.ice-article-outline button:focus-visible { outline: 2px solid var(--ice-signal-blue); outline-offset: -2px; }
+.ice-article-outline button span { color: var(--ice-text-secondary); font-size: 11px; margin-inline-end: 8px; }
+.ice-article-outline p { color: var(--ice-text-secondary); padding: 0 12px; font-size: var(--ice-font-size-sm); }

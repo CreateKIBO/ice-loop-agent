@@ -1,0 +1,76 @@
+'use strict';
+const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const { openNativeSession, wait } = require('./native-session.cjs');
+const repo = path.resolve(__dirname, '../..');
+const f = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/backup-migration-fixture.json')));
+assert.equal(path.dirname(f.root), path.join(repo, '.test-tmp/release-backup'));
+assert(fs.existsSync(path.join(f.root, '.test-owner.json')));
+const result = {state:'running', synthetic_schema_19:true, os_picker_injected:true, selection_redirected:true, checks:{}, root:f.root, runtime:f.runtime};
+const save = () => { const text=JSON.stringify(result,null,2); fs.writeFileSync(path.join(f.root,'backup-migration-result.json'),text); fs.writeFileSync(path.join(repo,'docs/上线准备/backup-migration-native.json'),text); };
+const hash = file => fs.existsSync(file) ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : null;
+const selected = path.join(repo,'.desktop-data-path.json'), selectedBefore=hash(selected);
+const check = (name, value) => { assert(value,name); result.checks[name]=true; save(); };
+const button = text => `[...document.querySelectorAll('button')].find(b=>b.innerText.trim()===${JSON.stringify(text)})`;
+let session;
+const dbState = file => JSON.parse(execFileSync(path.join(repo,'.venv/Scripts/python.exe'),['-X','utf8','-B','-c',
+  "import sqlite3,json,sys;from pathlib import Path;db=sqlite3.connect(Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True);print(json.dumps({'schema':db.execute('PRAGMA user_version').fetchone()[0],'review_table':bool(db.execute(\"SELECT 1 FROM sqlite_master WHERE name='proposal_decision_drafts'\").fetchone()),'receipt20':db.execute('SELECT COUNT(*) FROM schema_migrations WHERE version=20').fetchone()[0],'legacy10':db.execute('SELECT checksum FROM schema_migrations WHERE version=10').fetchone()[0],'model_calls':db.execute('SELECT COUNT(*) FROM model_invocations').fetchone()[0],'tasks':dict(db.execute('SELECT task_id,state FROM tasks'))}));db.close()",file],{encoding:'utf8',windowsHide:true,cwd:repo,env:session?.env??process.env}));
+process.on('exit',()=>{if(result.state!=='finished')process.exitCode=1;});
+(async()=>{try{
+ session=await openNativeSession(repo,f.runtime,{entryPath:f.entry});
+ const {evaluate:e,call,until}=session;
+ const click=async text=>{await until(`Boolean(${button(text)})&&!${button(text)}.disabled`);await e(`${button(text)}.click()`);};
+ const rpc=(method,params={})=>e(`window.ice.request(${JSON.stringify(method)},${JSON.stringify({account_id:'ice-loop',...params})})`);
+ await until(`Boolean(document.querySelector('#ice-account-select'))`);
+ check('fixture_has_real_schema_19_without_new_table',dbState(path.join(f.root,'synthetic-schema-19.db')).schema===19&&!dbState(path.join(f.root,'synthetic-schema-19.db')).review_table);
+ await click('备份与恢复');await until(`Boolean(document.querySelector('.ice-backup'))`);
+ await click('选择备份并校验');await until(`Boolean(document.querySelector('[aria-label="备份恢复预览"]'))`);
+ const preview=await e(`document.querySelector('[aria-label="备份恢复预览"]').innerText`);
+ check('preview_explains_source_to_latest_before_confirmation',preview.includes(`schema 19 → ${f.target_schema}（恢复时迁移）`));
+ check('old_checksum_scope_is_visible',preview.includes('早期迁移记录的校验范围')&&preview.includes('迁移 10 使用旧版校验记录'));
+ check('both_publications_are_in_preview',preview.includes('ICE Loop')&&preview.includes('迁移验收第二公众号'));
+ check('restore_requires_confirmation',await e(`${button('恢复到新目录')}.disabled`));
+ for(const width of [1280,500]){
+  await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+  check('preview_fits_viewport_'+width,await e(`(()=>{const d=document.querySelector('[role=dialog]'),r=d.getBoundingClientRect();return d.scrollWidth<=d.clientWidth+1&&r.left>=0&&r.right<=innerWidth+1;})()`));
+  if(width===500){const shot=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(f.root,'migration-preview-500.png'),Buffer.from(shot.data,'base64'));}
+ }
+ await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+ await e(`document.querySelector('.ice-backup__confirm input').click()`);await click('恢复到新目录');
+ await until(`Boolean(${button('保存当前修改并重启')})`,45000);
+ const receipt=await e(`document.querySelector('[aria-label="恢复结果"]').innerText`);
+ check('receipt_reports_migration_completed_in_new_directory',receipt.includes(`数据库已在新目录校验完成：schema 19 → ${f.target_schema}`));
+ const restored=JSON.parse(fs.readFileSync(path.join(f.root,'selection.json'))).runtime_root;result.restored_runtime=restored;
+ assert(restored.startsWith(f.root+path.sep)&&restored!==f.runtime);
+ const restoredDb=dbState(path.join(restored,'app.db'));result.database_before_restart=restoredDb;
+ check('published_database_is_already_latest_before_first_engine_open',restoredDb.schema===f.target_schema&&restoredDb.review_table&&restoredDb.receipt20===1);
+ check('original_legacy_receipt_is_preserved',restoredDb.legacy10==='fixture-legacy-code-only');
+ check('pending_tasks_stay_paused_without_model_calls',restoredDb.model_calls===0&&restoredDb.tasks[f.bound]==='paused'&&restoredDb.tasks[f.unbound]==='paused');
+ check('source_archive_bytes_unchanged',hash(f.package)===f.package_hash);
+ check('current_window_stays_on_source_until_restart',(await rpc('backup.queue')).runtime_root===f.runtime);
+ check('current_source_article_is_preserved',(await rpc('jobs.get',{job_id:f.job})).body===f.body);
+ check('first_window_has_no_renderer_exceptions',session.errors.length===0);
+ await session.close();session=null;
+ const entry=path.join(path.dirname(restored),'migration-restart-main.cjs');fs.writeFileSync(entry,'require('+JSON.stringify(f.entry)+');\n');
+ session=await openNativeSession(repo,restored,{entryPath:entry,useWorkspaceSelection:true});
+ const e2=session.evaluate;
+ await session.until(`Boolean(document.querySelector('#ice-account-select'))`);
+ const rpc2=(method,params={})=>e2(`window.ice.request(${JSON.stringify(method)},${JSON.stringify({account_id:'ice-loop',...params})})`);
+ const bootstrap=await rpc2('bootstrap');check('real_restart_reads_two_restored_publications',bootstrap.accounts.length===2);
+ check('restarted_engine_uses_restored_runtime',(await rpc2('backup.queue')).runtime_root===restored);
+ check('restarted_article_matches_source',(await rpc2('jobs.get',{job_id:f.job})).body===f.body);
+ const image=await rpc2('resources.preview',{resource_id:f.resource,original:true});
+ check('restored_image_bytes_match',crypto.createHash('sha256').update(Buffer.from(image.data_url.split(',')[1],'base64')).digest('hex')===f.image_hash);
+ await rpc2('accounts.switch',{account_id:f.secondary_account});
+ const conversations=await rpc2('chat.list',{account_id:f.secondary_account});
+ check('second_publication_conversation_is_restored',conversations.some(row=>row.title==='第二公众号的恢复会话'));
+ check('second_publication_cannot_read_first_images',(await rpc2('resources.list',{account_id:f.secondary_account})).length===0);
+ await wait(4200);const idle=dbState(path.join(restored,'app.db'));
+ check('restart_never_auto_runs_paused_or_paid_work',idle.model_calls===0&&idle.tasks[f.bound]==='paused'&&idle.tasks[f.unbound]==='paused');
+ check('original_credentials_not_copied',!fs.existsSync(path.join(restored,'credentials.json')));
+ check('personal_selection_file_unchanged',hash(selected)===selectedBefore);
+ check('picker_plan_consumed',JSON.parse(fs.readFileSync(path.join(f.root,'dialog-plan.json'))).length===0);
+ check('no_renderer_exceptions',session.errors.length===0);result.state='finished';
+}catch(error){result.state='failed';result.error=String(error.stack||error);if(session)try{result.dom=await session.evaluate('document.body.innerText');result.renderer_errors=session.errors;}catch{}}
+finally{if(session)await session.close();save();console.log(JSON.stringify({state:result.state,checks:Object.keys(result.checks).length,error:result.error,root:f.root}));}})();

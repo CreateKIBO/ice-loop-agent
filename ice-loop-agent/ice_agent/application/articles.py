@@ -24,6 +24,7 @@ class ArticlesEditorHandler(Handler):
         "articles.document", "articles.editor_draft_save", "articles.editor_draft_get",
         "articles.editor_draft_clear", "articles.propose_patch", "articles.proposals_list",
         "articles.proposal_decide", "articles.approval_status",
+        "articles.proposals_page", "articles.proposal_get", "articles.proposal_draft_save",
     })
 
     def handle(self, method: str, params: dict) -> Any:
@@ -179,6 +180,46 @@ class ArticlesEditorHandler(Handler):
         finally:
             store.close()
 
+    def _articles_proposals_page(self, params: dict) -> dict:
+        service = self.service
+        _, _, store = service._job_app(params["job_id"])
+        try:
+            article = store.get_article(store.get_job(params["job_id"])["article_id"])
+            return editorial_store.list_edit_proposal_page(
+                store, service._account()["id"], article["article_id"],
+                limit=params.get("limit", 20), cursor=params.get("cursor"))
+        finally:
+            store.close()
+
+    def _articles_proposal_get(self, params: dict) -> dict:
+        service = self.service
+        _, _, store = service._job_app(params["job_id"])
+        try:
+            article = store.get_article(store.get_job(params["job_id"])["article_id"])
+            proposal_id = params.get("proposal_id")
+            if not isinstance(proposal_id, str) or not proposal_id or len(proposal_id) > 200:
+                raise ValueError("无效的提案编号")
+            return {"proposal": editorial_store.get_article_edit_proposal(
+                store, service._account()["id"], article["article_id"], proposal_id),
+                "review_draft": editorial_store.get_proposal_decision_draft(
+                    store, service._account()["id"], article["article_id"], proposal_id)}
+        finally:
+            store.close()
+
+    def _articles_proposal_draft_save(self, params: dict) -> dict:
+        service = self.service
+        _, _, store = service._job_app(params["job_id"])
+        try:
+            article = store.get_job(params["job_id"])["article_id"]
+            proposal_id = params.get("proposal_id")
+            if not isinstance(proposal_id, str) or not proposal_id or len(proposal_id) > 200:
+                raise ValueError("无效的提案编号")
+            return {"draft": editorial_store.save_proposal_decision_draft(
+                store, service._account()["id"], article, proposal_id,
+                params.get("base_hash"), params.get("decisions"), params.get("expected_version"))}
+        finally:
+            store.close()
+
     def _articles_proposal_decide(self, params: dict) -> dict:
         service = self.service
         engine, _, store = service._job_app(params["job_id"])
@@ -192,16 +233,14 @@ class ArticlesEditorHandler(Handler):
                 raise ValueError("提案不属于当前文章或公众号")
             if proposal["status"] != "pending":
                 raise ValueError("提案已处理过，请查看处理结果")
-            decisions = params.get("decisions")
-            if not isinstance(decisions, list) or len(decisions) != len(proposal["ops"]):
-                raise ValueError("必须对每一项修改给出决定")
-            for decision in decisions:
-                if not isinstance(decision, dict) or \
-                        decision.get("decision") not in ("accept", "reject", "new_text"):
-                    raise ValueError("决定必须是 accept/reject/new_text")
-                if decision["decision"] == "new_text" and \
-                        (not isinstance(decision.get("text"), str) or not decision["text"].strip()):
-                    raise ValueError("改后接受必须提供新文本")
+            if "review_version" in params:
+                expected = params["review_version"]
+                draft = editorial_store.get_proposal_decision_draft(
+                    store, service._account()["id"], article["article_id"], proposal["proposal_id"])
+                if type(expected) is not int or expected != (draft["version"] if draft else 0):
+                    raise ValueError("已保存的审阅决定发生变化，请重新读取并核对后提交；当前输入仍保留")
+            decisions = editorial_store.validate_proposal_decisions(
+                params.get("decisions"), len(proposal["ops"]), complete=True)
             base_document = proposal["base_document"]
             current_md = engine._load_state(params["job_id"]).get("integrated_md", "")
             current_hash = sha256_text(current_md)
@@ -224,13 +263,11 @@ class ArticlesEditorHandler(Handler):
                         "revision_id": None, "content_hash": current_hash}
             from ..revisions import save_body
             saved = save_body(engine, store, params["job_id"], new_md, current_hash,
-                              service._account()["id"])
+                              service._account()["id"], protect_editor_draft=True)
             status = "applied" if not conflicts else "partially_applied"
             outcome = {"applied": merged["applied"], "conflicts": conflicts,
                        "revision_id": saved["revision_id"]}
             editorial_store.finish_edit_proposal(store, proposal["proposal_id"], status, outcome)
-            editorial_store.clear_editor_draft(store, service._account()["id"],
-                                               article["article_id"])
             return {"status": status, "applied": merged["applied"], "conflicts": conflicts,
                     "revision_id": saved["revision_id"], "content_hash": saved["content_hash"],
                     "evidence_errors": saved.get("evidence_errors")}

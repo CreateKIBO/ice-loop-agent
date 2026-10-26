@@ -1,5 +1,11 @@
 /** Large original images live only in the open viewer, outside Query caches. */
-export function imageLease(data: string): { url: string; release: () => void } {
+export function imageLease(data: string | Blob): { url: string; release: () => void } {
+  if (data instanceof Blob) {
+    if (!['image/png','image/jpeg','image/webp'].includes(data.type) || data.size > 32 * 1024 * 1024 || data.size <= 0) throw Error('图片数据无效或超出可预览大小');
+    const url = URL.createObjectURL(data);
+    let released = false;
+    return { url, release() { if (!released) { released = true; URL.revokeObjectURL(url); } } };
+  }
   if (data.length > 46 * 1024 * 1024) throw Error('图片数据无效或超出可预览大小');
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\r\n]+)$/.exec(data);
   if (!match) throw Error('图片数据无效或超出可预览大小');

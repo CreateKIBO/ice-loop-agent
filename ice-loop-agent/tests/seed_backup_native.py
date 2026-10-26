@@ -10,6 +10,8 @@ from uuid import uuid4
 repo=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(repo))
 from PIL import Image
+from ice_agent.migrations import MAX_KNOWN_VERSION
+from ice_agent.llm.capabilities import preset_profile
 from ice_agent.backup import create_backup
 from ice_agent.desktop_service import DesktopService
 from ice_agent.paths import atomic_write_text
@@ -35,7 +37,8 @@ try:
     store.conn.execute("UPDATE tasks SET state='paused',error_code='RESTORE_REVIEW'");store.conn.commit()
     image=root/'input.png';Image.new('RGB',(800,480),'#2448DB').save(image)
     resource=service.call('resources.import',{'file_path':str(image)})
-    atomic_write_text(runtime/'credentials.json','{"fixture":"excluded fake secret, never a real Key"}')
+    # An empty credential file still proves exclusion without provoking real-profile key recovery.
+    atomic_write_text(runtime/'credentials.json','{}')
     package=root/'base.zip';create_backup(runtime,service.settings,package)
     bad=root/'bad.zip'
     with zipfile.ZipFile(package) as source,zipfile.ZipFile(bad,'w',zipfile.ZIP_DEFLATED) as dest:
@@ -57,14 +60,17 @@ try:
 const fs=require('node:fs'),path=require('node:path'),{dialog}=require('electron');
 const project=PROJECT,selected=path.join(project,'.desktop-data-path.json'),redirect=path.join(__dirname,'selection.json');
 const remap=value=>typeof value==='string'&&(value===selected||value.startsWith(selected+'.'))?redirect+value.slice(selected.length):value;
-for(const name of ['existsSync','readFileSync','writeFileSync','unlinkSync']){const original=fs[name];fs[name]=function(file,...args){return original.call(fs,remap(file),...args);};}
+// Refuse unredirected metadata reads as well: a clean machine may have no
+// personal selection file at all. All assertions must use this fixture only.
+const rawStat=fs.statSync;fs.statSync=function(file,...args){if(file===selected)throw Error('unredirected personal selection stat');return rawStat.call(fs,file,...args);};
+for(const name of ['existsSync','statSync','readFileSync','writeFileSync','unlinkSync']){const original=fs[name];fs[name]=function(file,...args){return original.call(fs,remap(file),...args);};}
 const rename=fs.renameSync;fs.renameSync=function(from,to){if(to===selected&&fs.existsSync(path.join(__dirname,'deny-selection')))throw Error('fixture selection write denied');return rename.call(fs,remap(from),remap(to));};
 const pick=(kind,options)=>{const file=path.join(__dirname,'dialog-plan.json'),plan=JSON.parse(fs.readFileSync(file)),next=plan.shift();if(!next||next.kind!==kind)throw Error('Unexpected picker '+kind);fs.writeFileSync(file,JSON.stringify(plan));return next;};
 dialog.showOpenDialog=async(_window,options)=>pick('open',options);
 dialog.showSaveDialog=async(_window,options)=>pick('save',options);
 require(path.join(project,'desktop/main.cjs'));
 """.replace('PROJECT',json.dumps(str(repo))))
-    fixture={'root':str(root),'runtime':str(runtime),'entry':str(wrapper),'package':str(package),
+    fixture={'target_schema':MAX_KNOWN_VERSION,'offline_profile':preset_profile('mock',profile_id='frozen-chat-fixture'),'root':str(root),'runtime':str(runtime),'entry':str(wrapper),'package':str(package),
              'job':job,'article':article,'resource':resource['resource_id'],'image_hash':resource['sha256'],
              'bound':bound['task_id'],'unbound':unbound['task_id'],'body':body,
              'os_dialog_injected':True,'selection_pointer_redirected':True}

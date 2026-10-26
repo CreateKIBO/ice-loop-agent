@@ -1,6 +1,7 @@
 /* ICE Loop reading workspace: brand tokens stay shared with the existing app. */
 .ice-conversation-header { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--ice-border); background:var(--ice-surface); flex-shrink:0; }
 .ice-conversation-header__identity { min-width:0; flex:1; }
+.ice-conversation-header__identity > .ice-composer-note { display:block; margin-top:3px; line-height:1.5; overflow-wrap:anywhere; }
 .ice-eyebrow { font-size:10px; letter-spacing:.12em; color:var(--ice-text-secondary); }
 .ice-conversation-header h1 { margin:3px 0 0; font-size:15px; line-height:1.4; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ice-conversation-header__status { display:flex; gap:5px; align-items:center; font-size:11px; color:var(--ice-text-secondary); white-space:nowrap; }
@@ -64,3 +65,15 @@
 .ice-context-receipt summary { cursor: pointer; padding: var(--ice-space-2) 0; }
 .ice-context-receipt summary:focus-visible { outline: 2px solid var(--ice-signal-blue); outline-offset: 3px; border-radius: 4px; }
 .ice-context-receipt p { margin: 4px 0 8px; line-height: 1.65; }
+
+/* 批次3-21：窗口内查找命中高亮（仅描边提示，不依赖颜色单独表达——按钮与计数同在）。 */
+.ice-message--find-hit > div:first-of-type {
+  outline: 2px solid var(--ice-signal-blue);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ice-message--find-hit > div:first-of-type { transition: none; }
+}
+.ice-window-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px var(--ice-space-3); border-bottom: 1px solid var(--ice-border); background: var(--ice-surface); }
+.ice-window-find > input { flex: 1 1 180px; min-width: 100px; }
+.ice-window-find > [role="status"] { min-width: 70px; text-align: center; font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }

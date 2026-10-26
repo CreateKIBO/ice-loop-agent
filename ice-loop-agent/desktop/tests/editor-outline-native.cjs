@@ -1,0 +1,51 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {openNativeSession}=require('./native-session.cjs');
+const repo=path.resolve(__dirname,'../..'),f=JSON.parse(fs.readFileSync(path.join(repo,'docs/上线准备/interaction-lists-fixture.json')));
+assert.equal(path.dirname(f.root),path.join(repo,'.test-tmp/release-interaction-lists'));assert(fs.existsSync(path.join(f.root,'.test-owner.json')));
+const output=path.join(f.root,'outline-result.json'),result={state:'running',checks:{},runtime:f.runtime};
+const save=()=>{const json=JSON.stringify(result,null,2);fs.writeFileSync(output,json);fs.writeFileSync(path.join(repo,'docs/上线准备/editor-outline-native.json'),json);};save();
+process.on('exit',()=>{if(result.state!=='finished')process.exitCode=1;});
+const body='# 导航验收\n\n## 重复章节\n\n正文。\n\n```python\n# 代码伪标题\n```\n\n重复章节\n---\n\n结尾。\n';
+const rows=()=>fs.existsSync(f.trace)?fs.readFileSync(f.trace,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
+const writes=()=>rows().filter(r=>r.phase==='started'&&['articles.save','articles.editor_draft_save'].includes(r.method)).length;
+(async()=>{let s;try{
+ s=await openNativeSession(repo,f.runtime,{entryPath:f.entry});const {evaluate:e,call,until}=s;
+ const check=(n,v)=>{assert(v,n);result.checks[n]=true;save();};
+ const key=async(k,modifiers=0)=>{await call('Input.dispatchKeyEvent',{type:'keyDown',key:k,windowsVirtualKeyCode:k==='Enter'?13:65,modifiers,...(k==='Enter'?{text:'\r'}:{})});await call('Input.dispatchKeyEvent',{type:'keyUp',key:k,windowsVirtualKeyCode:k==='Enter'?13:65,modifiers});};
+ const button=text=>`[...document.querySelectorAll('button')].find(b=>b.innerText.trim()===${JSON.stringify(text)})`;
+ const activate=async expr=>{await until(`Boolean(${expr})`);await e(`${expr}.focus()`);await key('Enter');};
+ await activate(`[...document.querySelectorAll('li[data-job-id="job-kb-done"] button')].find(b=>b.innerText.trim()==='编辑正文')`);
+ await until(`Boolean(document.querySelector('.ice-editor[contenteditable="true"]'))`);
+ await activate(button('源模式'));await until(`Boolean(document.querySelector('.cm-content'))`);
+ await e(`document.querySelector('.cm-content').focus()`);await key('a',2);await call('Input.insertText',{text:body});
+ await until(`document.querySelector('.cm-content').innerText.includes('代码伪标题')`);
+ await until(`document.querySelectorAll('.ice-article-outline nav button').length===3`);
+ check('outline_excludes_fenced_heading',!(await e(`document.querySelector('.ice-article-outline').innerText.includes('代码伪标题')`)));
+ await e(`document.querySelector('.ice-article-outline summary').focus()`);await key('Enter');
+ await activate(`document.querySelectorAll('.ice-article-outline nav button')[2]`);
+ await until(`getSelection().anchorNode?.parentElement?.closest('.cm-line')?.textContent==='重复章节'`);
+ check('source_jump_targets_setext_duplicate',await e(`getSelection().anchorNode?.parentElement?.closest('.cm-line')?.textContent==='重复章节'`));
+ // Wait for the real working-draft acknowledgement, then measure navigation separately.
+ await until(`document.body.innerText.includes('工作草稿已保存')`);
+ const before=writes();
+ await activate(button('富文本'));await until(`Boolean(document.querySelector('.ice-editor h2'))`);
+ // Deterministically emulate deferred animation frames in an occluded native window.
+ await e(`window.__originalOutlineRaf=window.requestAnimationFrame;window.requestAnimationFrame=()=>0`);
+ await activate(`document.querySelectorAll('.ice-article-outline nav button')[2]`);
+ await until(`(()=>{const h=getSelection().anchorNode?.parentElement?.closest('h2');return h===document.querySelectorAll('.ice-editor h2')[1]})()`);
+ check('rich_jump_targets_last_duplicate',await e(`(()=>{const h=getSelection().anchorNode?.parentElement?.closest('h2');return h===document.querySelectorAll('.ice-editor h2')[1]})()`));
+ // Source conversion is read-only; repeat navigation to the same heading.
+ await activate(`document.querySelectorAll('.ice-article-outline nav button')[0]`);
+ await until(`getSelection().anchorNode?.parentElement?.closest('h1')?.textContent==='导航验收'`);
+ check('rich_jump_targets_first_heading',await e(`getSelection().anchorNode?.parentElement?.closest('h1')?.textContent==='导航验收'`));
+ check('rich_navigation_never_waits_for_animation_frame',true);
+ await e(`window.requestAnimationFrame=window.__originalOutlineRaf;delete window.__originalOutlineRaf`);
+ check('navigation_does_not_issue_writes',writes()===before);
+ check('navigation_never_saves_a_version',!rows().some(r=>r.method==='articles.save'&&r.phase==='started'));
+ const draft=await e(`window.ice.request('articles.editor_draft_get',{job_id:'job-kb-done',account_id:${JSON.stringify(f.account_a)}})`);
+ check('working_draft_content_preserved',draft.draft.content===body);
+ await call('Emulation.setDeviceMetricsOverride',{width:500,height:900,deviceScaleFactor:1,mobile:false});
+ check('outline_has_no_horizontal_overflow',await e(`document.documentElement.scrollWidth<=innerWidth`));
+ result.state='finished';
+}catch(err){result.state='failed';result.error=String(err.stack||err);process.exitCode=1;}finally{if(s)await s.close();save();console.log(JSON.stringify({state:result.state,checks:Object.keys(result.checks).length,output}));}})();

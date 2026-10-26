@@ -53,7 +53,7 @@ export function DefaultBudgetPanel() {
   return <section aria-label="模型调用预算" style={{display:'grid',gap:12,marginBottom:24,paddingBottom:20,borderBottom:'1px solid var(--ice-border)'}}>
     <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}><strong data-budget-heading tabIndex={-1}>全局默认预算</strong><span className="ice-badge">此电脑的所有公众号</span></div>
     <p style={{margin:0,fontSize:'var(--ice-font-size-sm)',color:'var(--ice-text-secondary)',lineHeight:1.65}}>
-      普通文章与补图上限只影响之后创建的任务，已有文章在配图工作台调整本篇预算。会话上限保存后立即适用于已有会话，已用次数不清零。每次真实模型请求计一次，失败重试也计入；能力不匹配的请求不计入。</p>
+      普通文章与补图上限只影响之后创建的任务，已有文章在配图工作台调整本篇预算。会话上限保存后立即适用于已有会话，已用次数不清零。每次生成请求计一次，失败重试也计入；未发送的能力检查不计入。Token计数是独立的供应商请求，不占本地生成次数，费用以供应商为准。</p>
     {budget.isLoading&&<SkeletonRows rows={3} height={32} />}
     {budget.error&&<Banner tone="danger" title="预算读取失败">{budget.error.message}<Button size="sm" onClick={read}>重试读取预算</Button></Banner>}
     {draft&&<fieldset disabled={Boolean(busy)} style={{border:0,padding:0,margin:0,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(180px,100%),1fr))',gap:12,minWidth:0}}>

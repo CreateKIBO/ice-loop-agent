@@ -41,6 +41,16 @@ class BackupActions {
       return { ...summary, token };
     });
   }
+  inspectPoint(pointId, runtimeRoot) {
+    return this.exclusive(async()=>{
+      this.review=null;
+      if(typeof pointId!=='string'||!/^[0-9a-f]{32}$/.test(pointId))throw Error('恢复点标识无效');
+      const summary=await this.request('recovery.inspect',{point_id:pointId,...(runtimeRoot?{runtime_root:runtimeRoot}:{})});
+      const token=randomUUID();
+      this.review={token,kind:'point',pointId,runtimeRoot,hash:summary.package_hash,expires:this.now()+this.ttlMs};
+      return {...summary,token};
+    });
+  }
   checkedReview(token) {
     if (!this.review || typeof token !== 'string' || this.review.token !== token) throw Error('请先选择并预览备份包');
     if (this.now() >= this.review.expires) { this.review = null; throw Error('备份预览已过期，请重新选择并校验'); }
@@ -56,7 +66,9 @@ class BackupActions {
       this.checkedReview(token); // The native picker can remain open past expiry.
       this.review = null; // one attempt per reviewed package; changed bytes require review again
       const destination = path.join(picked.filePaths[0], 'ice-restored-' + this.now() + '-' + randomUUID().slice(0, 8));
-      const restored = await this.request('backup.restore', { file_path: review.file, destination, package_hash: review.hash });
+      const restored = review.kind==='point'
+        ? await this.request('recovery.restore',{point_id:review.pointId,...(review.runtimeRoot?{runtime_root:review.runtimeRoot}:{}),destination,package_hash:review.hash})
+        : await this.request('backup.restore', { file_path: review.file, destination, package_hash: review.hash });
       this.pendingSelection = { token: randomUUID(), restored };
       return this.publishSelection();
     });

@@ -53,14 +53,36 @@ export function ImageViewer({ target, onClose }: { target: ImageTarget; onClose:
   const drag = React.useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const request = previewRequest(target, true), key = JSON.stringify(request);
   React.useEffect(() => {
-    let active = true, lease: ReturnType<typeof imageLease> | undefined;
+    let active = true, lease: { url: string; release: () => void } | undefined;
     const control = new AbortController();
     setImage(null); setError(null); setMode('fit');
     if (account !== target.accountId) { setError('公众号已切换，请重新打开图片'); return; }
-    void imageQueue.run(() => rpc<unknown>(request.method, request.params), control.signal, true).then(result => {
-      if (!active) return;
-      lease = imageLease(dataUrl(result));
-      setImage({ url: lease.url, width: 0, height: 0 });
+    const originalBridge = window.ice as unknown as {
+      openOriginalImage?: (params: Record<string, unknown>) => Promise<{ token: string; url: string }>;
+      releaseOriginalImage?: (token: string) => Promise<unknown>;
+    };
+    void imageQueue.run(async () => {
+      if (originalBridge.openOriginalImage && originalBridge.releaseOriginalImage) {
+        const params = target.kind === 'candidate'
+          ? { kind: 'candidate', account_id: target.accountId, job_id: target.jobId, candidate_id: target.candidateId }
+          : { kind: 'resource', account_id: target.accountId, resource_id: target.resourceId };
+        const opened = await originalBridge.openOriginalImage(params);
+        try {
+          const response = await fetch(opened.url, { signal: control.signal, cache: 'no-store' });
+          if (!response.ok) throw Error('原图授权已失效，请重新打开图片');
+          // Binary Blob avoids base64/JSON copies and retains explicit revocation semantics.
+          lease = imageLease(await response.blob());
+        } finally {
+          await originalBridge.releaseOriginalImage(opened.token).catch(() => undefined);
+        }
+      } else {
+        lease = imageLease(dataUrl(await rpc<unknown>(request.method, request.params)));
+      }
+      // A reply after unmount must release its main-process capability too.
+      if (!active) lease.release();
+      return lease;
+    }, control.signal, true).then(opened => {
+      if (active) setImage({ url: opened.url, width: 0, height: 0 });
     }).catch(problem => { if (active) setError((problem as Error).message); });
     return () => { active = false; control.abort(); lease?.release(); };
     // Only semantic identity changes reload the large original; no Query entry retains it.

@@ -2,9 +2,10 @@
 const fs=require('node:fs'),path=require('node:path');
 const {openNativeSession,wait}=require('./native-session.cjs');
 const repo=path.resolve(__dirname,'../..'),out=path.join(repo,'docs/上线准备');
+const imagesOnly=process.argv.includes('--images-only');
 const fixture=JSON.parse(fs.readFileSync(path.join(out,'assets-fixture.json'),'utf8'));
 const attempt=path.join(out,'assets-attempts',path.basename(path.dirname(fixture.runtime))+'-'+Date.now());fs.mkdirSync(attempt,{recursive:true});
-const report={state:'running',checks:{},errors:[],runtime:fixture.runtime,evidence_dir:attempt},save=()=>{const text=JSON.stringify(report,null,2);fs.writeFileSync(path.join(out,'assets-native.json'),text);fs.writeFileSync(path.join(attempt,'result.json'),text);};
+const report={state:'running',scope:imagesOnly?'images/editor/delivery; live TapNow skipped':'full assets and live embedded TapNow',skipped:imagesOnly?['live_tapnow_browser']:[],checks:{},errors:[],runtime:fixture.runtime,evidence_dir:attempt},save=()=>{const text=JSON.stringify(report,null,2);fs.writeFileSync(path.join(out,'assets-native.json'),text);fs.writeFileSync(path.join(attempt,'result.json'),text);};
 const assert=(name,ok)=>{report.checks[name]=Boolean(ok);save();if(!ok)throw Error(name+' failed');};
 async function targetEvaluation(target,expression){
  const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true});});
@@ -63,6 +64,7 @@ async function targetEvaluation(target,expression){
   await click('从资源库选图');await until(`document.body.innerText.includes('共 17 张')||Boolean(${button('下一页资源')})`);await click('下一页资源');assert('resources_beyond_first_page_accessible',true);
   await type('搜索配图资源','循环图解资源');await until(`document.querySelector('.ice-asset-cards')?.innerText.includes('循环图解资源')`);await click('采用此资源');
   await until(`document.body.innerText.includes('资源已复制到图位并采纳')`);assert('resource_reuse_binds_real_slot',(await rpc('jobs.get')).slots.find(s=>s.figure_no===fixture.generative).valid);
+  if(!imagesOnly){
   await click('打开内嵌 TapNow');await until(`document.body.innerText.includes('内嵌网页工作台')`);
   let remote;for(let i=0;i<50;i++){remote=(await session.getTargets()).find(t=>t.type==='page'&&t.url.startsWith('https://app.tapnow.media'));if(remote)break;await wait(200);}
   assert('tapnow_is_native_view_inside_agent',Boolean(remote));
@@ -73,6 +75,7 @@ async function targetEvaluation(target,expression){
   const beforeHeight=box.height;await click('展开操作说明');await wait(300);const after=await targetEvaluation(remote,'innerHeight');assert('collapsible_chrome_resizes_webview',after<beforeHeight);
   await click('关闭并释放网页');await until(`!document.querySelector('.ice-browser-region')`);
   await wait(300);assert('release_closes_only_remote_page',!(await session.getTargets()).some(t=>t.id===remote.id));assert('article_workbench_retained',await evaluate(`Boolean(document.querySelector('.ice-asset-tabs'))`));
+  }
   for(const width of [1280,1024,800]){await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await wait(150);assert('assets_no_page_overflow_'+width,await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`));}await shot('assets-workspace.png');
   await click('关闭配图工作台');await until(`window.__imageUrls.size===0`);assert('leaving_assets_releases_thumbnails_and_originals',true);
   await evaluate(`[...document.querySelectorAll('.ice-editor-bar button')].find(e=>e.innerText.trim().startsWith('交付审阅')).click()`);await until(`document.body.innerText.includes('最终交付审阅')`);assert('delivery_snapshot_reflects_new_images',(await rpc('articles.delivery_snapshot')).figures.filter(f=>f.valid).length>=3);

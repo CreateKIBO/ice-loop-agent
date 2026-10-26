@@ -25,6 +25,10 @@ class FakeTransport(OpenAIChatTransport):
         self.calls: list[dict] = []
         self.script = script or []
 
+    def count_tokens(self, base_url, api_key, model, messages, *, timeout=15):
+        # Do not inherit live HTTP counting in offline adapter/router fixtures.
+        return 8
+
     def chat(self, base_url, api_key, model, messages, *, stream=False,
              extra_body=None, timeout=120, on_delta=None):
         self.calls.append({

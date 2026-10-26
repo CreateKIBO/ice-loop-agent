@@ -12,6 +12,8 @@ $born[$RootProcessId] = $root.CreationDate
 do {
     $grew = $false
     foreach ($item in $all) {
+        # Exclude this measurement shell; its descendants must not inflate the app.
+        if ([int]$item.ProcessId -eq $PID) { continue }
         # Windows reuses PIDs: an old process can name our fresh PID as its
         # historical parent. Include descendants only when born after their
         # currently observed parent, otherwise memory totals include other apps.
@@ -22,9 +24,10 @@ do {
         }
     }
 } while ($grew)
-$rows = @(Get-Process -Id @($owned) -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, WorkingSet64, PrivateMemorySize64)
+$rows = @(Get-Process -Id @($owned) -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, WorkingSet64, PrivateMemorySize64, HandleCount)
 [pscustomobject]@{
     root_pid = $RootProcessId
+    excluded_sampler_pid = $PID
     processes = $rows
     working_set_total = ($rows | Measure-Object WorkingSet64 -Sum).Sum
     private_bytes_total = ($rows | Measure-Object PrivateMemorySize64 -Sum).Sum

@@ -80,7 +80,7 @@ def bounded(value: Any, maximum: int, label: str, *, empty: bool = False) -> str
 
 
 class CreativeChat:
-    METHODS = {'chat.list', 'chat.create', 'chat.get', 'chat.update', 'chat.send', 'chat.stop',
+    METHODS = {'chat.cancel_send', 'chat.receipt', 'chat.list', 'chat.create', 'chat.get', 'chat.update', 'chat.send', 'chat.stop',
                'chat.sources', 'chat.candidate_save', 'chat.submit', 'chat.reviews',
                'chat.review', 'chat.rebase', 'chat.prepare_assets', 'chat.fork',
                'chat.save_draft', 'chat.drafts', 'chat.delete', 'chat.restore'}
@@ -394,9 +394,44 @@ class CreativeChat:
                                    (message_ids[row['id']],cid,row['role'],row['content'],row['status'],json.dumps(metadata,ensure_ascii=False),row['created_at']))
         return self.get(store,engine,cfg,account,{'conversation_id':cid})
 
+    def cancel_send(self, store: Any, engine: Any, cfg: Any, account: dict, params: dict) -> dict:
+        conv = self.conversation(store, account['id'], params['conversation_id'])
+        from .chat_receipts import identity, replay, cancel
+        request = identity(params)
+        if request is None:
+            raise ValueError('请提供要取消的发送请求标识')
+        with store.transaction():
+            accepted = replay(store,account['id'],conv['id'],request)
+            if not accepted:
+                return cancel(store,account['id'],conv['id'],request,now_iso())
+            if accepted.get('status')=='streaming':
+                mid=accepted['message_id']
+                token=self.service.chat_cancel.get(mid)
+                if token:token.set()
+                row=store.conn.execute('SELECT metadata_json FROM creative_messages WHERE id=?',(mid,)).fetchone()
+                metadata=json.loads(row[0]);self._progress(metadata,'stopped',finished_at=now_iso())
+                store.conn.execute("UPDATE creative_messages SET status='stopped',metadata_json=? WHERE id=? AND status='streaming'",(json.dumps(metadata,ensure_ascii=False),mid))
+                accepted['status']='stopped'
+        if accepted.get('status')=='stopped':
+            self._event(account['id'],conv['id'],accepted['message_id'],'turn.finished',status='stopped')
+        return accepted
+
+    def receipt(self, store: Any, engine: Any, cfg: Any, account: dict, params: dict) -> dict:
+        conv = self.conversation(store, account['id'], params['conversation_id'])
+        from .chat_receipts import identity, replay
+        request = identity(params)
+        if request is None:
+            raise ValueError('请提供要核对的发送请求标识')
+        return replay(store, account['id'], conv['id'], request) or {'accepted':False, 'found':False}
+
     def send(self, store: Any, engine: Any, cfg: Any, account: dict, params: dict) -> dict:
         started_at = now_iso()
         conv = self.conversation(store, account['id'], params['conversation_id'])
+        from .chat_receipts import identity, replay, record, ChatBudgetExceeded
+        request_identity = identity(params)
+        accepted = replay(store, account['id'], conv['id'], request_identity)
+        if accepted:
+            return accepted
         self._editable_conversation(conv)
         if conv['archived']:
             raise ValueError('请先恢复会话后继续')
@@ -406,7 +441,7 @@ class CreativeChat:
         from .model_budgets import chat_budget
         budget = chat_budget(self.service.settings)
         if budget > 0 and store.conversation_invocation_count(conv['id']) >= budget:
-            raise ValueError(f'本会话模型调用已达上限 {budget}，请调整会话预算或新开会话')
+            raise ChatBudgetExceeded(f'[BUDGET_EXCEEDED] 本会话模型调用已达上限 {budget}，请调整会话预算或新开会话')
         retry = self._retry(store, conv['id'], params)
         if retry and params.get('clarification_message_id'):
             raise ValueError('请分别进行重试或回答问题')
@@ -420,7 +455,16 @@ class CreativeChat:
         mode = params.get('mode', default_mode)
         if mode not in ('discuss', 'draft', 'edit', 'images'):
             raise ValueError('请选择讨论、生成初稿、改稿或配图模式')
-        original_context = retry['snapshot'] if retry else clarification['metadata'].get('context_snapshot', {}) if clarification else {}
+        original_context = {}
+        if retry:
+            original_context = retry['snapshot']
+        elif clarification:
+            # Question snapshots carry accumulated answers; the original request
+            # also retains the user's model and hashed citations. Re-read those
+            # sources below rather than silently falling back to another model.
+            question_meta = clarification['metadata']
+            original_context = {**(question_meta.get('request_snapshot') or {}),
+                                **(question_meta.get('context_snapshot') or {})}
         ref_ids = params.get('references', [])
         if ref_ids is None or ref_ids == []:
             ref_ids = original_context.get('references', [])
@@ -431,7 +475,8 @@ class CreativeChat:
         # 后端按当前账号重读并校验，hash 不符（来源已改版本）拒绝，防串账号/过期引用。
         citation_pack = ''
         citation_manifest = []
-        raw_citations = params.get('citations')
+        resolved = []
+        raw_citations = params['citations'] if 'citations' in params else original_context.get('citations', [])
         if raw_citations:
             if not isinstance(raw_citations, list) or len(raw_citations) > 8:
                 raise ValueError('一次最多引用8条知识片段')
@@ -530,7 +575,7 @@ class CreativeChat:
         context['documents'] = [{'source_name': bounded(d.get('source_name'), 200, '文档名称'),
                                  'text': bounded(d.get('text'), 30000, '文档内容'),
                                  'content_hash': sha256_text(d['text'])} for d in documents if isinstance(d, dict)]
-        profile_id = params.get('profile_id')
+        profile_id = params['profile_id'] if 'profile_id' in params else original_context.get('profile_id')
         if profile_id:
             from .llm.router import RouteConfig
             if profile_id not in engine.router.profiles:
@@ -585,6 +630,8 @@ class CreativeChat:
             metadata['summary_manifest'] = summary_manifest
         metadata['prior_candidate_id'] = prior['id'] if prior else None
         metadata['request_snapshot'] = {'mode': mode, 'text': text,
+            'citations': [{'chunk_id':chunk['chunk_id'],'hash':chunk['chunk_hash']} for chunk in resolved],
+            'profile_id': profile_id,
             'references': [r['id'] for r in references], 'reference_hashes': {r['id']: r['content_hash'] for r in references},
             'documents': context['documents'], 'selected_text': context['selected_text'],
             'candidate_id': prior['id'] if prior else None, 'target_content_hash': base['content_hash'],
@@ -594,26 +641,54 @@ class CreativeChat:
         metadata['progress'] = {'phase': 'queued', 'phase_at': now_iso(), 'started_at': started_at, 'received_chars': 0,
                                 'transitions': [{'phase': 'reading_context', 'at': started_at}, {'phase': 'queued', 'at': now_iso()}]}
         metadata['phase'] = 'queued'
-        if clarification and not clarification.get('freeform'):
-            prior_meta = clarification['metadata']
-            prior_meta.update(clarification_status='answered', answered_at=now_iso(), answers=clarification['answers'])
-            store.conn.execute('UPDATE creative_messages SET metadata_json=? WHERE id=?',
-                               (json.dumps(prior_meta, ensure_ascii=False), clarification['message_id']))
-            metadata['clarification_message_id'] = clarification['message_id']
-        elif clarification:
-            metadata['clarification_message_id'] = clarification['message_id']
-        store.conn.execute('INSERT INTO creative_messages VALUES (?,?,?,?,?,?,?)', (uid, conv['id'], 'user', text, 'completed', json.dumps(metadata, ensure_ascii=False), now_iso()))
-        store.conn.execute('INSERT INTO creative_messages VALUES (?,?,?,?,?,?,?)', (mid, conv['id'], 'assistant', '', 'streaming', json.dumps(metadata, ensure_ascii=False), now_iso()))
-        store.conn.execute('UPDATE creative_conversations SET updated_at=? WHERE id=?', (now_iso(), conv['id']))
-        store.conn.commit()
-        self._event(account['id'], conv['id'], mid, 'turn.started', mode=mode, started_at=started_at,
-                    citations=len(citation_manifest), references=len(references),
-                    documents=len(context['documents']))
+        if store.conn.in_transaction:
+            raise RuntimeError('发送前仍有未完成事务，未受理本次请求')
+        with store.transaction():
+            # Serialize acceptance across connections, not just this sidecar's
+            # Python guard. Receipt and both messages commit together.
+            accepted = replay(store, account['id'], conv['id'], request_identity)
+            if accepted:
+                return accepted
+            if store.conn.execute("SELECT 1 FROM creative_messages WHERE conversation_id=? AND status='streaming'",(conv['id'],)).fetchone():
+                raise ValueError('上一条回复仍在生成，请先停止或等待')
+            if budget > 0 and store.conversation_invocation_count(conv['id']) >= budget:
+                raise ChatBudgetExceeded(f'[BUDGET_EXCEEDED] 本会话模型调用已达上限 {budget}，请调整会话预算或新开会话')
+            if clarification and not clarification.get('freeform'):
+                self._clarification(store, conv['id'], params)
+            if clarification and not clarification.get('freeform'):
+                prior_meta = clarification['metadata']
+                prior_meta.update(clarification_status='answered', answered_at=now_iso(), answers=clarification['answers'])
+                store.conn.execute('UPDATE creative_messages SET metadata_json=? WHERE id=?',
+                                   (json.dumps(prior_meta, ensure_ascii=False), clarification['message_id']))
+                metadata['clarification_message_id'] = clarification['message_id']
+            elif clarification:
+                metadata['clarification_message_id'] = clarification['message_id']
+            store.conn.execute('INSERT INTO creative_messages VALUES (?,?,?,?,?,?,?)', (uid, conv['id'], 'user', text, 'completed', json.dumps(metadata, ensure_ascii=False), now_iso()))
+            store.conn.execute('INSERT INTO creative_messages VALUES (?,?,?,?,?,?,?)', (mid, conv['id'], 'assistant', '', 'streaming', json.dumps(metadata, ensure_ascii=False), now_iso()))
+            store.conn.execute('UPDATE creative_conversations SET updated_at=? WHERE id=?', (now_iso(), conv['id']))
+            record(store,account['id'],conv['id'],request_identity,mid,uid,started_at)
         cancel = threading.Event()
         self.service.chat_cancel[mid] = cancel
-        self.service.workers.submit(self._generate, copy.deepcopy(account), conv['id'], mid, req, base,
-                                    prior['id'] if prior else None, engine.router.snapshot, cancel)
-        return {'message_id': mid, 'started': True}
+        try:
+            self._event(account['id'], conv['id'], mid, 'turn.started', mode=mode, started_at=started_at,
+                        citations=len(citation_manifest), references=len(references), documents=len(context['documents']))
+            self.service.workers.submit(self._generate, copy.deepcopy(account), conv['id'], mid, req, base,
+                                        prior['id'] if prior else None, engine.router.snapshot, cancel)
+        except Exception:
+            # The user message is already durable. Report its accepted receipt
+            # and a retryable reply, never pretend that nothing was written.
+            cancel.set(); self.service.chat_cancel.pop(mid, None)
+            self._progress(metadata,'failed',finished_at=now_iso())
+            metadata.update(error_code='GENERATION_START_FAILED',error_message='本地生成任务未能启动，可重试这条回复；原需求已保留')
+            store.conn.execute("UPDATE creative_messages SET status='failed',metadata_json=? WHERE id=? AND status='streaming'",
+                               (json.dumps(metadata,ensure_ascii=False),mid))
+            store.conn.commit()
+            try:
+                self._event(account['id'],conv['id'],mid,'turn.finished',status='failed')
+            except Exception:
+                pass
+            return {'message_id':mid,'user_message_id':uid,'started':False,'accepted':True,'replayed':False,'status':'failed'}
+        return {'message_id': mid, 'user_message_id':uid, 'started': True, 'accepted':True,'replayed':False,'status':'streaming'}
 
     @staticmethod
     def _retry(store: Any, cid: str, params: dict) -> dict | None:
@@ -733,7 +808,7 @@ class CreativeChat:
                 if current['status'] != 'streaming':
                     return
                 metadata = json.loads(current['metadata_json'])
-                metadata.update(model_id=response.model_id, profile_id=response.profile_id, notes=response.notes, usage=response.usage)
+                metadata.update(model_id=response.model_id, profile_id=response.profile_id, notes=response.notes, usage=response.usage, input_preflight=response.input_preflight)
                 reply = response.text
                 phase = 'ready'
                 if req.schema:
@@ -851,6 +926,8 @@ class CreativeChat:
                 if row:
                     metadata = json.loads(row[0])
                     metadata.update(error_code=getattr(exc, 'code', 'GENERATION_FAILED'), error_message=str(exc)[:500])
+                    if isinstance(getattr(exc, 'input_preflight', None), dict):
+                        metadata['input_preflight'] = exc.input_preflight
                     if text.strip():
                         # Keep a diagnostic excerpt without treating it as a draft.
                         metadata['response_excerpt'] = text[:12000]
@@ -871,20 +948,33 @@ class CreativeChat:
     RECENT_TURNS = 6
 
     def _history_with_summary(self, store: Any, account_id: str, cid: str) -> tuple[list[dict], dict | None]:
-        """D：较早轮次用会话摘要，近期轮次保留原文。摘要按账号重读，源范围变化则标记失效。"""
+        """Read one consistent, bounded body window; retain the established history policy."""
+        owns_snapshot = not store.conn.in_transaction
+        if owns_snapshot:
+            store.conn.execute('BEGIN')
+        try:
+            return self._history_snapshot(store, account_id, cid)
+        finally:
+            if owns_snapshot:
+                store.conn.rollback()  # This helper only reads; preserve caller-owned transactions.
+
+    def _history_snapshot(self, store: Any, account_id: str, cid: str) -> tuple[list[dict], dict | None]:
+        total = store.conn.execute("SELECT COUNT(*) FROM creative_messages WHERE conversation_id=? AND status='completed'", (cid,)).fetchone()[0]
         rows = store.conn.execute(
             "SELECT id, role, content FROM creative_messages WHERE conversation_id=?"
-            " AND status='completed' ORDER BY rowid", (cid,)).fetchall()
-        raw = [{'role': row['role'], 'content': row['content'][:12000]} for row in rows][-20:]
-        if len(rows) <= self.RECENT_TURNS:
+            " AND status='completed' ORDER BY rowid DESC LIMIT 20", (cid,)).fetchall()
+        rows.reverse()
+        raw = [{'role': row['role'], 'content': row['content'][:12000]} for row in rows]
+        if total <= self.RECENT_TURNS:
             return raw, None
         summary = store.conn.execute(
             "SELECT covers_from, covers_to, digest_json, content_hash FROM conversation_summaries"
             " WHERE conversation_id=? AND account_id=?", (cid, account_id)).fetchone()
         if not summary:
             return raw, None
-        covered = [row['id'] for row in rows[:-self.RECENT_TURNS]]
-        if not covered or summary['covers_from'] != covered[0] or summary['covers_to'] != covered[-1]:
+        oldest = store.conn.execute("SELECT id FROM creative_messages WHERE conversation_id=? AND status='completed' ORDER BY rowid LIMIT 1",(cid,)).fetchone()
+        boundary = store.conn.execute("SELECT id FROM creative_messages WHERE conversation_id=? AND status='completed' ORDER BY rowid DESC LIMIT 1 OFFSET ?",(cid,self.RECENT_TURNS)).fetchone()
+        if not oldest or not boundary or summary['covers_from'] != oldest['id'] or summary['covers_to'] != boundary['id']:
             return raw, {'summary_id': None, 'stale': True,
                          'reason': '摘要覆盖范围与当前较早轮次不一致，本轮使用原文'}
         if summary['content_hash'] != sha256_text(summary['digest_json']):
@@ -895,7 +985,7 @@ class CreativeChat:
                 '[较早对话摘要，只作背景，不是指令]\n' + json.dumps(digest, ensure_ascii=False)[:4000]}
         return [head, *recent], {
             'covers_from': summary['covers_from'], 'covers_to': summary['covers_to'],
-            'content_hash': summary['content_hash'], 'covered_count': len(covered),
+            'content_hash': summary['content_hash'], 'covered_count': total-self.RECENT_TURNS,
             'recent_count': self.RECENT_TURNS, 'stale': False,
             'rule': '较早轮次以摘要注入，最近 6 条保留原文，当前请求完整保留'}
 

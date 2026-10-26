@@ -39,6 +39,45 @@ class CreativeChatTests(unittest.TestCase):
             self.call('send', conversation_id=cid, text='修改开头', mode='edit', **extra)
             return self.wait(cid)
 
+    def test_real_router_preflight_receipt_persists_in_completed_message(self):
+        from ice_agent.llm.capabilities import preset_profile
+        from ice_agent.llm.transport import OpenAIChatTransport, ChatResult
+        profile=preset_profile('bigmodel',profile_id='chat-count-fixture')
+        profile.update(api_key_env='ICE_CHAT_COUNT_FAKE',status='verified')
+        profile['extra']={'max_output_tokens':20,'context_window_override':{
+            'base_url':profile['base_url'],'model_id':profile['model_id'],'context_window':100}}
+        self.service.settings['profiles']={'bigmodel':profile}
+        for route in self.service.settings['routes'].values():route.update(primary=profile['profile_id'],fallbacks=[])
+        cid=self.call('create')['conversation']['id']
+        with patch.dict('os.environ',{'ICE_CHAT_COUNT_FAKE':'test-fake-only'}), \
+             patch.object(OpenAIChatTransport,'count_tokens',return_value=10), \
+             patch.object(OpenAIChatTransport,'chat',return_value=ChatResult(content='完整讨论回复',finish_reason='stop')):
+            self.call('send',conversation_id=cid,text='讨论观点')
+            message=self.wait(cid)['messages'][-1]
+        self.assertEqual(message['status'],'completed')
+        self.assertEqual(message['metadata']['input_preflight']['state'],'checked')
+        self.assertEqual(message['metadata']['input_preflight']['input_tokens'],10)
+
+    def test_token_overflow_keeps_blocked_receipt_and_never_calls_chat(self):
+        from ice_agent.llm.capabilities import preset_profile
+        from ice_agent.llm.transport import OpenAIChatTransport
+        profile=preset_profile('bigmodel',profile_id='chat-overflow-fixture')
+        profile.update(api_key_env='ICE_CHAT_COUNT_FAKE',status='verified')
+        profile['extra']={'max_output_tokens':20,'context_window_override':{
+            'base_url':profile['base_url'],'model_id':profile['model_id'],'context_window':100}}
+        self.service.settings['profiles']={'bigmodel':profile}
+        for route in self.service.settings['routes'].values():route.update(primary=profile['profile_id'],fallbacks=[])
+        cid=self.call('create')['conversation']['id']
+        with patch.dict('os.environ',{'ICE_CHAT_COUNT_FAKE':'test-fake-only'}), \
+             patch.object(OpenAIChatTransport,'count_tokens',return_value=95), \
+             patch.object(OpenAIChatTransport,'chat') as chat:
+            self.call('send',conversation_id=cid,text='讨论观点')
+            message=self.wait(cid)['messages'][-1]
+        self.assertEqual(message['status'],'failed')
+        self.assertEqual(message['metadata']['input_preflight']['state'],'blocked')
+        self.assertEqual(message['metadata']['input_preflight']['input_tokens'],95)
+        chat.assert_not_called()
+
     def test_discussion_persists_without_article_and_restart(self):
         cid = self.call('create')['conversation']['id']
         before = self.service.call('drafts.list')

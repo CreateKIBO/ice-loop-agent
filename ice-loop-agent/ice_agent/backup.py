@@ -12,6 +12,7 @@ import sqlite3
 import stat
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from contextlib import closing
 from pathlib import Path, PurePosixPath
 
@@ -23,6 +24,57 @@ MAX_BYTES = 1024 * 1024 * 1024
 MAX_FILE = 128 * 1024 * 1024
 MAX_FILES = 10000
 BLOCK_BYTES = 1024 * 1024
+
+MAX_SETTINGS_BYTES = 32 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class BackupLimits:
+    max_bytes: int
+    max_file: int
+    max_files: int
+    max_manifest: int = 1024 * 1024
+
+
+# Larger limits are only chosen by the owned recovery-point API, never by a
+# renderer-supplied limits object or by values inside an untrusted archive.
+RECOVERY_LIMITS = BackupLimits(32 * 1024**3, 4 * 1024**3, 100000, 32 * 1024**2)
+
+
+def _limits(value=None):
+    return value or BackupLimits(MAX_BYTES, MAX_FILE, MAX_FILES)
+
+
+def _kwargs(limits=None, progress=None):
+    result = {}
+    if limits is not None:
+        result['limits'] = limits
+    if progress is not None:
+        result['progress'] = progress
+    return result
+
+
+def _notify(progress, phase, **values):
+    if progress is not None:
+        progress(phase, **values)
+
+
+def owned_recovery_root(runtime):
+    root = normalize(runtime) / 'recovery-points'
+    marker = root / '.owner.json'
+    if root.is_symlink() or root.is_junction() or marker.is_symlink():
+        return None
+    try:
+        if marker.stat().st_size > 4096:
+            return None
+        value = json.loads(marker.read_text(encoding='utf-8'))
+        identity = hashlib.sha256(str(normalize(runtime)).casefold().encode('utf-8')).hexdigest()
+        if (value.get('format') == 'ice-recovery-points' and value.get('version') == 1
+                and value.get('runtime_id') == identity and re.fullmatch('[0-9a-f]{64}', value.get('owner', ''))):
+            return root
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    return None
 RUNTIME_DIRS = ('jobs', 'assets', 'resources', 'staging', 'screenshots','captures','image-variants','run-evidence')
 EXCLUDED = {'credentials.json', 'keys.json', '.env', 'electron', 'sessions', 'browser', 'logs', '__pycache__'}
 SECRET_KEYS = {'api_key', 'apikey', 'access_token', 'refresh_token', 'password', 'secret', 'authorization'}
@@ -59,8 +111,34 @@ def safe_name(name):
     return name
 
 
-def create_backup(runtime, settings, target):
+def iter_backup_files(root, *, excluded_root=None):
+    root = Path(root)
+    if root.is_symlink() or root.is_junction():
+        raise ValueError('备份不接受符号链接或目录联接，请先整理数据')
+    if not root.exists():
+        return
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        parent = Path(directory)
+        dirs[:] = [name for name in dirs if name.lower() not in EXCLUDED and (excluded_root is None or parent/name != excluded_root)]
+        for name in dirs+files:
+            item = parent/name
+            if item.is_symlink() or item.is_junction():
+                raise ValueError('备份不接受符号链接或目录联接，请先整理数据')
+            assert_within(item, root)
+        for name in files:
+            if name.lower() not in EXCLUDED and not name.lower().endswith(('.tmp','-wal','-shm')):
+                yield parent/name
+
+
+def create_backup(runtime, settings, target, *, limits=None, progress=None, _for_recovery=False, _allow_inactive_leases=False, _source_index=None):
     runtime, target = normalize(runtime), normalize(target)
+    policy = _limits(limits)
+    recovery_root = owned_recovery_root(runtime)
+    if _for_recovery and (recovery_root is None or target.parent.parent != recovery_root
+            or not re.fullmatch('[0-9a-f]{32}', target.parent.name) or target.name != 'workspace.zip'):
+        raise ValueError('自动恢复点目标未归属当前工作区')
+    if _allow_inactive_leases and not _for_recovery:
+        raise ValueError('仅升级前恢复点可以保留旧执行租约')
     assert_not_c_drive(target)
     def managed_root(value):
         original = Path(value)
@@ -70,21 +148,48 @@ def create_backup(runtime, settings, target):
     roots = sorted({managed_root(account['article_root']) for account in settings['accounts'].values()}
                    | {managed_root(settings['article_root'])})
     # Include frozen roots of older jobs after an account output path changed.
-    with closing(sqlite3.connect(runtime / 'app.db')) as source:
-        if source.execute("SELECT COUNT(*) FROM jobs WHERE lease IS NOT NULL OR state='running'").fetchone()[0]:
+    with closing(sqlite3.connect((runtime / 'app.db').as_uri() + '?mode=ro', uri=True)) as source:
+        source.execute('PRAGMA query_only=ON')
+        source.execute('PRAGMA trusted_schema=OFF')
+        if not _allow_inactive_leases and source.execute("SELECT COUNT(*) FROM jobs WHERE lease IS NOT NULL OR state='running'").fetchone()[0]:
             raise ValueError('任务正在运行，请暂停后再备份')
         roots = sorted(set(roots) | {managed_root(json.loads(row[0])['article_root'])
             for row in source.execute('SELECT spec_json FROM articles') if json.loads(row[0]).get('article_root')})
         for root in [runtime, *map(Path, roots)]:
             assert_not_c_drive(root)
-            if is_within(target, root):
+            if is_within(target, root) and not _for_recovery:
                 raise ValueError('请把备份文件保存在工作数据目录之外')
+        if recovery_root is not None and any(is_within(root, recovery_root) for root in map(Path, roots)):
+            raise ValueError('文章目录不能位于内部恢复点目录中')
         target.parent.mkdir(parents=True, exist_ok=True)
+        # Reserve for worst-case compression, source snapshot, validation copy
+        # and migration scratch. Scan only the same managed roots we will copy.
+        file_count = 0
+        estimated = 0
+        for root in [*(runtime/name for name in RUNTIME_DIRS), *map(Path, roots)]:
+            for file in iter_backup_files(root, excluded_root=recovery_root):
+                size = file.stat().st_size
+                estimated += size
+                if size > policy.max_file or estimated > policy.max_bytes or file_count >= policy.max_files-2:
+                    raise ValueError('工作数据超过备份容量上限，原资料保留')
+                file_count += 1
+                _notify(progress, 'scan_files', files_done=file_count, bytes_done=estimated)
+        db_bytes = source.execute('PRAGMA page_count').fetchone()[0] * source.execute('PRAGMA page_size').fetchone()[0]
+        required = int(estimated*1.02) + db_bytes*4 + 64*1024*1024
+        if shutil.disk_usage(target.parent).free < required:
+            raise ValueError('备份所在磁盘空间不足，至少需额外约 '+str((required+1024**2-1)//1024**2)+' MB；原数据库未升级')
         with tempfile.TemporaryDirectory(prefix='ice-backup-', dir=target.parent) as temp:
             staging = Path(temp)
             snapshot = staging / 'app.db'
             with closing(sqlite3.connect(snapshot)) as dest:
-                source.backup(dest)
+                _notify(progress, 'snapshot_database')
+                if progress is None:
+                    source.backup(dest)
+                else:
+                    source.backup(dest, pages=256, progress=lambda status, remaining, total:
+                                  _notify(progress, 'snapshot_database', pages_done=total-remaining, pages_total=total))
+                if progress:
+                    dest.set_progress_handler(lambda: (_notify(progress,'verify_database') or 0),10000)
                 if dest.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
                     raise ValueError('数据库校验失败，备份未保存')
                 bindings = list(dest.execute('SELECT path,sha256 FROM artifacts')) + list(dest.execute('SELECT file_path,sha256 FROM asset_candidates'))
@@ -95,51 +200,44 @@ def create_backup(runtime, settings, target):
                 'created_at':now_iso(), 'runtime_source':str(runtime),
                 'article_roots': [{'source':root, 'relative':f'articles/root-{index}'} for index,root in enumerate(roots)],
                 'accounts':[{'id':a['id'], 'name':a['name']} for a in settings['accounts'].values()],
-                'excluded':['API Key 与登录会话', '日志与浏览器缓存', '外部只读存稿目录（历史正文快照保留在数据库）'],
+                'excluded':['API Key 与登录会话', '日志与浏览器缓存', '外部只读存稿目录（历史正文快照保留在数据库）', *(['自动恢复点及其内部索引'] if recovery_root else [])],
                 'files':{}}
             sanitized = staging / 'settings.json'
             atomic_write_text(sanitized, json.dumps(clean_settings(settings), ensure_ascii=False, indent=2))
             temporary = staging / 'bundle.zip'
             total = 0
             with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as bundle:
-                def add(file, name):
+                def add(file, name, *, record_source=True):
                     nonlocal total
                     safe_name(name)
-                    size = file.stat().st_size
+                    initial_stat = file.stat()
+                    size = initial_stat.st_size
                     total += size
-                    if size > MAX_FILE or total > MAX_BYTES or len(manifest['files']) >= MAX_FILES:
-                        raise ValueError('工作数据超过备份上限（单文件 128MB、总量 1GB、10000 文件）')
+                    if size > policy.max_file or total > policy.max_bytes or len(manifest['files']) >= policy.max_files:
+                        raise ValueError('工作数据超过备份上限（单文件 128MB、总量 1GB、10000 文件）' if limits is None else '恢复点超过容量上限（单文件4GB、总量32GB、100000文件）')
                     total -= size
                     written = 0
                     hasher = hashlib.sha256()
-                    with file.open('rb') as source_file, bundle.open(name, 'w') as member:
+                    with file.open('rb') as source_file, bundle.open(name, 'w', force_zip64=size >= zipfile.ZIP64_LIMIT) as member:
                         for block in iter(lambda: source_file.read(BLOCK_BYTES), b''):
                             written += len(block)
                             total += len(block)
-                            if written > MAX_FILE or total > MAX_BYTES:
+                            if written > policy.max_file or total > policy.max_bytes:
                                 raise ValueError('备份读取期间文件超过大小上限，未保存')
                             member.write(block)
                             hasher.update(block)
+                            _notify(progress, 'copy_files', files_done=len(manifest['files']), bytes_done=total)
+                    final_stat = file.stat()
+                    if (initial_stat.st_dev, initial_stat.st_ino, initial_stat.st_size, initial_stat.st_mtime_ns) != (final_stat.st_dev, final_stat.st_ino, final_stat.st_size, final_stat.st_mtime_ns):
+                        raise ValueError('备份读取期间源文件已变化，原资料保留')
+                    if _source_index is not None and record_source:
+                        _source_index[name] = {'path':str(file), 'size':final_stat.st_size, 'mtime_ns':final_stat.st_mtime_ns, 'inode':final_stat.st_ino, 'device':final_stat.st_dev}
                     manifest['files'][name] = {'size':written, 'sha256':hasher.hexdigest()}
                 def collect(root, prefix):
-                    if root.is_symlink() or root.is_junction():
-                        raise ValueError('备份不接受符号链接或目录联接，请先整理数据')
-                    if not root.exists():
-                        return
-                    for directory, dirs, files in os.walk(root, followlinks=False):
-                        parent = Path(directory)
-                        dirs[:] = [name for name in dirs if name.lower() not in EXCLUDED]
-                        for name in dirs + files:
-                            item = parent / name
-                            if item.is_symlink() or item.is_junction():
-                                raise ValueError('备份不接受符号链接或目录联接，请先整理数据')
-                            assert_within(item, root)
-                        for name in files:
-                            if name.lower() in EXCLUDED or name.lower().endswith(('.tmp', '-wal', '-shm')):
-                                continue
-                            add(parent / name, prefix + '/' + (parent / name).relative_to(root).as_posix())
-                add(snapshot, 'runtime/app.db')
-                add(sanitized, 'runtime/settings.json')
+                    for file in iter_backup_files(root, excluded_root=recovery_root):
+                        add(file, prefix+'/'+file.relative_to(root).as_posix())
+                add(snapshot, 'runtime/app.db', record_source=False)
+                add(sanitized, 'runtime/settings.json', record_source=False)
                 for directory in RUNTIME_DIRS:
                     collect(runtime / directory, 'runtime/' + directory)
                 for root in manifest['article_roots']:
@@ -157,26 +255,33 @@ def create_backup(runtime, settings, target):
                             pass
                     if not any(manifest['files'].get(name,{}).get('sha256') == expected for name in names):
                         raise ValueError('托管图片或运行证据缺失/变化，备份未保存：' + Path(reference).name)
-                bundle.writestr('manifest.json', json.dumps(manifest, ensure_ascii=False))
-            summary = inspect_backup(temporary, temporary_root=staging)
+                manifest_text = json.dumps(manifest, ensure_ascii=False)
+                if len(manifest_text.encode('utf-8')) > policy.max_manifest:
+                    raise ValueError('备份清单超过容量上限，原资料保留')
+                bundle.writestr('manifest.json', manifest_text)
+            summary = inspect_backup(temporary, temporary_root=staging, **_kwargs(limits, progress))
+            _notify(progress, 'save_recovery_point')
             os.replace(temporary, target)
     return {**summary, 'file_path':str(target)}
 
 
-def _validate(bundle):
+def _validate(bundle, *, limits=None, progress=None):
+    policy = _limits(limits)
     entries = bundle.infolist()
-    if len(entries) > MAX_FILES + 1 or sum(entry.file_size for entry in entries) > MAX_BYTES + 1024 * 1024:
+    if len(entries) > policy.max_files + 1 or sum(entry.file_size for entry in entries) > policy.max_bytes + policy.max_manifest:
         raise ValueError('备份超出读取上限')
     names = []
     for entry in entries:
         safe_name(entry.filename)
-        if entry.file_size > MAX_FILE or entry.is_dir() or stat.S_ISLNK(entry.external_attr >> 16):
+        if entry.file_size > policy.max_file or entry.is_dir() or stat.S_ISLNK(entry.external_attr >> 16):
             raise ValueError('备份包含不支持的文件类型或超大文件')
         names.append(entry.filename)
     if len({name.casefold() for name in names}) != len(names):
         raise ValueError('备份包含重名文件')
-    if 'manifest.json' not in names or bundle.getinfo('manifest.json').file_size > 1024 * 1024:
+    if 'manifest.json' not in names or bundle.getinfo('manifest.json').file_size > policy.max_manifest:
         raise ValueError('缺少有效的备份清单')
+    if 'runtime/settings.json' in names and bundle.getinfo('runtime/settings.json').file_size > MAX_SETTINGS_BYTES:
+        raise ValueError('备份配置超过读取上限')
     manifest = json.loads(bundle.read('manifest.json'))
     if not isinstance(manifest, dict) or manifest.get('format') != 'ice-workspace' or type(manifest.get('schema')) is not int or manifest['schema'] != 1:
         raise ValueError('不支持此备份格式或版本')
@@ -200,7 +305,7 @@ def _validate(bundle):
         raise ValueError('备份摘要无效')
     for name, meta in files.items():
         parts = PurePosixPath(name).parts
-        if (not isinstance(meta, dict) or type(meta.get('size')) is not int or not 0 <= meta['size'] <= MAX_FILE
+        if (not isinstance(meta, dict) or type(meta.get('size')) is not int or not 0 <= meta['size'] <= policy.max_file
                 or not isinstance(meta.get('sha256'), str) or not re.fullmatch('[0-9a-f]{64}', meta['sha256'])):
             raise ValueError('备份文件校验信息无效')
         if parts[0] == 'runtime' and not (name in ('runtime/app.db', 'runtime/settings.json') or len(parts) >= 3 and parts[1] in RUNTIME_DIRS):
@@ -209,32 +314,49 @@ def _validate(bundle):
             raise ValueError('备份文章文件未归属有效目录')
         if parts[0] == 'manifest.json':
             raise ValueError('备份清单不能充当数据目录')
-        size, checksum = _hash_member(bundle, name)
+        _notify(progress, 'verify_files')
+        size, checksum = _hash_member(bundle, name, **_kwargs(limits, progress))
         if size != meta['size'] or checksum != meta['sha256']:
             raise ValueError('备份文件损坏或校验失败：' + name)
     return manifest
 
 
-def _hash_member(bundle, name):
+def _hash_member(bundle, name, *, limits=None, progress=None):
+    policy = _limits(limits)
     size, hasher = 0, hashlib.sha256()
     with bundle.open(name) as member:
         for block in iter(lambda: member.read(BLOCK_BYTES), b''):
             size += len(block)
-            if size > MAX_FILE:
+            if size > policy.max_file:
                 raise ValueError('备份文件超过大小上限')
             hasher.update(block)
+            _notify(progress, 'verify_files')
     return size, hasher.hexdigest()
 
 
-def _extract_member(bundle, name, target):
+def _extract_member(bundle, name, target, expected, *, limits=None, progress=None):
+    policy = _limits(limits)
+    size, hasher = 0, hashlib.sha256()
     with bundle.open(name) as source, target.open('wb') as destination:
-        shutil.copyfileobj(source, destination, length=BLOCK_BYTES)
+        for block in iter(lambda: source.read(BLOCK_BYTES), b''):
+            size += len(block)
+            if size > policy.max_file:
+                raise ValueError('备份文件在读取期间超过大小上限')
+            hasher.update(block)
+            destination.write(block)
+            _notify(progress, 'restore_files')
+    if size != expected['size'] or hasher.hexdigest() != expected['sha256']:
+        raise ValueError('备份文件在读取期间已变化或校验失败：' + name)
 
 
-def _check_workspace(bundle, manifest, staging):
+def _check_workspace(bundle, manifest, staging, *, limits=None, progress=None):
     """Open/migrate a disposable database, never a live workspace or the ZIP."""
     try:
-        settings = json.loads(bundle.read('runtime/settings.json'))
+        settings_bytes = bundle.read('runtime/settings.json')
+        expected_settings = manifest['files']['runtime/settings.json']
+        if len(settings_bytes) != expected_settings['size'] or hashlib.sha256(settings_bytes).hexdigest() != expected_settings['sha256']:
+            raise ValueError('备份配置在读取期间已变化或校验失败')
+        settings = json.loads(settings_bytes)
         roots = {root['source'] for root in manifest['article_roots']}
         accounts = settings.get('accounts') if isinstance(settings, dict) else None
         if (not isinstance(accounts, dict) or not accounts or len(accounts) > 1000
@@ -263,9 +385,11 @@ def _check_workspace(bundle, manifest, staging):
                 raise ValueError('备份模型路由配置无效')
             RouteConfig(**route)
         database = staging / 'checked.db'
-        _extract_member(bundle, 'runtime/app.db', database)
+        _extract_member(bundle, 'runtime/app.db', database, manifest['files']['runtime/app.db'], **_kwargs(limits, progress))
         with closing(sqlite3.connect(database)) as db:
             db.execute('PRAGMA trusted_schema=OFF')
+            if progress is not None:
+                db.set_progress_handler(lambda: (_notify(progress, 'verify_database') or 0), 10000)
             if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
                 raise ValueError('备份数据库已损坏')
             schema = db.execute('PRAGMA user_version').fetchone()[0]
@@ -273,32 +397,56 @@ def _check_workspace(bundle, manifest, staging):
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if not required <= tables:
                 raise ValueError('备份数据库缺少工作台数据表')
-            from .migrations import MAX_KNOWN_VERSION, run_migrations
+            from .migrations import MAX_KNOWN_VERSION, run_migrations, verify_migrations
             if not 9 <= schema <= MAX_KNOWN_VERSION:
                 raise ValueError('备份数据库来自不支持的版本，请使用对应版本的程序恢复')
-            run_migrations(db)  # this file is already a disposable copy
+            migration = run_migrations(db, app_version=__version__)  # this file is already a disposable copy
+            audit = verify_migrations(db)
             for text, expected in db.execute('SELECT state_json,content_hash FROM checkpoints'):
                 if sha256_text(text) != expected or not isinstance(json.loads(text), dict):
                     raise ValueError('备份任务检查点校验失败')
-        return schema
+        return {'database_schema': schema, 'database_target_schema': migration['after'],
+                'migration_versions': [item['version'] for item in migration['applied']],
+                'legacy_unverified': audit['legacy_unverified']}
     except (sqlite3.Error, KeyError, TypeError, json.JSONDecodeError) as error:
         raise ValueError('备份数据库或配置无法读取，请选择有效的工作台备份') from error
 
 
-def inspect_backup(file, *, temporary_root=None):
-    if file.stat().st_size > MAX_BYTES:
-        raise ValueError('备份包超过 1GB')
-    with zipfile.ZipFile(file) as bundle:
-        manifest = _validate(bundle)
-        parent = normalize(temporary_root or file.parent)
-        assert_not_c_drive(parent)
-        parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='ice-backup-check-', dir=parent) as temp:
-            schema = _check_workspace(bundle, manifest, Path(temp))
-    return {'package_hash':digest(file), 'created_at':manifest['created_at'],
+def _archive_digest(stream, *, limits=None, progress=None):
+    # One descriptor is authoritative for preview and extraction.
+    policy = _limits(limits)
+    if os.fstat(stream.fileno()).st_size > policy.max_bytes:
+        raise ValueError('备份包超过 1GB' if limits is None else '恢复点备份包超过32GB')
+    stream.seek(0)
+    checksum = hashlib.sha256()
+    size = 0
+    for block in iter(lambda: stream.read(BLOCK_BYTES), b''):
+        size += len(block)
+        if size > policy.max_bytes:
+            raise ValueError('备份包在读取期间超过大小上限')
+        checksum.update(block)
+        _notify(progress, 'verify_archive')
+    stream.seek(0)
+    return checksum.hexdigest()
+
+
+def inspect_backup(file, *, temporary_root=None, limits=None, progress=None):
+    file = Path(file)
+    with file.open('rb') as stream:
+        checksum = _archive_digest(stream, **_kwargs(limits, progress))
+        with zipfile.ZipFile(stream) as bundle:
+            manifest = _validate(bundle, **_kwargs(limits, progress))
+            parent = normalize(temporary_root or file.parent)
+            assert_not_c_drive(parent)
+            parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix='ice-backup-check-', dir=parent) as temp:
+                checked = _check_workspace(bundle, manifest, Path(temp), **_kwargs(limits, progress))
+        if _archive_digest(stream, **_kwargs(limits, progress)) != checksum:
+            raise ValueError('备份包在校验期间已变化，请重新选择并预览')
+    return {'package_hash':checksum, 'created_at':manifest['created_at'],
         'app_version':manifest['app_version'], 'accounts':manifest['accounts'],
         'files':len(manifest['files']), 'bytes':sum(meta['size'] for meta in manifest['files'].values()),
-        'excluded':manifest['excluded'], 'database_checked':True, 'database_schema':schema}
+        'excluded':manifest['excluded'], 'database_checked':True, **checked}
 
 
 PATH_KEYS = {'path', 'file_path', 'folder', 'article_root', 'runtime_root', 'library_root',
@@ -321,8 +469,11 @@ def relocate(value, mappings, key=''):
 
 def migrate_database(file, mappings, runtime):
     with closing(sqlite3.connect(file)) as db:
+        db.execute('PRAGMA trusted_schema=OFF')
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise ValueError('备份数据库已损坏')
+        from .migrations import run_migrations
+        migration = run_migrations(db, app_version=__version__)
         # SQL 一律字面量（项目规则）：逐表展开迁移语句，值走 ? 绑定。
         for identifier, text in db.execute(
                 'SELECT article_id, spec_json FROM articles').fetchall():
@@ -402,9 +553,11 @@ def migrate_database(file, mappings, runtime):
             db.execute("UPDATE tasks SET state='cancelled',lease_token=NULL,lease_expires_at=NULL,updated_at=? WHERE cancel_requested=1 AND state IN ('queued','running','paused','waiting_user','waiting_model','waiting_resource')", (now_iso(),))
             db.execute("UPDATE tasks SET state='paused',lease_token=NULL,lease_expires_at=NULL,error_code='RESTORE_REVIEW',updated_at=? WHERE state IN ('queued','running','paused','waiting_user','waiting_model','waiting_resource')", (now_iso(),))
         db.commit()
+    return {'source_schema': migration['before'], 'database_schema': migration['after'],
+            'migration_versions': [item['version'] for item in migration['applied']]}
 
 
-def restore_backup(file, destination, expected_hash):
+def restore_backup(file, destination, expected_hash, *, limits=None, progress=None):
     file, destination = normalize(file), normalize(destination)
     assert_not_c_drive(destination)
     if destination.exists():
@@ -412,20 +565,20 @@ def restore_backup(file, destination, expected_hash):
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Hash and extraction use one open archive; detect replacement after the review.
     with file.open('rb') as stream:
-        if hashlib.file_digest(stream, 'sha256').hexdigest() != expected_hash:
+        if _archive_digest(stream, **_kwargs(limits, progress)) != expected_hash:
             raise ValueError('备份包已变化，请重新预览')
         stream.seek(0)
         with zipfile.ZipFile(stream) as bundle:
-            manifest = _validate(bundle)
+            manifest = _validate(bundle, **_kwargs(limits, progress))
             staging = Path(tempfile.mkdtemp(prefix='ice-restore-', dir=destination.parent))
             try:
                 for name in manifest['files']:
                     target = staging / name
                     assert_within(target, staging)
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    _extract_member(bundle, name, target)
+                    _extract_member(bundle, name, target, manifest['files'][name], **_kwargs(limits, progress))
                 with tempfile.TemporaryDirectory(prefix='workspace-check-', dir=staging) as check_dir:
-                    _check_workspace(bundle, manifest, Path(check_dir))
+                    _check_workspace(bundle, manifest, Path(check_dir), **_kwargs(limits, progress))
                 new_runtime = destination / 'runtime'
                 mappings = [(Path(manifest['runtime_source']), new_runtime)] + [
                     (Path(root['source']), destination / root['relative']) for root in manifest['article_roots']]
@@ -440,7 +593,7 @@ def restore_backup(file, destination, expected_hash):
                 for profile in settings['profiles'].values():
                     profile['status'] = 'requires_probe'
                 atomic_write_text(settings_file, json.dumps(settings, ensure_ascii=False, indent=2))
-                migrate_database(staging / 'runtime/app.db', mappings, new_runtime)
+                migrated = migrate_database(staging / 'runtime/app.db', mappings, new_runtime)
                 with closing(sqlite3.connect(staging / 'runtime/app.db')) as db:
                     allowed_roots = {str(destination / root['relative']) for root in manifest['article_roots']}
                     for spec, in db.execute('SELECT spec_json FROM articles'):
@@ -466,6 +619,10 @@ def restore_backup(file, destination, expected_hash):
                         assert_within(file_to_check, staging)
                         if not file_to_check.is_file() or digest(file_to_check) != expected:
                             raise ValueError('备份的资产或运行证据缺失、损坏：' + str(relative))
+                # Bind the published data to the exact package the user reviewed,
+                # including changes made after the first validation pass.
+                if _archive_digest(stream, **_kwargs(limits, progress)) != expected_hash:
+                    raise ValueError('备份包在恢复期间已变化，请重新选择并预览')
                 # Publish only after every file, checkpoint and migration succeeded.
                 if destination.exists():
                     raise ValueError('恢复目录已被其他程序创建，请选择新目录')
@@ -474,4 +631,4 @@ def restore_backup(file, destination, expected_hash):
                 if staging.exists():
                     shutil.rmtree(staging)
     return {'runtime_root':str(destination / 'runtime'), 'destination':str(destination),
-            'accounts':manifest['accounts'], 'reconnect_required':True}
+            'accounts':manifest['accounts'], 'reconnect_required':True, **migrated}

@@ -1,5 +1,6 @@
 // 多处入口共用的业务动作（左栏、命令面板、欢迎页、快捷键）。
 import { accountStore, conversationStore, editorStore, flushAllDirty, queryClient, resetForAccountSwitch, rpc } from "./client";
+import { refreshAfterWrite } from "./receipts";
 import type { ChatResult } from "./workbenchResponses";
 import { stageComposerDraft, type ComposerDraft } from './composerDraft';
 
@@ -22,7 +23,10 @@ export async function createConversation(requestId: string = crypto.randomUUID()
   const result = await rpc<ChatResult>("chat.create", { account_id: account, request_id: requestId,
     ...(options.series?{series:options.series}:{}),...(options.title?{title:options.title}:{}),
     ...(options.editorialPlan?{editorial_plan:options.editorialPlan}:{}) });
-  await queryClient.invalidateQueries({ queryKey: ["ice", account, "chat.list"] });
+  // 会话已创建成功；列表刷新失败只提示刷新，不把成功冒充成"新建失败"
+  // 诱导用新请求键重试（那会建出第二个会话）（批次A-04）。
+  await refreshAfterWrite("会话创建", () => queryClient.invalidateQueries(
+    { queryKey: ["ice", account, "chat.list"] }, { throwOnError: true }));
   if(accountStore.get()!==account)throw Error('公众号已切换，会话已保存在原公众号，请切回查看；当前输入保留');
   if(options.initialInput)stageComposerDraft(account,result.conversation.id,options.initialInput);
   editorStore.set(null);

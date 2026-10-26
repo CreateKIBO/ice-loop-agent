@@ -5,8 +5,15 @@ import type { BackupSummary,RestoredBackup } from '../features/backup/backupMode
 declare global {
   interface Window {
     ice?: {
+      sendChat?: (params:Record<string,unknown>) => Promise<{ok:true;result:unknown}|{ok:false;error:{message:string;code:string;recoverable:boolean;action:string|null;settled:boolean}}>;
       pickKnowledgeFile?: () => Promise<string | null>;
       importOutline?: (accountId:string) => Promise<{text:string;source_name:string;file_hash:string}|null>;
+      startupState?: () => Promise<import('../app/StartupScreen').StartupState>;
+      cancelStartup?: () => Promise<{cancelled:boolean}>;
+      onStartupProgress?: (callback:(state:import('../app/StartupScreen').StartupState)=>void) => ()=>void;
+      deleteRecoveryPoint?: (pointId:string,recordHash:string) => Promise<{deleted:string}|null>;
+      openRecoveryFolder?: () => Promise<{ok:boolean}>;
+      inspectRecoveryPoint?: (pointId:string) => Promise<BackupSummary|null>;
       createBackup?: () => Promise<BackupSummary|null>;
       inspectBackup?: () => Promise<BackupSummary|null>;
       restoreBackup?: (token:string) => Promise<RestoredBackup|null>;

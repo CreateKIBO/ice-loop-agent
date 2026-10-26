@@ -1,9 +1,13 @@
 import * as React from 'react';
 import { Banner, Button, Dialog, ErrorPanel, Input, Spinner } from '../../components/ui';
+import { ErrorNote } from '../../components/ErrorNote';
 import { toast } from '../../components/toast';
 import { dirtyStore, queryClient, registerDirtyFlush, rpc, useAccountQuery, useCurrentAccount } from '../../data/client';
+import { refreshAfterWrite } from '../../data/receipts';
 import { ImageThumbnail, ImageViewer, type ImageTarget } from './ImageViewer';
-import { kindLabel, promptParams, resourcePage, usableRunKeys, type AssetCandidate, type AssetDetail, type FigureSlot, type ResourceRow } from './assetModel';
+import { buildAssetChecklist, kindLabel, promptParams, resourcePage, slotOverviews, usableRunKeys,
+         type AssetCandidate, type AssetDetail, type ChecklistReference, type FigureSlot, type ResourceRow } from './assetModel';
+import { CopyButton } from '../../components/CopyButton';
 import { PromptPanel } from './PromptPanel';
 import '../../styles/assets.css';
 
@@ -12,7 +16,7 @@ export function AssetWorkspace({ jobId, figureNo, onClose }: { jobId: string; fi
   const query = useAccountQuery<AssetDetail>('jobs.get', { job_id: jobId }, { staleTime: 0, refetchOnMount: 'always' });
   const [selected, setSelected] = React.useState<number | undefined>(figureNo);
   const [busy, setBusy] = React.useState(false), busyRef = React.useRef(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const [dirty, setDirty] = React.useState(false), dirtyRef = React.useRef(false);
   const [confirmClose, setConfirmClose] = React.useState(false);
   const [viewer, setViewer] = React.useState<ImageTarget | null>(null);
@@ -35,17 +39,36 @@ export function AssetWorkspace({ jobId, figureNo, onClose }: { jobId: string; fi
       const changed = await action();
       if (changed === null) return;
       markDirty(false);
-      await Promise.all([
-        query.refetch(),
-        queryClient.invalidateQueries({ queryKey: ['ice', account, 'articles.delivery_snapshot'] }),
-        queryClient.invalidateQueries({ queryKey: ['ice', account, 'resources.list'] }),
-        queryClient.invalidateQueries({ queryKey: ['ice', account, 'downloads.list'] }),
-      ]);
       toast.success({ title });
-    } catch (problem) { setError((problem as Error).message); }
+      // 写已成功（导入/审核/采纳/保存提示词）；快照与资源列表刷新失败单独提示（批次A-04）。
+      await refreshAfterWrite(title, async () => {
+        await query.refetch({ throwOnError: true });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['ice', account, 'articles.delivery_snapshot'] }, { throwOnError: true }),
+          queryClient.invalidateQueries({ queryKey: ['ice', account, 'resources.list'] }, { throwOnError: true }),
+          queryClient.invalidateQueries({ queryKey: ['ice', account, 'downloads.list'] }, { throwOnError: true }),
+        ]);
+      });
+    } catch (problem) { setError(problem); }
     finally { busyRef.current = false; setBusy(false); }
   };
   const close = () => { if (busyRef.current) return; if (dirtyRef.current) setConfirmClose(true); else onClose(); };
+  // 批C1：配图计划总览 + “下一个待处理图位”；有效性与提示词有无都以已保存字段为准。
+  const overviews = data ? slotOverviews(data) : [];
+  const nextPending = overviews.find(row => !row.valid)?.figureNo ?? null;
+  const goNextPending = () => {
+    if (busy || dirty || nextPending === null) return;
+    setSelected(nextPending); setError(null);
+  };
+  // 批C2：制作清单只用已保存数据 + 缓存中实际读到的参考图（未读的明确标注，不为此发起请求）。
+  const cachedReferences = (figureNo: number): ChecklistReference[] | null => {
+    const target = data?.slots.find(row => row.figure_no === figureNo);
+    if (!data || !target || target.kind === 'body_real') return null;
+    const cached = queryClient.getQueryData<{ references: ChecklistReference[] }>(
+      ['ice', account, 'prompts.references', promptParams(data, target)]);
+    return cached?.references ?? null;
+  };
+  const [checklist, setChecklist] = React.useState<string | null>(null);
   const review = (candidate: AssetCandidate, decision: string, note = '') => mutate(() => rpc('assets.review', {
     account_id: account, job_id: jobId, candidate_id: candidate.candidate_id, decision, note,
     content_hash: candidate.content_hash, slot_hash: slot!.content_hash,
@@ -56,12 +79,32 @@ export function AssetWorkspace({ jobId, figureNo, onClose }: { jobId: string; fi
       footer={confirmClose ? <><span className="ice-asset-muted" style={{ flex: 1 }}>提示词尚未保存</span><Button onClick={() => setConfirmClose(false)}>继续编辑提示词</Button>
         <Button variant="danger" onClick={() => { markDirty(false); onClose(); }}>放弃提示词并关闭</Button></> : <>
         <span className="ice-asset-muted" style={{ flex: 1 }} role="status">{busy ? '正在处理图片…' : dirty ? '提示词尚未保存' : data ? `${data.slots.filter(row => row.valid).length}/${data.slots.length} 图位已有有效图片` : ''}</span>
+        {data && <Button size="sm" disabled={busy || dirty} title="按图号整理标题、用途、已保存提示词与实际读到的参考图，生成可复制清单（不调用模型）"
+                onClick={() => setChecklist(buildAssetChecklist(data, cachedReferences))}>制作清单…</Button>}
         <Button disabled={busy || dirty} onClick={() => { setError(null); void query.refetch(); }}>刷新配图</Button><Button disabled={busy} onClick={close}>关闭配图工作台</Button></>}>
       {query.isLoading && <div className="ice-asset-loading"><Spinner />正在读取图位…</div>}
       {query.error && <ErrorPanel title="图位读取失败" detail={query.error.message} onRetry={() => void query.refetch()} />}
-      {error && <Banner tone="danger" title="配图操作未完成">{error}。当前内容保留，可刷新核对后重试。</Banner>}
+      {error != null && <ErrorNote error={error} note="当前内容保留，可刷新核对后重试。" />}
       {data && <div className="ice-asset-grid">
         <div className="ice-asset-row"><strong>{data.article.final_title || data.article.topic}</strong><span className="ice-badge">{data.article.series}/{data.article.episode}</span></div>
+        {/* 批C1：配图计划总览——图号/用途/位置/提示词有无/当前选用有效性。 */}
+        <details className="ice-asset-card" aria-label="配图计划总览">
+          <summary style={{ cursor: 'pointer' }}>配图计划总览：{overviews.filter(row => row.valid).length}/{overviews.length} 个图位已有有效图片
+            {nextPending !== null && <> · 下一个待处理：图{nextPending}</>}
+          </summary>
+          <ol style={{ margin: '6px 0 0', paddingLeft: 20, display: 'grid', gap: 2 }} aria-label="图位总览列表">
+            {overviews.map(row => <li key={row.figureNo} style={{ fontSize: 'var(--ice-font-size-sm)' }}>
+              图{row.figureNo} · {row.kindText} · {row.caption}{row.position ? `（位置：${row.position}）` : ''}
+              {' · '}{row.valid ? '已有有效图片' : '待配图'}
+              {' · '}{row.kind === 'body_real' ? '真实截图（不需要提示词）' : row.hasPrompt ? '提示词已保存' : '提示词未准备'}
+            </li>)}
+          </ol>
+          <div className="ice-asset-row" style={{ marginTop: 6 }}>
+            <Button size="sm" disabled={busy || dirty || nextPending === null}
+                    title={dirty ? '有未保存的提示词修改，先保存或放弃后再切换图位' : nextPending === null ? '全部图位均已有有效图片' : `跳到图${nextPending}`}
+                    onClick={goNextPending}>下一个待处理图位{nextPending !== null ? `（图${nextPending}）` : ''}</Button>
+          </div>
+        </details>
         {locked && !busy && <Banner tone="warning" title="暂时不能修改配图">请先等待任务停止，并完成配图计划审阅。</Banner>}
         <nav className="ice-asset-tabs" aria-label="选择文章图位">{data.slots.map(row => <Button key={row.slot_id} aria-pressed={slot?.slot_id === row.slot_id}
           disabled={busy || (dirty && row.slot_id !== slot?.slot_id)} variant={row.slot_id === slot?.slot_id ? 'primary' : 'secondary'} onClick={() => { setSelected(row.figure_no); setError(null); }}>
@@ -91,6 +134,16 @@ export function AssetWorkspace({ jobId, figureNo, onClose }: { jobId: string; fi
         </div>}
       </div>}
     </Dialog>
+    {checklist !== null && (
+      <Dialog open onOpenChange={open => { if (!open) setChecklist(null); }} width={760}
+              title="配图制作清单" description="按图号整理的交接材料。内容来自已保存的图位与提示词；参考图仅包含本次实际读取到的图位。"
+              footer={<><span className="ice-asset-muted" style={{ flex: 1 }}>复制清单不会附带图片，也不会调用模型。</span>
+                <CopyButton text={checklist} label="复制制作清单" />
+                <Button onClick={() => setChecklist(null)}>关闭清单</Button></>}>
+        <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: 0, fontSize: 'var(--ice-font-size-sm)',
+                      maxHeight: '55vh', overflowY: 'auto' }} aria-label="配图制作清单内容">{checklist}</pre>
+      </Dialog>
+    )}
     {viewer && <ImageViewer target={viewer} onClose={() => setViewer(null)} />}
   </>;
 }

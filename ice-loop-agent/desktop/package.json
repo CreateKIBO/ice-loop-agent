@@ -17,8 +17,9 @@
     "check": "node --check main.cjs && node --check preload.cjs && node --check renderer/app.js && node --check renderer/publication.js && node --check renderer/brief.js && node --check renderer/planning.js && node --check renderer/outlines.js && node --check renderer/visual.js && node --check renderer/capture.js && node --check renderer/maintenance.js && node --check renderer/supplements.js",
     "test": "node --test tests/*.test.cjs",
     "smoke": "node tests/desktop-smoke.cjs",
-    "release": "electron-builder --config electron-builder.json --win nsis zip --x64",
-    "check:tools": "node --check tools.cjs && node --check renderer/workbench.js && node --check renderer/execution.js"
+    "release": "node ../build/build-candidate.cjs --installer --verify-desktop",
+    "check:tools": "node --check tools.cjs && node --check renderer/workbench.js && node --check renderer/execution.js",
+    "check:bundle": "npm --prefix ui run check:bundle"
   },
   "devDependencies": {
     "@shoelace-style/shoelace": "2.20.1",

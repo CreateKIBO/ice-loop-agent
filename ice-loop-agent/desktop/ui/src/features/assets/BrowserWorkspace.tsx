@@ -1,12 +1,12 @@
 import * as React from 'react';
 import { Banner, Button, Dialog, Input, Spinner } from '../../components/ui';
-import { paletteStore, publicationSettingsStore, settingsStore } from '../../app/uiState';
-import { useCurrentAccount } from '../../data/client';
+import { paletteStore, publicationSettingsStore, settingsStore, shortcutHelpStore, backupSettingsStore, editorialStore } from '../../app/uiState';
+import { accountStore, useCurrentAccount } from '../../data/client';
 import type { Website } from '../../data/websites';
 import '../../styles/assets.css';
 
 type BrowserState = { site?: Website; account_id?: string; url?: string; title?: string; loading?: boolean;
-  canBack?: boolean; canForward?: boolean; error?: string; download?: string };
+  openCount?: number; popupCount?: number; cancelled?: boolean; canBack?: boolean; canForward?: boolean; error?: string; download?: string };
 type Bounds = { x: number; y: number; width: number; height: number };
 type BrowserBridge = { browserShow: (params: { site: Website; bounds: Bounds }) => Promise<BrowserState>;
   browserHide: () => Promise<unknown>; browserBounds: (bounds: Bounds) => Promise<unknown>;
@@ -14,7 +14,12 @@ type BrowserBridge = { browserShow: (params: { site: Website; bounds: Bounds }) 
   onBrowserState: (callback: (state: BrowserState) => void) => () => void };
 export function BrowserWorkspace({ site, onSite, onClose }: { site: Website; onSite: (site: Website) => void; onClose: () => void }) {
   const account = useCurrentAccount(), palette = paletteStore.use(), settings = settingsStore.use(), publication = publicationSettingsStore.use();
-  const suspended = palette || settings || publication;
+  const help = shortcutHelpStore.use(), backup = backupSettingsStore.use(), editorial = editorialStore.use();
+  const [releaseAll, setReleaseAll] = React.useState(false), [releasing, setReleasing] = React.useState(false);
+  const releasingRef = React.useRef(false), mounted = React.useRef(true);
+  const externalSuspended = palette || settings || publication || help || backup || editorial;
+  const suspended = externalSuspended || releaseAll;
+  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [region, setRegion] = React.useState<HTMLDivElement | null>(null);
   const [state, setState] = React.useState<BrowserState>({}), [address, setAddress] = React.useState('');
   const [error, setError] = React.useState<string | null>(null), [retry, setRetry] = React.useState(0);
@@ -50,11 +55,33 @@ export function BrowserWorkspace({ site, onSite, onClose }: { site: Website; onS
     try { await bridge.browserCommand(action, value); }
     catch (problem) { setError((problem as Error).message); }
   };
-  return <Dialog open={!suspended} onOpenChange={open => { if (!open) onClose(); }} width={1800} className="ice-browser-dialog" title="内嵌网页工作台"
+  const closePages = async (all: boolean) => {
+    if (!available || releasingRef.current) return;
+    releasingRef.current = true; setReleasing(true); setError(null);
+    const sourceAccount = account;
+    const current = () => mounted.current && accountStore.get() === sourceAccount;
+    try {
+      const outcome = await bridge.browserCommand(all ? 'close-all' : 'close');
+      if (!current()) return;
+      setReleaseAll(false);
+      if (outcome.cancelled) { setError('网页已切换，本次释放已取消，请核对当前页面。'); return; }
+      onClose();
+    } catch (problem) { if (current()) { setReleaseAll(false); setError((problem as Error).message); } }
+    finally { releasingRef.current = false; if (current()) setReleasing(false); }
+  };
+  return <>
+    <Dialog open={releaseAll && !externalSuspended} onOpenChange={open => { if (!releasing) setReleaseAll(open); }} title="释放全部网页"
+      description="会关闭本公众号的全部站点和登录弹窗，并取消未完成的下载。请先保存网页内未完成的内容。" initialFocus="[data-cancel-release]"
+      footer={<><Button data-cancel-release disabled={releasing} onClick={() => setReleaseAll(false)}>继续使用网页</Button>
+        <Button variant="danger" loading={releasing} onClick={() => void closePages(true)}>确认释放全部网页</Button></>}>
+      <p>当前保留 {state.openCount ?? 1} 个站点{state.popupCount ? `和 ${state.popupCount} 个弹窗` : ''}。登录信息、已保存的下载文件与本地文章均保留。</p>
+    </Dialog>
+    <Dialog open={!suspended} onOpenChange={open => { if (!open) onClose(); }} width={1800} className="ice-browser-dialog" title="内嵌网页工作台"
     footer={<><span className="ice-asset-muted" style={{ flex: 1 }} role="status">{state.loading ? '网页正在加载…' : state.title || '网页在当前公众号独立登录'}</span>
-      <Button disabled={!available} title="关闭当前网页并释放其内容占用；下次从站点首页打开，保留登录信息。请先保存网站内未完成的内容。"
-        onClick={() => { if (available) void bridge.browserCommand('close').then(onClose).catch(problem => setError(problem.message)); }}>关闭并释放网页</Button>
-      <Button title="收起面板后保留网页，方便继续操作" onClick={onClose}>返回文章</Button></>}>
+      <Button disabled={!available || releasing} title="关闭当前网页并释放其内容占用；下次从站点首页打开，保留登录信息。请先保存网站内未完成的内容。"
+        onClick={() => void closePages(false)}>关闭并释放网页</Button>
+      <Button disabled={!available || releasing} onClick={() => setReleaseAll(true)}>释放全部网页{state.openCount ? `（${state.openCount}）` : ''}</Button>
+      <Button disabled={releasing} title="收起面板后保留网页，方便继续操作" onClick={onClose}>返回文章</Button></>}>
     <div className="ice-asset-grid ice-browser-layout">
       <div className="ice-asset-row"><Button aria-pressed={site === 'tapnow'} variant={site === 'tapnow' ? 'primary' : 'secondary'} onClick={() => onSite('tapnow')}>TapNow 生图</Button>
         <Button aria-pressed={site === 'wechat'} variant={site === 'wechat' ? 'primary' : 'secondary'} onClick={() => onSite('wechat')}>微信公众号后台</Button>
@@ -74,5 +101,5 @@ export function BrowserWorkspace({ site, onSite, onClose }: { site: Website; onS
       {state.download && <p role="status" className="ice-asset-muted">{state.download}</p>}
       <div ref={setRegion} className="ice-browser-region" aria-label="内嵌网页区域">{state.loading && <Spinner />}</div>
     </div>
-  </Dialog>;
+  </Dialog></>;
 }

@@ -1,6 +1,13 @@
 /* Curated release resources: never copy workspace databases, keys, sessions or user articles. */
 const fs=require('node:fs'),path=require('node:path');
-const root=path.resolve(__dirname,'..'),dist=path.join(root,'dist');
+const root=path.resolve(__dirname,'..');
+const distArg=process.argv.indexOf('--dist-root');
+const dist=distArg>=0?path.resolve(process.argv[distArg+1]||''):path.join(root,'dist');
+if(distArg>=0){
+  const candidate=path.dirname(dist),boundary=path.join(root,'.test-tmp/candidates')+path.sep;
+  if(!candidate.startsWith(boundary)||path.basename(dist)!=='dist'||!fs.existsSync(path.join(candidate,'CANDIDATE.json')))throw Error('Unowned candidate resource destination');
+}
+
 const pythonRoot=path.join(root,'.tools','python');
 const pythonHome=fs.readdirSync(pythonRoot).map(p=>path.join(pythonRoot,p)).find(p=>fs.existsSync(path.join(p,'python.exe')));
 if(!pythonHome)throw Error('Build Python runtime missing');

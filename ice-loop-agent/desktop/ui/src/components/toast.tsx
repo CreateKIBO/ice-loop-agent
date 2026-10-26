@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { createPortal } from 'react-dom';
 import { toastHost } from './toastHost';
+import { redactText } from './errorText';
 
 type Tone = "info" | "success" | "warning" | "danger";
 type ToastAction = { label: string; run: () => unknown };
@@ -20,7 +21,8 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(listener => listener());
 
 function show(tone: Tone, input: ToastInput | string): number {
-  const value = typeof input === "string" ? { title: input } : input;
+  const raw = typeof input === "string" ? { title: input } : input;
+  const value = { ...raw, title: redactText(raw.title), detail: raw.detail ? redactText(raw.detail) : undefined };
   const id = ++sequence;
   // 带动作的提示多给几秒，避免"撤销"还没点到就消失。
   const duration = value.duration ?? DEFAULT_DURATION[tone] + (value.action ? 2_500 : 0);
@@ -62,21 +64,23 @@ const ICON: Record<Tone, string> = { info: "i", success: "✓", warning: "!", da
 function ToastCard({ item }: { item: ToastItem }) {
   const [paused, setPaused] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+  const runningRef = React.useRef(false); // Block same-tick action replay before React commits disabled.
   const remaining = React.useRef(item.duration);
   const startedAt = React.useRef(0);
 
   React.useEffect(() => {
-    if (paused) return;
+    if (paused || running) return;
     startedAt.current = Date.now();
     const timer = window.setTimeout(() => toast.dismiss(item.id), remaining.current);
     return () => {
       window.clearTimeout(timer);
       remaining.current = Math.max(0, remaining.current - (Date.now() - startedAt.current));
     };
-  }, [paused, item.id]);
+  }, [paused, running, item.id]);
 
   const runAction = async () => {
-    if (!item.action || running) return;
+    if (!item.action || runningRef.current) return;
+    runningRef.current = true;
     setRunning(true);
     try { await item.action.run(); toast.dismiss(item.id); }
     catch (error) {

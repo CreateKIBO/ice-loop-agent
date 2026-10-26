@@ -6,6 +6,7 @@ import { openEditor } from '../../data/actions';
 import { ApprovalReview } from './ApprovalReview';
 import { ExecutionReview,RunResults } from './ExecutionReview';
 import { NODE_LABEL } from './taskTypes';
+import { jobGuide } from './jobGuide';
 import type { Approval,TaskDetail } from './taskTypes';
 import type { decisionParams } from './reviewModel';
 import '../../styles/task-review.css';
@@ -101,6 +102,7 @@ export function WorkflowReview({jobId,onClose}:{jobId:string;onClose:()=>void}) 
     setError(null);setConflict(false);void query.refetch();
   };
   const locked=busy||conflict||Boolean(advance)||Boolean(snapshot?.job.lease);
+  const guide=snapshot?jobGuide(snapshot.job):null;
   const approval=snapshot?.pending_approval;
   const hasExecution=snapshot?.job.current_node==='verify_code'&&snapshot.execution;
   return <Dialog open onOpenChange={open=>{if(!open)requestClose();}} width={860}
@@ -129,6 +131,8 @@ export function WorkflowReview({jobId,onClose}:{jobId:string;onClose:()=>void}) 
         {(polling||busy)&&<Spinner size={14} />}当前步骤：{NODE_LABEL[snapshot.job.current_node]??snapshot.job.current_node}
         {snapshot.job.state==='completed'?' · 制作完成':snapshot.job.state==='failed'?' · 已中断':snapshot.job.state==='paused'?(snapshot.job.lease?' · 正在停止当前程序…':' · 已暂停'):snapshot.job.state==='cancelled'?' · 已取消':advance?' · 正在继续':''}
       </div>
+      {/* 批A2：确定性的建议下一步（与任务卡同一纯推导；不自动执行任何动作）。 */}
+      <p className="ice-task-review__hint">建议下一步：{guide?.actions[0]?.label} — {guide?.actions[0]?.hint}</p>
       {error&&<Banner tone="danger" title="操作未完成">{error}。当前修改已保留，请核对状态后再试。</Banner>}
       {query.error&&<Banner tone="warning" title="暂未读取到最新状态">{query.error.message}</Banner>}
       {conflict&&<Banner tone="warning" title="任务内容已在别处变化">当前修改仍保留。可复制方案后关闭并放弃修改，再重新打开合并。</Banner>}

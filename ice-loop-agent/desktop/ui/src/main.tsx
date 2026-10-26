@@ -1,12 +1,16 @@
 // ICE Loop Studio v2.0 新工作台入口（M2 壳 + M3 编辑器接入）。
 // 数据面：TanStack Query over window.ice.request；账号切换整体清缓存。
+import { StartupScreen } from "./app/StartupScreen";
 import { StrictMode, Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig, motion } from "motion/react";
 
 import { CommandPalette, useGlobalShortcuts } from "./app/CommandPalette";
-import { ModelSettings, type BootstrapSettings } from "./app/ModelSettings";
+import { shortcutHelpStore } from "./app/uiState";
+const ShortcutHelp = lazy(() => import("./components/ShortcutHelp").then(module => ({ default: module.ShortcutHelp })));
+import type { BootstrapSettings } from "./app/modelBootstrap";
+import { ModelSettingsHost } from "./app/ModelSettingsHost";
 import { engineStore, paletteStore } from "./app/uiState";
 import { ErrorBoundary, WorkbenchShell } from "./app/WorkbenchShell";
 import { toast, Toaster } from "./components/toast";
@@ -142,7 +146,8 @@ function App() {
         </div>
       </div>
       <CommandPalette open={palette} onOpenChange={paletteStore.set} />
-      <ModelSettings />
+      <ShortcutHelpHost />
+      <ModelSettingsHost />
       <PublicationSettingsHost />
       <BackupSettingsHost />
       <EditorialHost />
@@ -154,10 +159,16 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    {new URLSearchParams(location.search).get("startup")==="1" ? <StartupScreen /> : <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </QueryClientProvider>
+    </QueryClientProvider>}
   </StrictMode>,
 );
+
+/** 快捷键帮助宿主：跟随 shortcutHelpStore，不依赖 App 内部状态。 */
+function ShortcutHelpHost() {
+  const open = shortcutHelpStore.use();
+  return open ? <Suspense fallback={null}><ShortcutHelp open={open} onOpenChange={shortcutHelpStore.set} /></Suspense> : null;
+}

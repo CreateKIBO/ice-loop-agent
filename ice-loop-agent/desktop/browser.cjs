@@ -1,5 +1,5 @@
 /* Remote sites run in isolated Chromium views; only the local workbench owns IPC. */
-const {WebContentsView, BrowserWindow, session, dialog, ipcMain} = require('electron');
+const {WebContentsView, BrowserWindow, session, ipcMain} = require('electron');
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const SITES = Object.freeze({tapnow:{name:'TapNow',url:'https://app.tapnow.media/home'},wechat:{name:'微信公众号',url:'https://mp.weixin.qq.com/'}});
 function siteFor(id){if(!Object.hasOwn(SITES,id))throw Error('请选择 TapNow 或微信公众号');return SITES[id];}
@@ -16,45 +16,59 @@ function bounds(raw,size){
 }
 function installBrowser({window:owner,assertSender,request,runtime}){
   let active=null,account=null,layout=null,visible=false,epoch=0;
-  const pages=new Map(),popups=new Set(),configured=new Set();
+  const pages=new Map(),popups=new Set(),configured=new Map(),downloads=new Set();
   function state(page=active){
-    if(!page||page.view.webContents.isDestroyed())return {site:null,visible:false};
+    if(!page||page.view.webContents.isDestroyed())return {site:null,visible:false,openCount:pages.size,popupCount:popups.size};
     const wc=page.view.webContents;
-    return {site:page.site,account_id:page.account,url:wc.getURL()||siteFor(page.site).url,title:wc.getTitle(),loading:wc.isLoading(),
+    return {site:page.site,account_id:page.account,openCount:pages.size,popupCount:popups.size,url:wc.getURL()||siteFor(page.site).url,title:wc.getTitle(),loading:wc.isLoading(),
       canBack:wc.navigationHistory.canGoBack(),canForward:wc.navigationHistory.canGoForward(),error:page.error||'',visible:visible&&page===active};
   }
   function emit(extra={}){const win=owner();if(win&&!win.isDestroyed())win.webContents.send('ice:browser-state',{...state(),...extra});}
   function detach(){const win=owner();if(active&&win&&!win.isDestroyed()){try{win.contentView.removeChildView(active.view);}catch{}}visible=false;}
   function hide(){epoch++;detach();emit();return {ok:true};}
-  function reset(){hide();for(const page of pages.values())if(!page.view.webContents.isDestroyed())page.view.webContents.close();pages.clear();for(const popup of popups)if(!popup.isDestroyed())popup.destroy();popups.clear();active=null;account=null;}
+  function reset(){hide();cancelDownloads();for(const [ses,handler] of configured)ses.removeListener('will-download',handler);configured.clear();for(const page of pages.values())if(!page.view.webContents.isDestroyed())page.view.webContents.close();pages.clear();for(const popup of popups)if(!popup.isDestroyed())popup.destroy();popups.clear();active=null;account=null;}
+  function cancelDownloads(page=null){
+    for(const transfer of [...downloads])if(!page||transfer.page===page)transfer.cancel();
+  }
+  function releaseSession(ses){
+    if([...pages.values()].some(page=>page.session===ses))return;
+    const handler=configured.get(ses);
+    if(handler){ses.removeListener('will-download',handler);configured.delete(ses);}
+  }
   function configureSession(ses){
-    if(configured.has(ses))return;configured.add(ses);
+    if(configured.has(ses))return;
     ses.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
     ses.setPermissionCheckHandler(()=>false);
-    ses.on('will-download',async(_event,item,wc)=>{
+    const onDownload=(_event,item,wc)=>{
       const page=[...pages.values()].find(page=>page.view.webContents===wc||page.session===wc?.session);
       if(!page){item.cancel();return;}
+      if(downloads.size>=4){item.cancel();if(account===page.account)emit({download:'已有 4 个下载正在处理，请完成或取消后再试',download_status:'interrupted'});return;}
+      // Source identity belongs to the download, never to a later UI selection.
+      const sourceAccount=page.account;
+      const notify=extra=>{if(account===sourceAccount&&pages.get(page.site)===page)emit(extra);};
+      let finished=false;
+      const transfer={page,cancel(){if(finished)return;finished=true;downloads.delete(transfer);item.removeListener('done',onDone);try{item.cancel();}catch{}}};
+      const onDone=(_event,result)=>{
+        if(finished)return;finished=true;downloads.delete(transfer);
+        const savePath=result==='completed'?item.getSavePath():null;
+        if(result!=='completed'||!savePath){notify({download:'下载未完成',download_status:'interrupted'});return;}
+        // A completed user file is preserved even if staging fails or the UI switches.
+        request('downloads.stage',{account_id:sourceAccount,file_path:savePath,origin_url:String(item.getURL()||'').slice(0,300)})
+          .then(staged=>notify({download:staged.deduped?'该图片此前已下载过，沿用原归档记录':'下载完成，已进入待归档，请在工作台选择图位',
+            download_status:'staged',download_id:staged.download_id,download_file:savePath}))
+          .catch(error=>notify({download:'下载已保存，但归档失败：'+error.message,download_status:'stage_failed',download_file:savePath}));
+      };
+      downloads.add(transfer);item.once('done',onDone);
       try{
-        const folder=path.join(runtime,'downloads',crypto.createHash('sha256').update(page.account).digest('hex').slice(0,16),page.site);
+        const folder=path.join(runtime,'downloads',crypto.createHash('sha256').update(sourceAccount).digest('hex').slice(0,16),page.site);
         fs.mkdirSync(folder,{recursive:true});
-        // Assign immediately so Chromium does not open a second default save dialog.
-        item.setSavePath(path.join(folder,'.pending-'+crypto.randomUUID()+'.download'));
-        item.pause();
         const safe=path.basename(item.getFilename()).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,160)||'download';
-        const choice=await dialog.showSaveDialog(owner(),{title:'保存 '+siteFor(page.site).name+' 下载文件',defaultPath:path.join(folder,safe)});
-        if(choice.canceled){item.cancel();return;}
-        item.setSavePath(choice.filePath);
-        item.once('done',(_event,result)=>{
-          if(result!=='completed'){emit({download:'下载未完成',download_status:'interrupted'});return;}
-          // 进待归档箱而不是直接采纳：图位由用户在工作台选择，重复文件复用原记录。
-          request('downloads.stage',{file_path:choice.filePath,origin_url:String(item.getURL()||'').slice(0,300)})
-            .then(staged=>emit({download:staged.deduped?'该图片此前已下载过，沿用原归档记录':'下载完成，已进入待归档，请在工作台选择图位',
-              download_status:'staged',download_id:staged.download_id,download_file:choice.filePath}))
-            .catch(error=>emit({download:'下载已保存，但归档失败：'+error.message,download_status:'stage_failed',download_file:choice.filePath}));
-        });
-        item.resume();
-      }catch{item.cancel();emit({download:'下载未完成，请重新选择保存位置'});}
-    });
+        // Electron only permits save-path/options changes synchronously inside
+        // will-download. Chromium owns the dialog and getSavePath is authoritative.
+        item.setSaveDialogOptions({title:'保存 '+siteFor(page.site).name+' 下载文件',defaultPath:path.join(folder,safe)});
+      }catch{transfer.cancel();notify({download:'下载未完成，请重新选择保存位置',download_status:'interrupted'});}
+    };
+    configured.set(ses,onDownload);ses.on('will-download',onDownload);
   }
   function secureContents(wc,page){
     wc.on('before-input-event',(event,input)=>{
@@ -107,15 +121,18 @@ function installBrowser({window:owner,assertSender,request,runtime}){
   });
   ipcMain.handle('ice:browser-command',async(event,action,value)=>{
     assertSender(event);if(!active)throw Error('请先打开网页工作台');
+    const target=active;
     const current=(await request('bootstrap')).account.id;
-    if(current!==active.account){reset();throw Error('公众号已切换，请重新打开网页');}
+    if(active!==target)return {cancelled:true};
+    if(current!==target.account){reset();throw Error('公众号已切换，请重新打开网页');}
     const wc=active.view.webContents;active.error='';
     if(action==='back'){if(wc.navigationHistory.canGoBack())wc.navigationHistory.goBack();}
     else if(action==='forward'){if(wc.navigationHistory.canGoForward())wc.navigationHistory.goForward();}
     else if(action==='reload')wc.reload();
     else if(action==='stop')wc.stop();
+    else if(action==='close-all'){reset();emit();return state();}
     else if(action==='close'){
-      const page=active;hide();pages.delete(page.site);active=null;layout=null;
+      const page=active;hide();cancelDownloads(page);pages.delete(page.site);releaseSession(page.session);active=null;layout=null;
       for(const popup of popups)if(!popup.isDestroyed()&&popup.webContents.session===page.session){popup.destroy();popups.delete(popup);}
       if(!wc.isDestroyed())wc.close();emit();return state();
     }

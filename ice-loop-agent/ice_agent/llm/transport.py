@@ -92,6 +92,7 @@ class ChatResult:
     streamed: bool = False
     notes: list[str] = field(default_factory=list)
     invocation_id: str = ""  # Assigned locally by RoleRouter, never by a provider.
+    input_preflight: dict[str, Any] = field(default_factory=dict)
 
     @property
     def usage_known(self) -> bool:
@@ -122,6 +123,23 @@ class OpenAIChatTransport:
 
     def __init__(self, *, allow_loopback_http: bool = False):
         self._allow_loopback_http = allow_loopback_http
+
+    def count_tokens(self, base_url: str, api_key: str, model: str, messages: list[dict], *, timeout: float = 15) -> int:
+        """GLM tokenizer contract; callers must bind it to the supported profile."""
+        raw = self._receive(base_url, '/tokenizer', api_key, method='POST', timeout=timeout, limit=16384,
+                            body=json.dumps({'model':model, 'messages':messages}, ensure_ascii=False).encode('utf-8'))
+        try:
+            data = json.loads(raw)
+            usage = data.get('usage') if isinstance(data, dict) and not data.get('error') else None
+            tokens = usage.get('total_tokens') if isinstance(usage, dict) else None
+            if type(tokens) is not int or not 0 <= tokens <= 2**31-1:
+                raise ValueError()
+            for field in ('prompt_tokens', 'image_tokens', 'video_tokens'):
+                if field in usage and (type(usage[field]) is not int or not 0 <= usage[field] <= tokens):
+                    raise ValueError()
+            return tokens
+        except (ValueError, UnicodeError):
+            raise ParamUnsupportedError('供应商Token计数响应无效，尚未发送生成请求；请核对模型和端点') from None
 
     def models(self, base_url: str, api_key: str, *, timeout: float = 25) -> list[dict]:
         """Bounded metadata GET; same endpoint/redirect/auth boundary as chat."""

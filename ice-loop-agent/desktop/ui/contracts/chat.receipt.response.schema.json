@@ -1,0 +1,118 @@
+{
+  "$id": "chat.receipt.response",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ChatSendAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Message Id",
+          "type": "string"
+        },
+        "user_message_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "User Message Id",
+          "type": "string"
+        },
+        "started": {
+          "title": "Started",
+          "type": "boolean"
+        },
+        "accepted": {
+          "const": true,
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "replayed": {
+          "title": "Replayed",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "streaming",
+            "completed",
+            "failed",
+            "stopped",
+            "interrupted"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "user_message_id",
+        "started",
+        "accepted",
+        "replayed",
+        "status"
+      ],
+      "title": "ChatSendAccepted",
+      "type": "object"
+    },
+    "ChatSendCancelled": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "const": false,
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "cancelled": {
+          "const": true,
+          "title": "Cancelled",
+          "type": "boolean"
+        },
+        "request_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accepted",
+        "cancelled",
+        "request_id"
+      ],
+      "title": "ChatSendCancelled",
+      "type": "object"
+    },
+    "ChatSendMissing": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted": {
+          "const": false,
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "found": {
+          "const": false,
+          "title": "Found",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "accepted",
+        "found"
+      ],
+      "title": "ChatSendMissing",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ChatSendAccepted"
+    },
+    {
+      "$ref": "#/$defs/ChatSendCancelled"
+    },
+    {
+      "$ref": "#/$defs/ChatSendMissing"
+    }
+  ],
+  "title": "ChatReceiptResponse"
+}

@@ -7,7 +7,7 @@ import { toast } from "../components/toast";
 import { createConversation, openConversation, openEditor,openGettingStarted } from "../data/actions";
 import { editorStore, flushAllDirty, useAccountQuery, useEditorJob } from "../data/client";
 import { switchToClassic } from "../data/desktop";
-import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore } from "./uiState";
+import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore, shortcutHelpStore } from "./uiState";
 
 type Action = {
   id: string; label: string; group: string; hint?: string; keywords?: string;
@@ -25,6 +25,7 @@ export function CommandPalette({ open, onOpenChange }: {
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [running, setRunning] = React.useState(false);
+  const runningRef = React.useRef(false);
   const restoreFocus = React.useRef<HTMLElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const listRef = React.useRef<HTMLUListElement | null>(null);
@@ -35,16 +36,18 @@ export function CommandPalette({ open, onOpenChange }: {
   const jobs = useAccountQuery<JobRow[]>("jobs.list", { visibility: "active" }, { enabled: open, staleTime: 3_000 });
 
   React.useEffect(() => {
+    let timer: number | undefined;
     if (open) {
       restoreFocus.current = document.activeElement as HTMLElement | null;
       setActiveIndex(0);
       setQuery("");
       setActionError(null);
-      window.setTimeout(() => inputRef.current?.focus(), 0);
+      timer = window.setTimeout(() => inputRef.current?.focus(), 0);
     } else if (restoreFocus.current) {
       restoreFocus.current.focus();
       restoreFocus.current = null;
     }
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   const actions = React.useMemo<Action[]>(() => {
@@ -60,6 +63,9 @@ export function CommandPalette({ open, onOpenChange }: {
     }
     list.push({
       id:'getting-started',group:'操作',label:'开始指南',keywords:'首次使用 导入 配置 first start home',run:openGettingStarted,
+    },{
+      id:'shortcut-help',group:'操作',label:'快捷键与操作帮助',keywords:'快捷键 键盘 帮助 keyboard shortcuts help',
+      run:()=>shortcutHelpStore.set(true),
     },{
       id:'publication-settings',group:'操作',label:'公众号与品牌',keywords:'账号 新增 公众号 品牌 历史 导入 account brand',
       run:()=>publicationSettingsStore.set(true),
@@ -113,12 +119,14 @@ export function CommandPalette({ open, onOpenChange }: {
   }, [clampedIndex, filtered.length]);
 
   const execute = async (action: Action) => {
-    if (running) return;
+    if (runningRef.current) return;
+    runningRef.current = true;
     setActionError(null);
     setRunning(true);
+    // 标明被阻止的动作（C4）：仅 flush/写入失败时用户才知道哪条命令没有执行；原始错误全文保留。
     try { await action.run(); onOpenChange(false); }
-    catch (error) { setActionError((error as Error).message); }
-    finally { setRunning(false); }
+    catch (error) { setActionError(`「${action.label}」未执行：${(error as Error).message}`); }
+    finally { runningRef.current = false; setRunning(false); }
   };
 
   const loading = open && (conversations.isLoading || jobs.isLoading);
@@ -133,6 +141,7 @@ export function CommandPalette({ open, onOpenChange }: {
                aria-activedescendant={active ? "ice-palette-" + clampedIndex : undefined}
                onChange={event => { setQuery(event.target.value); setActiveIndex(0); }}
                onKeyDown={event => {
+                 if (event.nativeEvent.isComposing) return;
                  if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex(Math.min(clampedIndex + 1, filtered.length - 1)); }
                  if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex(Math.max(clampedIndex - 1, 0)); }
                  if (event.key === "Enter" && active) {
@@ -185,6 +194,7 @@ export function useGlobalShortcuts() {
   React.useEffect(() => {
     let creating = false;
     const handler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
       const key = event.key.toLowerCase();
       if (key === "k") {

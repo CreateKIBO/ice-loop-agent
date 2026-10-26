@@ -132,6 +132,27 @@ class TestMigrationFramework(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT topic FROM articles WHERE article_id='art-1'").fetchone()[0], '示例主题')
         conn.close()
 
+    def test_review_draft_migration_from_19_is_dry_run_safe_and_atomic(self):
+        conn = _fresh_v9_db(self.dir / 'review-migration.db')
+        # Reconstruct a real version-19 store using the immutable historical migrations.
+        with self.assertRaises(RuntimeError):
+            run_migrations(conn, stop_after=20)
+        self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 19)
+        self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name='proposal_decision_drafts'").fetchone())
+        original = conn.execute("SELECT * FROM articles").fetchall()
+        run_migrations(conn, dry_run=True)
+        self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], 19)
+        self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name='proposal_decision_drafts'").fetchone())
+        report = run_migrations(conn)
+        self.assertEqual([m['version'] for m in report['applied']], list(range(20,MAX_KNOWN_VERSION+1)))
+        self.assertEqual(conn.execute('SELECT * FROM articles').fetchall(), original)
+        conn.execute("INSERT INTO proposal_decision_drafts VALUES (?,?,?,?,?,?,?)", ('a', 'art-1', 'p', 'h', '[]', 1, 'now'))
+        conn.commit()
+        self.assertEqual(run_migrations(conn)['applied'], [])
+        self.assertEqual(conn.execute('SELECT version FROM proposal_decision_drafts').fetchone()[0], 1)
+        self.assertEqual(verify_migrations(conn)['problems'], [])
+        conn.close()
+
     def test_newer_database_rejected_by_store(self):
         path = self.dir / 'd.db'
         conn = _fresh_v9_db(path)

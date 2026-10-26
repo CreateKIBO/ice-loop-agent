@@ -1,0 +1,74 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {openNativeSession}=require('./native-session.cjs');
+const repo=path.resolve(__dirname,'../..'),f=JSON.parse(fs.readFileSync(path.join(repo,'docs/上线准备/patch-review-fixture.json')));
+assert.equal(path.dirname(f.root),path.join(repo,'.test-tmp/release-interaction-lists'));assert(fs.existsSync(path.join(f.root,'.test-owner.json')));
+const report={state:'running',runtime:f.runtime,checks:{}};
+const save=()=>{const data=JSON.stringify(report,null,2);fs.writeFileSync(path.join(f.root,'editor-coordination-result.json'),data);fs.writeFileSync(path.join(repo,'docs/上线准备/editor-coordination-native.json'),data);};save();
+const rows=()=>fs.readFileSync(f.trace,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+const count=m=>rows().filter(r=>r.method===m&&r.phase==='started').length;
+process.on('exit',()=>{if(report.state!=='finished')process.exitCode=1;});
+(async()=>{let s;try{
+ s=await openNativeSession(repo,f.runtime,{entryPath:f.entry});const {evaluate:e,until,call}=s;
+ const check=(n,v)=>{assert(v,n);report.checks[n]=true;save();};
+ const key=async(k,modifiers=0)=>{const code={Enter:13,Home:36,End:35,a:65,s:83}[k];await call('Input.dispatchKeyEvent',{type:'keyDown',key:k,modifiers,windowsVirtualKeyCode:code,...(k==='Enter'?{text:'\r'}:{})});await call('Input.dispatchKeyEvent',{type:'keyUp',key:k,modifiers,windowsVirtualKeyCode:code});};
+ const button=t=>`[...document.querySelectorAll('button')].find(b=>b.innerText.trim()===${JSON.stringify(t)})`;
+ const activate=async expr=>{await until(`Boolean(${expr})&&!${expr}.disabled`);await e(`${expr}.focus()`);await until(`document.activeElement===${expr}`);await key('Enter');};
+ const rpc=(m,p)=>e(`window.ice.request(${JSON.stringify(m)},${JSON.stringify({job_id:f.patch_job,...p})})`);
+ await activate(`[...document.querySelectorAll('li[data-job-id="${f.patch_job}"] button')].find(b=>b.innerText.trim()==='编辑正文')`);
+ await until(`Boolean(document.querySelector('select[aria-label="选择修改提案"]'))`);
+ const select=`document.querySelector('select[aria-label="选择修改提案"]')`;
+ const first=await e(`${select}.options[0].value===${JSON.stringify(f.bulk_proposal)}`);await e(`${select}.focus()`);await key(first?'Home':'End');
+ await until(`document.querySelector('select[aria-label="跳转修改项"]')?.options.length===40`);
+ const doc=await rpc('articles.document',{});
+ await e(`(()=>{const editor=document.querySelector('.ice-editor');editor.focus();const r=document.createRange();r.selectNodeContents(editor);r.collapse(false);const selection=getSelection();selection.removeAllRanges();selection.addRange(r)})()`);
+ await key('Enter');await call('Input.insertText',{text:'本地正文新增段落必须保留'});
+ await until(`document.body.innerText.includes('请先处理正文修改再应用提案')`);
+ await activate(button('提交决定'));await until(`Boolean(${button('确认并应用决定')})`);
+ check('unsaved_body_disables_apply_confirmation',await e(`${button('确认并应用决定')}.disabled`));
+ check('blocked_confirmation_sends_no_proposal_write',count('articles.proposal_decide')===0);
+ await activate(button('继续检查'));
+ // Prove the server also protects a renderer's recovery draft, independent of disabled controls.
+ await until(`document.querySelector('.ice-editor-bar__identity').textContent.includes('工作草稿已保存')`);
+ let blocked=false;try{await rpc('articles.proposal_decide',{proposal_id:f.bulk_proposal,decisions:Array.from({length:40},(_,op_index)=>({op_index,decision:'accept'}))});}catch(error){blocked=String(error).includes('工作草稿');}
+ check('server_independently_rejects_unsaved_body',blocked&&(await rpc('articles.document',{})).markdown===doc.markdown);
+ await activate(button('保存新版本'));await until(`!document.body.innerText.includes('请先处理正文修改再应用提案')`);
+ const saved=await rpc('articles.document',{});check('manual_version_is_saved_before_proposal',saved.markdown.includes('本地正文新增段落必须保留'));
+ fs.writeFileSync(f.fault,JSON.stringify({delayMs:{'articles.proposal_decide':1200}}));
+ await activate(button('提交决定'));await activate(button('确认并应用决定'));
+ await until(`document.querySelector('[aria-label="正文编辑区域"]').inert`);
+ const savesBefore=count('articles.save');await key('s',2);
+ check('proposal_apply_locks_body_and_version_save',await e(`document.querySelector('.ice-editor').getAttribute('contenteditable')==='false'&&${button('保存新版本')}.disabled`)&&count('articles.save')===savesBefore);
+ await until(`document.body.innerText.includes('全部应用成功')`);fs.writeFileSync(f.fault,'{}');
+ await until(`document.querySelector('.ice-editor')?.getAttribute('contenteditable')==='true'&&!document.querySelector('[aria-label="正文编辑区域"]').inert`);
+ const merged=await rpc('articles.document',{});
+ check('proposal_preserves_manual_paragraph',merged.markdown.includes('本地正文新增段落必须保留')&&merged.markdown.includes('修改段落0。'));
+ check('clean_body_recovery_is_retired',(await rpc('articles.editor_draft_get',{})).draft===null);
+ // A second writer rejects the other proposal while this window retains manual review text.
+ await until(`document.querySelector('select[aria-label="跳转修改项"]')?.options.length===1`);
+ await activate(button('改后接受'));await until(`Boolean(document.querySelector('textarea[aria-label="修改后的文本"]'))`);
+ await e(`document.querySelector('textarea[aria-label="修改后的文本"]').focus()`);await key('a',2);await call('Input.insertText',{text:'另一窗口已处理也必须保留的审阅文字'});
+ await rpc('articles.proposal_decide',{proposal_id:f.other_proposal,decisions:[{op_index:0,decision:'reject'}]});
+ // Attempting submission is refused; use the existing read-only recovery entry, never replay remotely.
+ await activate(button('提交决定'));await activate(button('确认并应用决定'));
+ await until(`document.body.innerText.includes('提交决定未完成')`);
+ await activate(button('核对已保存审阅'));await activate(button('确认重新读取'));
+ await until(`Boolean(document.querySelector('textarea[aria-label="已保留的本地审阅记录"]'))`);
+ check('processed_proposal_keeps_manual_review_text',await e(`document.querySelector('textarea[aria-label="已保留的本地审阅记录"]').value.includes('另一窗口已处理也必须保留的审阅文字')`));
+ await until(`!${button('提交决定')}`);
+ check('processed_proposal_has_no_submit_controls',await e(`!${button('提交决定')}&&!document.querySelector('.ice-diff')`));
+ const handledWrites=count('articles.proposal_decide'),draftWrites=count('articles.proposal_draft_save');
+ await activate(button('← 返回对话'));check('retained_remote_review_blocks_silent_navigation',await e(`Boolean(document.querySelector('.ice-editor'))`));
+ await activate(button('移除已处理提案的本地记录'));await activate(button('继续保留'));
+ check('cancel_removal_keeps_manual_review',await e(`Boolean(document.querySelector('textarea[aria-label="已保留的本地审阅记录"]'))`));
+ await call('Emulation.setDeviceMetricsOverride',{width:500,height:900,deviceScaleFactor:1,mobile:false});
+ check('retained_record_fits_narrow_window',await e('document.documentElement.scrollWidth<=innerWidth'));
+ await activate(button('移除已处理提案的本地记录'));await activate(button('确认移除本地记录'));
+ await until(`!document.querySelector('textarea[aria-label="已保留的本地审阅记录"]')`);
+ check('removal_only_clears_local_record',count('articles.proposal_decide')===handledWrites&&count('articles.proposal_draft_save')===draftWrites);
+ await activate(button('← 返回对话'));await until(`!document.querySelector('.ice-editor')`);
+ check('navigation_resumes_after_explicit_removal',true);
+ check('body_unaffected_by_remote_record_cleanup',(await rpc('articles.document',{})).markdown===merged.markdown);
+ check('no_renderer_exceptions',s.errors.length===0);report.state='finished';
+}catch(error){report.state='failed';report.error=String(error.stack||error);if(s)try{report.dom=await s.evaluate('document.body.innerText');report.errors=s.errors;}catch{}}
+finally{fs.writeFileSync(f.fault,'{}');if(s)await s.close();save();console.log(JSON.stringify({state:report.state,checks:Object.keys(report.checks).length,root:f.root}));}})();

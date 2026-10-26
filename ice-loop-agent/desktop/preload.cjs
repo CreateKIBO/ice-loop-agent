@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('ice', Object.freeze({
+  sendChat: params => ipcRenderer.invoke('ice:chat-send',params),
   request: (method, params = {}) => ipcRenderer.invoke('ice:request', method, params),
+  openOriginalImage: params => ipcRenderer.invoke('ice:original-image-open', params),
+  releaseOriginalImage: token => ipcRenderer.invoke('ice:original-image-release', token),
   readRules:()=>ipcRenderer.invoke('ice:read-rules'),
   chooseWorkspace:()=>ipcRenderer.invoke('ice:choose-workspace'),
   copyArticle:jobId=>ipcRenderer.invoke('ice:copy-article',jobId),
@@ -18,6 +21,12 @@ contextBridge.exposeInMainWorld('ice', Object.freeze({
   saveKey: (provider, key) => ipcRenderer.invoke('ice:save-key', provider, key),
   openFolder: jobId => ipcRenderer.invoke('ice:open-folder', jobId),
   openHTML: jobId => ipcRenderer.invoke('ice:open-html', jobId),
+  startupState: () => ipcRenderer.invoke('ice:startup-state'),
+  cancelStartup: () => ipcRenderer.invoke('ice:startup-cancel'),
+  onStartupProgress: callback => {const listener=(_event,state)=>callback(state);ipcRenderer.on('ice:startup-progress',listener);return ()=>ipcRenderer.removeListener('ice:startup-progress',listener);},
+  deleteRecoveryPoint: (pointId,recordHash) => ipcRenderer.invoke('ice:delete-recovery-point',pointId,recordHash),
+  openRecoveryFolder: () => ipcRenderer.invoke('ice:open-recovery-folder'),
+  inspectRecoveryPoint: pointId => ipcRenderer.invoke('ice:inspect-recovery-point',pointId),
   createBackup: () => ipcRenderer.invoke('ice:create-backup'),
   inspectBackup: () => ipcRenderer.invoke('ice:inspect-backup'),
   restoreBackup: token => ipcRenderer.invoke('ice:restore-backup',token),

@@ -157,14 +157,15 @@ async function run({window,controller,request,runtime}){
   try{await waitFor(()=>page.view.webContents.getTitle().includes('/start')&&!page.view.webContents.isLoading());}catch(error){throw Error(error.message+' BACK '+JSON.stringify({before:beforeBack,state:controller.state(),requests:result.fixtureRequests}));}result.back=true;
   await evaluate('window.ice.browserCommand("forward")');await waitFor(()=>page.view.webContents.getTitle().includes('/next')&&!page.view.webContents.isLoading());result.forward=true;
   result.invalidURLRejected=await evaluate('window.ice.browserCommand("navigate","file:///G:/secret").then(()=>false,()=>true)');
-  const oldSaveDialog=dialog.showSaveDialog,downloadPath=path.join(runtime,'downloads','browser-proof.txt');fs.mkdirSync(path.dirname(downloadPath),{recursive:true});
-  dialog.showSaveDialog=async(_win,options)=>{assert.ok(options.defaultPath.startsWith(path.join(runtime,'downloads')));return {canceled:false,filePath:downloadPath};};
+  const downloadPath=path.join(runtime,'downloads','browser-proof.txt');fs.mkdirSync(path.dirname(downloadPath),{recursive:true});
+  // Inject only the native save destination, synchronously in will-download.
+  const chooseDownload=(_event,item)=>item.setSavePath(downloadPath);page.session.prependOnceListener('will-download',chooseDownload);
   try{
     const downloaded=new Promise(resolve=>page.session.once('will-download',(_event,item)=>item.once('done',(_event,status)=>resolve(status))));
     await page.view.webContents.executeJavaScript('document.querySelector("#download").click()',true);
     const status=await Promise.race([downloaded,new Promise((_resolve,reject)=>setTimeout(()=>reject(Error('Download timeout')),10000))]);
     result.downloadSaved=status==='completed'&&fs.readFileSync(downloadPath,'utf8')==='isolated browser download evidence';
-  }finally{dialog.showSaveDialog=oldSaveDialog;}
+  }finally{page.session.removeListener('will-download',chooseDownload);}
   const popupPromise=new Promise(resolve=>page.view.webContents.once('did-create-window',resolve));
   await page.view.webContents.executeJavaScript('document.querySelector("#popup").click()',true);
   const popup=await Promise.race([popupPromise,new Promise((_resolve,reject)=>setTimeout(()=>reject(Error('Popup timeout')),10000))]);

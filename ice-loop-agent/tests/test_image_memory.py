@@ -105,3 +105,37 @@ class TestImageDecodeMemory(unittest.TestCase):
                 begin.set();release.set();thread.join(10)
                 if timer is not None:timer.join(2)
         self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+
+
+class TestThumbnailGeometry(unittest.TestCase):
+    def test_all_exif_orientations_preserve_geometry_colors_and_original(self):
+        from PIL import ImageDraw,ImageOps
+        from ice_agent.image_memory import thumbnail_data_url
+        import hashlib
+        root=temp_dir('thumbnail-orientation-')
+        for orientation in range(1,9):
+            with self.subTest(orientation=orientation):
+                file=root/f'{orientation}.png'
+                with Image.new('RGB',(1600,800),'#2448DB') as source:
+                    ImageDraw.Draw(source).rectangle((0,0,799,799),fill='#FF0000')
+                    exif=Image.Exif();exif[274]=orientation;source.save(file,exif=exif)
+                digest=hashlib.sha256(file.read_bytes()).hexdigest()
+                with Image.open(file) as source,ImageOps.exif_transpose(source).convert('RGBA') as expected:
+                    expected.thumbnail((1000,700))
+                    with Image.open(io.BytesIO(base64.b64decode(thumbnail_data_url(file).split(',',1)[1]))) as actual:
+                        self.assertEqual(actual.size,expected.size)
+                        for point in [(20,20),(actual.width-21,20),(20,actual.height-21)]:
+                            self.assertEqual(actual.getpixel(point),expected.getpixel(point))
+                self.assertEqual(hashlib.sha256(file.read_bytes()).hexdigest(),digest)
+    def test_rgb_expansion_is_bounded_and_alpha_survives(self):
+        from ice_agent.image_memory import thumbnail_data_url
+        root=temp_dir('thumbnail-buffers-');file=root/'rgb.png'
+        with Image.new('RGB',(3000,2000),'#2448DB') as source:source.save(file)
+        sizes=[];original=Image.Image.convert
+        def convert(image,*args,**kwargs):sizes.append(image.width*image.height);return original(image,*args,**kwargs)
+        with patch.object(Image.Image,'convert',convert):thumbnail_data_url(file)
+        self.assertTrue(sizes);self.assertLessEqual(max(sizes),1000*700,'RGB original must not expand to full-size RGBA')
+        with Image.new('RGBA',(2000,1000),(12,34,56,0)) as source:
+            source.paste((200,30,40,128),(500,250,1500,750));source.save(file)
+        with Image.open(io.BytesIO(base64.b64decode(thumbnail_data_url(file).split(',',1)[1]))) as actual:
+            self.assertEqual(actual.mode,'RGBA');self.assertEqual(actual.getpixel((0,0))[3],0);self.assertEqual(actual.getpixel((500,250))[3],128)

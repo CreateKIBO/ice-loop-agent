@@ -110,6 +110,9 @@ class TestEditorJourney(unittest.TestCase):
                      'text': '提案替换后的段落内容'}],
             'reason': '测试提案', 'source_turn': 'turn-1'})['proposal']
         self.assertEqual(proposal['status'], 'pending')
+        listed = self._call('articles.proposals_list', {})['proposals']
+        self.assertEqual(listed[0]['base_document'], proposal['base_document'])
+        self.assertNotIn('base_document_json', listed[0])
         # base_revision='current' 不是真实版本：提案时用当前文档哈希校验，允许无 revision 的会话基线
         decision = self._call('articles.proposal_decide', {
             'proposal_id': proposal['proposal_id'],
@@ -243,6 +246,135 @@ class TestEditorJourney(unittest.TestCase):
         revisions_after = self.service.call('articles.revisions', {'job_id': self.job})
         self.assertGreater(len(revisions_after['revisions']), len(revisions_before['revisions']),
                            '恢复产生新版本，不删除后续历史')
+
+
+    def test_proposal_summary_pages_tied_timestamps_and_processed_anchor(self):
+        from ice_agent.editorial import storage as es
+        _, _, store = self.service._job_app(self.job)
+        try:
+            ids = []
+            for i in range(23):
+                p = es.create_edit_proposal(store, 'ice-loop', self.article, 'base', 'hash',
+                    {'blocks': [{'source': 'large' * 10000}]}, [{'text': 'new' * 10000}], str(i), None)
+                ids.append(p['proposal_id'])
+            store.conn.execute("UPDATE edit_proposals SET created_at=? WHERE article_id=?", ('2026-10-23T00:00:00', self.article));store.conn.commit()
+        finally:
+            store.close()
+        seen=[];cursor=None;first=True
+        while True:
+            page=self._call('articles.proposals_page', {'limit':7,'cursor':cursor})
+            self.assertLessEqual(len(page['proposals']),7)
+            for row in page['proposals']:
+                self.assertNotIn('base_document',row);self.assertNotIn('base_document_json',row);self.assertNotIn('ops',row)
+            seen.extend(row['proposal_id'] for row in page['proposals'])
+            cursor=page['next_cursor']
+            if not cursor:break
+            if first:
+                _,_,store=self.service._job_app(self.job)
+                try:es.finish_edit_proposal(store,cursor,'rejected',{})
+                finally:store.close()
+                first=False
+        self.assertEqual(seen,sorted(ids,reverse=True))
+        detail=self._call('articles.proposal_get',{'proposal_id':ids[0]})['proposal']
+        self.assertEqual(detail['base_document']['blocks'][0]['source'],'large'*10000)
+
+    def test_proposal_page_rejects_bad_limits_and_out_of_scope_references(self):
+        from ice_agent.editorial import storage as es
+        _,_,store=self.service._job_app(self.job)
+        try:
+            alien=es.create_edit_proposal(store,'another-account',self.article,'b','h',{'blocks':[]},[],'alien',None)['proposal_id']
+            other=es.create_edit_proposal(store,'ice-loop','another-article','b','h',{'blocks':[]},[],'other',None)['proposal_id']
+        finally:store.close()
+        for limit in [0,51,True,1.5,'20',None]:
+            with self.assertRaises(ValueError):self._call('articles.proposals_page',{'limit':limit})
+        for reference in [alien,other,'missing',True,'']:
+            with self.assertRaises(ValueError):self._call('articles.proposals_page',{'cursor':reference})
+            with self.assertRaises(ValueError):self._call('articles.proposal_get',{'proposal_id':reference})
+        self.assertEqual(self._call('articles.proposals_page',{})['proposals'],[])
+
+
+    def _review_proposal(self):
+        from ice_agent.editorial import block_hashes
+        doc = self._call('articles.document', {})
+        block = next(b for b in doc['document']['blocks'] if b['type'] == 'paragraph')
+        op = {'op': 'replace', 'block_id': block['block_id'],
+              'old_hash': block_hashes(doc['document'])[block['block_id']], 'text': '审阅候选新段落'}
+        return self._call('articles.propose_patch', {'ops': [op], 'base_revision': 'current'})['proposal']
+
+    def _save_review(self, p, items, version=0, **extra):
+        return self._call('articles.proposal_draft_save', {'proposal_id': p['proposal_id'],
+            'base_hash': p['base_hash'], 'decisions': items, 'expected_version': version, **extra})['draft']
+
+    def test_review_draft_restart_no_body_write_and_atomic_retirement(self):
+        p = self._review_proposal()
+        before = self._call('articles.document', {})
+        self._call('articles.editor_draft_save', {'content': '独立正文草稿', 'base_revision': None})
+        items = [{'op_index': 0, 'decision': 'new_text', 'text': ''}]
+        saved = self._save_review(p, items)
+        self.assertEqual(saved['version'], 1)
+        self.assertEqual(self._save_review(p, items), saved, '重复/回执丢失重试不产生新版本')
+        self.service.close()
+        self.service = DesktopService(REPO, self.root / 'runtime', self.root / 'articles')
+        restored = self._call('articles.proposal_get', {'proposal_id': p['proposal_id']})['review_draft']
+        self.assertEqual(restored['decisions'], items, '允许保存尚未写完的手改文字')
+        self.assertEqual(self._call('articles.document', {})['markdown'], before['markdown'])
+        self.assertEqual(self._call('articles.editor_draft_get', {})['draft']['content'], '独立正文草稿')
+        with self.assertRaises(ValueError):
+            self._call('articles.proposal_decide', {'proposal_id': p['proposal_id'], 'decisions': items})
+        self.assertIsNotNone(self._call('articles.proposal_get', {'proposal_id': p['proposal_id']})['review_draft'])
+        self._call('articles.proposal_decide', {'proposal_id': p['proposal_id'],
+                    'decisions': [{'op_index': 0, 'decision': 'reject'}]})
+        self.assertIsNone(self._call('articles.proposal_get', {'proposal_id': p['proposal_id']})['review_draft'])
+        _, _, store = self.service._job_app(self.job)
+        try:
+            self.assertEqual(store.conn.execute('SELECT COUNT(*) FROM proposal_decision_drafts').fetchone()[0], 0)
+        finally:
+            store.close()
+        with self.assertRaises(ValueError):
+            self._save_review(p, items, 1)
+
+    def test_review_draft_validates_scope_baseline_shape_and_versions(self):
+        from ice_agent.editorial.storage import save_proposal_decision_draft, get_proposal_decision_draft
+        p = self._review_proposal()
+        accept = [{'op_index': 0, 'decision': 'accept'}]
+        self._save_review(p, accept)
+        with self.assertRaises(ValueError):
+            self._save_review(p, [{'op_index': 0, 'decision': 'reject'}], 0)
+        for bad in [[{'op_index': True, 'decision': 'accept'}],
+                    [{'op_index': -1, 'decision': 'reject'}],
+                    [{'op_index': 1, 'decision': 'accept'}],
+                    [{'op_index': 0, 'decision': 'new_text', 'text': 'x' * 20001}],
+                    [{'op_index': 0, 'decision': 'bad'}], {}, None]:
+            with self.subTest(bad=str(bad)[:90]), self.assertRaises(ValueError):
+                self._save_review(p, bad, 1)
+        with self.assertRaises(ValueError):
+            self._save_review(p, accept, 1, base_hash='wrong')
+        with self.assertRaises(ValueError):
+            self._save_review(p, accept, True)
+        _, _, store = self.service._job_app(self.job)
+        try:
+            for account, article in [('other', self.article), ('ice-loop', 'other')]:
+                self.assertIsNone(get_proposal_decision_draft(store, account, article, p['proposal_id']))
+                with self.assertRaises(ValueError):
+                    save_proposal_decision_draft(store, account, article, p['proposal_id'], p['base_hash'], [], 0)
+        finally:
+            store.close()
+        self.assertEqual(self._save_review(p, [], 1)['version'], 2)
+        with self.assertRaises(ValueError):
+            self._call('articles.proposal_decide', {'proposal_id': p['proposal_id'], 'review_version': 1,
+                'decisions': [{'op_index': 0, 'decision': 'accept'}]})
+        self.assertEqual(self._call('articles.proposal_get', {'proposal_id': p['proposal_id']})['proposal']['status'], 'pending')
+
+    def test_submission_rejects_duplicate_boolean_missing_indices_and_oversized_text(self):
+        from ice_agent.editorial.storage import validate_proposal_decisions
+        for items in [[{'op_index': 0, 'decision': 'accept'}] * 2,
+                      [{'op_index': True, 'decision': 'accept'}],
+                      [{'decision': 'reject'}],
+                      [{'op_index': 0, 'decision': 'new_text', 'text': 'x' * 20001}]]:
+            with self.subTest(items=str(items)[:80]), self.assertRaises(ValueError):
+                validate_proposal_decisions(items, len(items), complete=True)
+        self.assertEqual(validate_proposal_decisions([
+            {'op_index': 1, 'decision': 'reject'}, {'op_index': 0, 'decision': 'accept'}], 2, complete=True)[0]['op_index'], 0)
 
 
 if __name__ == '__main__':

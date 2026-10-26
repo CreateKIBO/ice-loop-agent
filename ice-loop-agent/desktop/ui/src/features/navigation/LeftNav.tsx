@@ -4,19 +4,22 @@ import * as React from "react";
 import { useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
-import { Button, Dialog, EmptyState, Input, SkeletonRows, Spinner } from "../../components/ui";
+import { Button, Dialog, EmptyState, FilteredEmpty, Input, SkeletonRows, Spinner } from "../../components/ui";
+import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { applyAccountBootstrap,createConversation,openGettingStarted } from "../../data/actions";
+import { refreshAfterWrite } from "../../data/receipts";
 import {
   accountStore, conversationStore, editorStore, flushAllDirty, queryClient,
-  rpc, useAccountQuery, type RpcError,
+  rpc, useAccountQuery, useCurrentAccount,
 } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
-import { useBootstrap,useModelReadiness } from "../../app/ModelSettings";
-import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore } from "../../app/uiState";
+import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
+import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,shortcutHelpStore } from "../../app/uiState";
 import { CopyButton } from "../../components/CopyButton";
 import { openWebsite } from '../../data/websites';
 import { MarkdownContent } from "../../components/MarkdownContent";
+import { focusAfterRowRemoval } from "../../components/focusRestore";
 import { usePaneActive } from "../../app/PaneActivity";
 
 type BootstrapAccount = { id: string; name: string };
@@ -46,8 +49,8 @@ export function shortTime(iso: string | undefined, now = new Date()): string {
 }
 
 // 归档/删除/恢复会影响多个视图（最近、归档、回收站各是一个查询），统一按前缀失效。
-const refreshConversationLists = () =>
-  queryClient.invalidateQueries({ queryKey: ["ice", accountStore.get(), "chat.list"] });
+const refreshConversationLists = (account = accountStore.get()) =>
+  queryClient.invalidateQueries({ queryKey: ["ice", account, "chat.list"] }, { throwOnError: true });
 
 export function LeftNav({ accounts, activeAccountId, version }: {
   accounts: BootstrapAccount[]; activeAccountId: string; version?: string;
@@ -95,7 +98,8 @@ export function LeftNav({ accounts, activeAccountId, version }: {
       <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
       <div style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)" }}>
         <Button variant="primary" loading={creating} disabled={creating} onClick={newConversation}>新建会话</Button>
-        {createError && <div role="alert" style={{ color: "var(--ice-danger)", marginTop: 8 }}>{createError}</div>}
+        {createError && <ErrorNote error={createError} note="没有创建任何会话，可安全重试（同一请求键不会建出两个会话）。"
+                                  onRetry={newConversation} retryLabel="重试新建" />}
       </div>
       <div style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)", display: "grid", gap: "var(--ice-space-2)" }}>
         <Input placeholder="搜索会话或草稿" value={filter} type="search"
@@ -121,17 +125,18 @@ export function LeftNav({ accounts, activeAccountId, version }: {
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, padding: "0 var(--ice-space-2)" }}>
         {conversations.isLoading && <SkeletonRows rows={6} height={16} />}
         {conversations.error && (
-          <BannerLike title="会话列表加载失败"
-                      detail={(conversations.error as RpcError).message}
-                      onRetry={() => conversations.refetch()} />
+          <div style={{ padding: "var(--ice-space-2)" }}>
+            <ErrorNote error={conversations.error} note="会话本身未受影响。"
+                       onRetry={() => conversations.refetch()} retryLabel="重新加载列表" />
+          </div>
         )}
         {!conversations.isLoading && !conversations.error && filtered.length === 0 && (
           filter.trim()
-            ? <EmptyState title="没有匹配的会话" hint={`没有标题包含「${filter.trim()}」的会话。`} />
+            ? <FilteredEmpty filterLabel={`标题包含「${filter.trim()}」`} onClear={() => setFilter("")} />
             : <EmptyState title={showDeleted ? "回收站是空的" : showArchived ? "没有归档会话" : "还没有会话"}
                           hint={showArchived || showDeleted ? undefined : "点击上方「新建会话」开始讨论或初稿。"} />
         )}
-        <ul className="ice-nav-list">
+        <ul className="ice-nav-list" tabIndex={-1} aria-label="会话列表，行被移除后焦点落到相邻会话">
           <AnimatePresence initial={false} mode="popLayout">
             {filtered.map(row => (
               <motion.li key={row.id} layout="position"
@@ -147,7 +152,7 @@ export function LeftNav({ accounts, activeAccountId, version }: {
       <SectionTitle>草稿箱 <span className="ice-nav-count">{filteredDrafts.length}</span></SectionTitle>
       <div style={{ flexShrink: 0, maxHeight: 200, overflowY: "auto", padding: "0 var(--ice-space-2) var(--ice-space-2)" }}>
         {drafts.isLoading && <SkeletonRows rows={2} height={12} gap={8} />}
-        {drafts.error && <div role="alert" className="ice-error-text">草稿加载失败 <button className="ice-link-btn" onClick={() => drafts.refetch()}>重试</button></div>}
+        {drafts.error && <ErrorNote error={drafts.error} onRetry={() => drafts.refetch()} retryLabel="重新加载草稿" />}
         {!drafts.isLoading && !drafts.error && filteredDrafts.length === 0 && (
           <div style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)", padding: "0 4px" }}>
             {filter.trim() ? "没有匹配的草稿。" : "在对话中保存初稿后会出现在这里，保存不等于采纳。"}
@@ -186,6 +191,7 @@ function NavFooter({ version }: { version?: string }) {
       <Button variant="ghost" size="sm" onClick={() => openWebsite('tapnow')}>网页工作台</Button>
       <Button variant="ghost" size="sm" onClick={()=>editorialStore.set(true)}>选题与排期</Button>
       <Button variant="ghost" size="sm" onClick={()=>backupSettingsStore.set(true)}>备份与恢复</Button>
+      <Button variant="ghost" size="sm" onClick={()=>shortcutHelpStore.set(true)}>使用帮助</Button>
       <Button variant="ghost" size="sm" title="切换到经典界面：更多管理工具"
               onClick={() => switchToClassic().catch(error =>
                 toast.error({ title: "无法切换界面", detail: (error as Error).message }))}>
@@ -197,42 +203,52 @@ function NavFooter({ version }: { version?: string }) {
   );
 }
 
-type RowFeedback = { title: string; undo?: () => Promise<unknown> };
+type RowFeedback = { title: string; undo?: (account: string) => Promise<unknown> };
 
 function ConversationRow({ row, showArchived }: { row: ConversationRow; showArchived: boolean }) {
+  const account = useCurrentAccount();
   const current = useSyncExternalStore(conversationStore.subscribe, conversationStore.get);
   const selected = current === row.id;
   const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const busyRef = React.useRef(false); // 2026-10-20：同 tick 连点绕过 state 闭包（与重命名同缺陷），ref 双闸
+  const [error, setError] = React.useState<unknown>(null);
+  const rowRef = React.useRef<HTMLDivElement>(null);
   const act = async (method: string, params: Record<string, unknown>, feedback: RowFeedback) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     const wasSelected = selected;
     try {
       await flushAllDirty(); // 删除/归档前落盘编辑器
-      await rpc(method, params);
-      if (wasSelected) conversationStore.set(null);
-      await refreshConversationLists();
+      if (accountStore.get() !== account) throw Error("公众号已切换，请在原公众号操作");
+      await rpc(method, { ...params, account_id: account });
+      if (accountStore.get() === account && conversationStore.get() === row.id) conversationStore.set(null);
+      focusAfterRowRemoval(rowRef.current, ".ice-nav-row__main");
       const undo = feedback.undo;
       toast.success({
         title: feedback.title,
         action: undo ? {
           label: "撤销",
           run: async () => {
-            await undo();
-            await refreshConversationLists();
-            if (wasSelected) { editorStore.set(null); conversationStore.set(row.id); }
+            if (accountStore.get() !== account) throw Error("请先切回原公众号再撤销");
+            await flushAllDirty();
+            if (accountStore.get() !== account) throw Error("公众号已切换，已取消撤销");
+            await undo(account);
+            await refreshAfterWrite("撤销", () => refreshConversationLists(account));
+            if (wasSelected && accountStore.get() === account) { editorStore.set(null); conversationStore.set(row.id); }
           },
         } : undefined,
       });
-    } catch (error) { setError((error as Error).message); }
-    finally { setBusy(false); }
+      // 写已成功；列表刷新失败只提示刷新，不冒充归档/删除失败（批次A-04）。
+      await refreshAfterWrite(feedback.title, () => refreshConversationLists(account));
+    } catch (error) { setError(error); }
+    finally { busyRef.current = false; setBusy(false); }
   };
   const id = { conversation_id: row.id };
   return (
     <>
-      <div className={"ice-nav-row" + (selected ? " ice-nav-row--selected" : "") + (busy ? " ice-nav-row--busy" : "")}>
+      <div ref={rowRef} className={"ice-nav-row" + (selected ? " ice-nav-row--selected" : "") + (busy ? " ice-nav-row--busy" : "")}>
         <button
           type="button"
           className="ice-nav-row__main"
@@ -253,10 +269,10 @@ function ConversationRow({ row, showArchived }: { row: ConversationRow; showArch
             <>
               <RowAction label="归档" title={`归档「${row.title}」，可在「归档」中恢复`}
                          onClick={() => act("chat.update", { ...id, archived: true }, {
-                           title: "已归档会话", undo: () => rpc("chat.update", { ...id, archived: false }) })} />
+                           title: "已归档会话", undo: account => rpc("chat.update", { ...id, account_id: account, archived: false }) })} />
               <RowAction label="删除" title={`把「${row.title}」移入回收站，可还原`}
                          onClick={() => act("chat.delete", id, {
-                           title: "已移入回收站", undo: () => rpc("chat.restore", id) })} />
+                           title: "已移入回收站", undo: account => rpc("chat.restore", { ...id, account_id: account }) })} />
             </>
           ) : (
             <RowAction label={row.deleted ? "还原" : "恢复"} title={`恢复「${row.title}」到最近会话`}
@@ -265,7 +281,8 @@ function ConversationRow({ row, showArchived }: { row: ConversationRow; showArch
           )}
         </div>
       </div>
-      {error && <div role="alert" className="ice-error-text" style={{ padding: "2px var(--ice-space-2)" }}>{error}</div>}
+      {error != null && <div style={{ padding: "2px var(--ice-space-2)" }}>
+        <ErrorNote error={error} note="操作未生效，当前列表保持原状。" /></div>}
     </>
   );
 }
@@ -296,9 +313,8 @@ function DraftRowView({ draft }: { draft: DraftRow }) {
           状态：{statusLabel} · 草稿保存在草稿库，不等于采纳或发布。
           {draft.series ? ` · ${draft.series}${draft.episode ? `-${String(draft.episode).padStart(3, "0")}` : ""}` : ""}
         </p>
-        {detail.isLoading ? <SkeletonRows rows={5} /> : detail.error ? <div role="alert" className="ice-error-text">
-          读取失败：{(detail.error as RpcError).message} <Button size="sm" onClick={() => detail.refetch()}>重试</Button>
-        </div> : <>
+        {detail.isLoading ? <SkeletonRows rows={5} /> : detail.error ? <ErrorNote error={detail.error}
+          onRetry={() => detail.refetch()} retryLabel="重新读取草稿" /> : <>
           <div className="ice-draft-view-controls"><div className="ice-segmented" role="group" aria-label="草稿阅读模式">
             <button type="button" aria-pressed={!source} onClick={() => setSource(false)}>排版预览</button>
             <button type="button" aria-pressed={source} onClick={() => setSource(true)}>Markdown</button>
@@ -315,7 +331,7 @@ function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }
   accounts: BootstrapAccount[]; activeAccountId: string;
 }) {
   const [switching, setSwitching] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const boot=useBootstrap().data;
   const current=useSyncExternalStore(accountStore.subscribe,accountStore.get);
   const accounts=boot?.accounts??initialAccounts,activeAccountId=current||initialId;
@@ -335,10 +351,17 @@ function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }
             // R04：切换前把全部脏对象（编辑器草稿）立即落盘到当前账号域。
             await flushAllDirty();
             const result=await rpc<{account:{id:string}}>("accounts.switch", { account_id: nextId });
-            // 整体清缓存 + 更新账号域（防串公众号）。
-            if(accountStore.get()===activeAccountId)applyAccountBootstrap(result);
+            // 整体清缓存 + 更新账号域（防串公众号）。切换已在服务端完成，
+            // 本地引导失败只提示刷新视图，不回滚成"账号未切换"（批次A-04）。
+            try {
+              if(accountStore.get()===activeAccountId)applyAccountBootstrap(result);
+            } catch (bootstrapError) {
+              toast.warning({ title: "账号已切换，界面数据刷新失败",
+                detail: (bootstrapError as Error).message,
+                action: { label: "重试刷新", run: () => applyAccountBootstrap(result) } });
+            }
           } catch (error) {
-            setError((error as Error).message);
+            setError(error);
           } finally {
             setSwitching(false);
           }
@@ -353,7 +376,7 @@ function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }
         ))}
       </select>
       <Button variant="ghost" size="sm" disabled={switching} onClick={()=>publicationSettingsStore.set(true)}>公众号与品牌</Button>
-      {error && <div role="alert" style={{ color: "var(--ice-danger)", fontSize: 12 }}>{error}</div>}
+      {error != null && <ErrorNote error={error} note="账号未切换，当前账号数据保持不变。" />}
     </div>
   );
 }
@@ -364,18 +387,5 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       margin: "var(--ice-space-2) var(--ice-space-3)", fontSize: "var(--ice-font-size-sm)",
       color: "var(--ice-text-secondary)", fontWeight: 600, textTransform: "none",
     }}>{children}</h2>
-  );
-}
-
-function BannerLike({ title, detail, onRetry }: { title: string; detail: string; onRetry?: () => void }) {
-  return (
-    <div role="alert" style={{
-      margin: "var(--ice-space-2)", padding: "var(--ice-space-2) var(--ice-space-3)",
-      background: "var(--ice-danger-bg)", borderRadius: "var(--ice-radius-md)", fontSize: "var(--ice-font-size-sm)",
-    }}>
-      <strong>{title}</strong>
-      <div style={{ color: "var(--ice-text-secondary)" }}>{detail}</div>
-      {onRetry && <button type="button" className="ice-link-btn" style={{ marginTop: 4 }} onClick={onRetry}>重试</button>}
-    </div>
   );
 }
