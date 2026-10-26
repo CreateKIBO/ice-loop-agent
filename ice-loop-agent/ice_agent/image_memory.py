@@ -23,8 +23,12 @@ def serialized_image_decode(function):
 def thumbnail_data_url(path):
     from PIL import Image, ImageOps
     with Image.open(path) as source:
-        with ImageOps.exif_transpose(source).convert('RGBA') as image:
-            image.thumbnail((1000,700))
-            output = io.BytesIO()
-            image.save(output,format='PNG')
+        # Resize before copying/expanding full-size pixels. JPEG thumbnail() can also
+        # use decoder draft scaling while the source remains lazily opened.
+        orientation = source.getexif().get(274, 1)
+        source.thumbnail((700, 1000) if orientation in (5, 6, 7, 8) else (1000, 700))
+        with ImageOps.exif_transpose(source) as oriented:
+            with oriented.convert('RGBA') as image:
+                output = io.BytesIO()
+                image.save(output,format='PNG')
     return 'data:image/png;base64,'+base64.b64encode(output.getvalue()).decode('ascii')

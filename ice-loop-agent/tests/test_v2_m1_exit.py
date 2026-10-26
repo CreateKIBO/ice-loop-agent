@@ -44,17 +44,30 @@ class TestProtocolSubprocess(unittest.TestCase):
                 except ValueError:
                     pass
             cls.reader_done.set()
-        threading.Thread(target=pump, daemon=True).start()
+        cls.reader_thread = threading.Thread(target=pump, daemon=True)
+        cls.reader_thread.start()
 
     @classmethod
     def tearDownClass(cls):
         try:
             cls.proc.stdin.close()
-            cls.proc.wait(timeout=15)
-        except Exception:
-            cls.proc.kill()
-        if cls.proc.stderr:
-            cls.proc.stderr.close()
+            try:
+                cls.proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                cls.proc.kill()
+                cls.proc.wait(timeout=5)
+        finally:
+            if cls.proc.poll() is None:
+                cls.proc.kill()
+                cls.proc.wait(timeout=5)
+            cls.reader_thread.join(timeout=5)
+            for pipe in (cls.proc.stdin, cls.proc.stdout, cls.proc.stderr):
+                if pipe and not pipe.closed:
+                    pipe.close()
+        if cls.reader_thread.is_alive() or not cls.reader_done.is_set():
+            raise AssertionError('协议读取线程未释放')
+        if any(not pipe.closed for pipe in (cls.proc.stdin, cls.proc.stdout, cls.proc.stderr)):
+            raise AssertionError('协议子进程管道未释放')
 
     def _rpc(self, request: dict, timeout: float = 60) -> dict:
         rid = request.get('id')

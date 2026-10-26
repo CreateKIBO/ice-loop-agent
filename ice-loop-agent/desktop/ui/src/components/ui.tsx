@@ -6,6 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { registerToastHost } from './toastHost';
+import { ActivityRail } from './ActivityRail';
 
 import "../styles/tokens.css";
 import "../styles/base.css";
@@ -34,7 +35,7 @@ export function Button({ variant = "secondary", loading = false, size = "md", di
       disabled={disabled || loading}
       aria-busy={loading || undefined}
     >
-      {loading && <Spinner size={12} />}
+      {loading && <ActivityRail compact />}
       {children}
     </button>
   );
@@ -121,6 +122,17 @@ export function EmptyState({ title, hint, action }: { title: string; hint?: stri
   );
 }
 
+/** 筛选无结果（批次1-02）：与“本来没有数据”区分——文案说明是筛选条件导致，
+ *  并提供清除筛选入口；不用于真正的空库空态。 */
+export function FilteredEmpty({ filterLabel, onClear }: { filterLabel: string; onClear: () => void }) {
+  return (
+    <EmptyState
+      title="没有匹配的结果"
+      hint={`当前筛选条件（${filterLabel}）下没有内容；数据本身可能仍在。`}
+      action={<Button variant="ghost" onClick={onClear}>清除筛选</Button>} />
+  );
+}
+
 /** 列表加载占位：保留列表的大致形状，避免内容出现时整块跳动。 */
 export function SkeletonRows({ rows = 4, height = 14, gap = 12 }: { rows?: number; height?: number; gap?: number }) {
   return (
@@ -141,22 +153,38 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
   className?: string;
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const returnFocus = React.useRef<HTMLElement | null>(null);
   const notificationCleanup = React.useRef<(() => void) | undefined>(undefined);
   const notificationRef = React.useCallback((node: HTMLDivElement | null) => {
     notificationCleanup.current?.();
     notificationCleanup.current = node ? registerToastHost(node) : undefined;
   }, []);
   const focusInitial = (event: Event) => {
+    // These controlled dialogs have no Radix Trigger. Retain the actual opener.
+    const active = document.activeElement;
+    returnFocus.current = active instanceof HTMLElement && active !== document.body && !contentRef.current?.contains(active) ? active : null;
     const target = initialFocus ? contentRef.current?.querySelector<HTMLElement>(initialFocus) : null;
     if (!target) return;
     event.preventDefault();
     target.focus();
   };
+  const restoreFocus = (event: Event) => {
+    // Radix's modal default only focuses its Trigger, which this wrapper does not render.
+    event.preventDefault();
+    const target = returnFocus.current;
+    returnFocus.current = null;
+    if (!target?.isConnected || target.matches(':disabled') || target.closest('[inert]')) return;
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][data-state="open"]'));
+    const top = dialogs.filter(node => node !== contentRef.current).at(-1);
+    // A close-and-open navigation must leave the new dialog in control of focus.
+    if (top && !top.contains(target)) return;
+    target.focus({ preventScroll: true });
+  };
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="ice-dialog-overlay" />
-        <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial}
+        <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial} onCloseAutoFocus={restoreFocus}
                                  className={'ice-dialog' + (className ? ' ' + className : '')} style={{ width: `min(${width}px, calc(100vw - 48px))` }}
                                  {...(description ? {} : { "aria-describedby": undefined })}>
           <DialogPrimitive.Title style={{ margin: 0, fontSize: "var(--ice-font-size-lg)",

@@ -46,6 +46,7 @@ function tsType(node, rootSchema, indent) {
       });
       const allowExtra = node.additionalProperties === true || node.additionalProperties === undefined;
       if (allowExtra && lines.length === 0) return "Record<string, unknown>";
+      if (typeof node.additionalProperties === "object" && lines.length === 0) return `Record<string, ${tsType(node.additionalProperties, rootSchema, indent)}>`;
       const extra = allowExtra ? `${indent}  [key: string]: unknown;` : "";
       return `{\n${[...lines, extra].filter(Boolean).join("\n")}\n${indent}}`;
     }

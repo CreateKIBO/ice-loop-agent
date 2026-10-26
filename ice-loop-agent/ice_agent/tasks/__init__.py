@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from datetime import timedelta
 from typing import Any, Callable
@@ -62,8 +63,20 @@ class TaskQueue:
                 if row:
                     existing = self._row(row)
                     if existing["input_hash"] != input_hash:
-                        raise TaskInputConflict(
-                            "相同幂等键但输入不同：请更换 key 或确认输入一致")
+                        # Historical queues used str(hash(JSON)): a salted signed
+                        # integer, not a stable digest. Promote only a known old
+                        # format AND an identical stored payload in this domain.
+                        legacy = (isinstance(existing["input_hash"], str)
+                                  and re.fullmatch(r"-?[0-9]{1,20}", existing["input_hash"]) is not None)
+                        if not legacy or canonical_input_hash(existing["payload"]) != input_hash:
+                            raise TaskInputConflict(
+                                "相同幂等键但输入不同：请更换 key 或确认输入一致")
+                        changed = self.store.conn.execute(
+                            "UPDATE tasks SET input_hash=? WHERE task_id=? AND input_hash=?",
+                            (input_hash, existing["task_id"], existing["input_hash"]))
+                        if changed.rowcount != 1:
+                            raise TaskInputConflict("任务输入已在别处更新，请刷新后重试")
+                        existing["input_hash"] = input_hash
                     return existing
             task_id = task_id or f"task-{uuid.uuid4().hex[:20]}"
             self.store.conn.execute(

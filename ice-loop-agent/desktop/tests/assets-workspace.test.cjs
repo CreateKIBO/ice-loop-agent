@@ -93,3 +93,12 @@ test('original requests are explicitly scoped and cannot reuse the thumbnail res
  assert.equal(previewRequest(target,true).params.account_id,'account-a');
  assert.equal(previewRequest({kind:'resource',accountId:'b',resourceId:'r',caption:''},true).method,'resources.preview');
 });
+
+test('binary original leases preserve bytes and revoke without base64 expansion',async()=>{
+ const bytes=new Uint8Array([137,80,78,71,13,10,26,10]);
+ const lease=imageLease(new Blob([bytes],{type:'image/png'}));
+ assert.deepEqual(new Uint8Array(await (await fetch(lease.url)).arrayBuffer()),bytes);
+ lease.release();lease.release();await assert.rejects(fetch(lease.url));
+ assert.throws(()=>imageLease(new Blob(['bad'],{type:'text/html'})));
+ assert.throws(()=>imageLease(new Blob([],{type:'image/png'})));
+});

@@ -4,7 +4,7 @@ const {openNativeSession,wait}=require('./native-session.cjs');
 const repo=path.resolve(__dirname,'../..'),out=path.join(repo,'docs/上线准备');
 const fixture=JSON.parse(fs.readFileSync(path.join(out,'chat-window-fixture.json'),'utf8'));
 const attempt=path.join(out,'chat-window-attempts',path.basename(path.dirname(fixture.runtime))+'-'+Date.now());fs.mkdirSync(attempt,{recursive:true});
-const result={fixture,attempt,checks:{},samples:[],errors:[]};let session;
+const result={state:'running',runtime:fixture.runtime,fixture,attempt,checks:{},samples:[],errors:[]};let session;
 function check(name,value){result.checks[name]=Boolean(value);if(!value)throw Error('Failed: '+name);}
 const expr=value=>JSON.stringify(value);
 (async()=>{
@@ -110,5 +110,5 @@ const expr=value=>JSON.stringify(value);
   check('payload_reduction_over_95_percent',fixture.comparison.bounded.bytes<fixture.comparison.legacy.bytes*0.05);
   check('no_javascript_errors',session.errors.length===0);result.success=true;
  }catch(error){result.errors.push(error.stack);result.success=false;try{if(session){result.failureGeometry=await session.evaluate(`(()=>{const n=document.querySelector('.ice-chat-log');return n?{height:n.scrollHeight,top:n.scrollTop,viewport:n.clientHeight,rows:[...n.querySelectorAll('[data-message-id]')].map(e=>({id:e.dataset.messageId,height:e.offsetHeight})),alerts:[...document.querySelectorAll('[role=alert]')].map(e=>e.innerText)}:null;})()`);const shot=await session.call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(attempt,'failure.png'),Buffer.from(shot.data,'base64'));}}catch{}}
- finally{if(session){result.errors.push(...session.errors);await session.close();}fs.writeFileSync(path.join(attempt,'result.json'),JSON.stringify(result,null,2));fs.writeFileSync(path.join(out,'chat-window-native.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({success:result.success,checks:result.checks,errors:result.errors,attempt}));if(!result.success)process.exitCode=1;}
+ finally{result.state='finished';if(session){result.errors.push(...session.errors);await session.close();}fs.writeFileSync(path.join(attempt,'result.json'),JSON.stringify(result,null,2));fs.writeFileSync(path.join(out,'chat-window-native.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({success:result.success,checks:result.checks,errors:result.errors,attempt}));if(!result.success)process.exitCode=1;}
 })().catch(error=>{console.error(error);process.exitCode=1;});

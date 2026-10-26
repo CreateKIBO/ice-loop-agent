@@ -7,6 +7,8 @@ SQL 全部在 storage 或本文件且全字面量+参数绑定。
 from __future__ import annotations
 
 import json
+import os
+import stat
 import re
 import uuid
 from hashlib import sha256
@@ -226,30 +228,50 @@ _ALLOWED_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpe
                   ".webp": "image/webp"}
 
 
-def stage_download(store, account_id: str, file_path: str, *,
-                   origin_url: str = "") -> dict[str, Any]:
-    """下载进待归档箱：校验 MIME magic 与扩展匹配，不确定图位前不生成就绪候选。"""
-    path = Path(file_path)
+MAX_DOWNLOAD_BYTES = 32 * 1024 * 1024
+DOWNLOAD_READ_CHUNK = 1024 * 1024
+
+
+def _download_metadata(path: Path) -> tuple[str, int, str]:
+    """Validate and hash one open file with bounded buffers, never read_bytes()."""
     if not path.is_file():
         raise ValueError("下载文件不存在")
-    raw = path.read_bytes()[:32]
-    if len(raw) < 8:
-        raise ValueError("文件过小，不像有效图片")
-    magic_png = raw[:8] == b"\x89PNG\r\n\x1a\n"
-    magic_jpg = raw[:2] == b"\xff\xd8"
-    magic_webp = raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
-    suffix = path.suffix.lower()
-    mime = _ALLOWED_MEDIA.get(suffix, "")
-    if mime == "image/png" and not magic_png:
-        raise ValueError("扩展名与文件内容不符（PNG magic 缺失）")
-    if mime in ("image/jpeg",) and not magic_jpg:
-        raise ValueError("扩展名与文件内容不符（JPEG magic 缺失）")
-    if mime == "image/webp" and not magic_webp:
-        raise ValueError("扩展名与文件内容不符（WebP magic 缺失）")
-    if not mime:
-        raise ValueError("只接受 png/jpg/webp 下载归档")
-    data = path.read_bytes()
-    file_hash = sha256(data).hexdigest()
+    with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("只接受普通图片文件")
+        if before.st_size > MAX_DOWNLOAD_BYTES:
+            raise ValueError("下载图片超过 32MB，请压缩后重新导入")
+        raw = stream.read(32)
+        if len(raw) < 8:
+            raise ValueError("文件过小，不像有效图片")
+        mime = _ALLOWED_MEDIA.get(path.suffix.lower(), "")
+        if mime == "image/png" and raw[:8] != b"\x89PNG\r\n\x1a\n":
+            raise ValueError("扩展名与文件内容不符（PNG magic 缺失）")
+        if mime == "image/jpeg" and raw[:2] != b"\xff\xd8":
+            raise ValueError("扩展名与文件内容不符（JPEG magic 缺失）")
+        if mime == "image/webp" and not (raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"):
+            raise ValueError("扩展名与文件内容不符（WebP magic 缺失）")
+        if not mime:
+            raise ValueError("只接受 png/jpg/webp 下载归档")
+        digest = sha256(raw)
+        size = len(raw)
+        while chunk := stream.read(DOWNLOAD_READ_CHUNK):
+            size += len(chunk)
+            if size > MAX_DOWNLOAD_BYTES:
+                raise ValueError("下载图片超过 32MB，请压缩后重新导入")
+            digest.update(chunk)
+        after = os.fstat(stream.fileno())
+        if size != before.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            raise ValueError("下载文件在读取时发生变化，请重新导入")
+        return mime, size, digest.hexdigest()
+
+
+def stage_download(store, account_id: str, file_path: str, *,
+                   origin_url: str = "") -> dict[str, Any]:
+    """下载进待归档箱：有界 MIME/hash 校验，不确定图位前不生成就绪候选。"""
+    path = Path(file_path)
+    mime, size, file_hash = _download_metadata(path)
     download_id = new_id("dl")
     with store.transaction():
         dup = store.conn.execute(
@@ -261,10 +283,10 @@ def stage_download(store, account_id: str, file_path: str, *,
         store.conn.execute(
             "INSERT INTO download_staging (download_id, account_id, file_path, file_sha256,"
             " mime, size, origin_url, status, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (download_id, account_id, str(path), file_hash, mime, len(data),
+            (download_id, account_id, str(path), file_hash, mime, size,
              origin_url[:300], "pending", now_iso()))
     return {"download_id": download_id, "deduped": False, "status": "pending",
-            "mime": mime, "size": len(data), "file_sha256": file_hash}
+            "mime": mime, "size": size, "file_sha256": file_hash}
 
 
 def bind_download(store, runtime, account_id: str, download_id: str,

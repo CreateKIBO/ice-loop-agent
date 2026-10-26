@@ -80,23 +80,28 @@ function lcsDiff(a: string[], b: string[]): DiffPart[] {
 }
 
 export function inlineDiff(before: string, after: string): InlineDiff {
-  const a = Array.from(before), b = Array.from(after);
-  // 先剥掉公共前后缀：提案通常只改段落中间几处，DP 规模会小很多。
+  // Strip shared UTF-16 ranges before allocating code-point arrays. Very large
+  // shared prefixes/suffixes should stay strings rather than millions of entries.
   let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) start++;
-  let endA = a.length, endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  // A differing low surrogate may leave the shared high surrogate at the boundary.
+  if (start > 0 && /[\uD800-\uDBFF]/.test(before[start - 1])) start--;
+  let endA = before.length, endB = after.length;
+  while (endA > start && endB > start && before[endA - 1] === after[endB - 1]) { endA--; endB--; }
+  if (endA < before.length && /[\uDC00-\uDFFF]/.test(before[endA])) { endA++; endB++; }
 
-  const middleA = a.slice(start, endA), middleB = b.slice(start, endB);
-  const truncated = middleA.length * middleB.length > MAX_CELLS;
+  const textA = before.slice(start, endA), textB = after.slice(start, endB);
+  // UTF-16 lengths bound code-point count from above. Refuse a large allocation
+  // conservatively, even when its DP cell product would be small (e.g. insertion).
+  const truncated = textA.length > 20000 || textB.length > 20000 || textA.length * textB.length > MAX_CELLS;
   const middle = truncated
-    ? [{ kind: "del" as const, text: middleA.join("") }, { kind: "add" as const, text: middleB.join("") }]
-    : lcsDiff(middleA, middleB);
+    ? [{ kind: "del" as const, text: textA }, { kind: "add" as const, text: textB }]
+    : lcsDiff(Array.from(textA), Array.from(textB));
 
   const parts = glueShortEqualities(merge([
-    { kind: "same", text: a.slice(0, start).join("") },
+    { kind: "same", text: before.slice(0, start) },
     ...middle,
-    { kind: "same", text: a.slice(endA).join("") },
+    { kind: "same", text: before.slice(endA) },
   ]));
   return {
     before: parts.filter(part => part.kind !== "add"),

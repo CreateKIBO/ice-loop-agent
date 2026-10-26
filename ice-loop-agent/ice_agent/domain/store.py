@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -242,31 +242,34 @@ class Store:
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.conn = sqlite3.connect(str(self.db_path))
-        self.conn.row_factory = sqlite3.Row
-        from ..migrations import MAX_KNOWN_VERSION, run_migrations
-        schema_version=self.conn.execute('PRAGMA user_version').fetchone()[0]
-        if schema_version>MAX_KNOWN_VERSION:
+        try:
+            self.conn.row_factory = sqlite3.Row
+            from ..migrations import MAX_KNOWN_VERSION, run_migrations, validate_migration_state
+            # Validate before WAL/schema/backup writes, including fully migrated stores.
+            validate_migration_state(self.conn)
+            schema_version=self.conn.execute('PRAGMA user_version').fetchone()[0]
+            if schema_version<9 and self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='articles'").fetchone():
+                backup_path=self.db_path.with_name(self.db_path.stem+'-before-v1.0.db')
+                if not backup_path.exists():
+                    with closing(sqlite3.connect(str(backup_path))) as destination:
+                        self.conn.backup(destination)
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.executescript(_SCHEMA)
+            # Legacy (<9) databases adopt the v1.5.3 baseline version; databases at
+            # 9+ are only ever advanced by numbered migrations, never rewritten on
+            # open (read/poll connections must not take a writer lock).
+            if schema_version < 9:
+                self.conn.execute('PRAGMA user_version=9')
+            self.conn.commit()
+            # Numbered v2.0 migrations run only when something is pending; fully
+            # migrated databases skip the tracking-table check-free fast path.
+            if schema_version < MAX_KNOWN_VERSION or not self.conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone():
+                run_migrations(self.conn, app_version=__version__)
+            self.conn.commit()
+        except BaseException:
             self.conn.close()
-            raise ValueError('数据库来自较新版本，不能使用旧引擎打开')
-        if schema_version<9 and self.conn.execute("SELECT 1 FROM sqlite_master WHERE name='articles'").fetchone():
-            backup_path=self.db_path.with_name(self.db_path.stem+'-before-v1.0.db')
-            if not backup_path.exists():
-                with sqlite3.connect(str(backup_path)) as destination:
-                    self.conn.backup(destination)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.executescript(_SCHEMA)
-        # Legacy (<9) databases adopt the v1.5.3 baseline version; databases at
-        # 9+ are only ever advanced by numbered migrations, never rewritten on
-        # open (read/poll connections must not take a writer lock).
-        if schema_version < 9:
-            self.conn.execute('PRAGMA user_version=9')
-        self.conn.commit()
-        # Numbered v2.0 migrations run only when something is pending; fully
-        # migrated databases skip the tracking-table check-free fast path.
-        if schema_version < MAX_KNOWN_VERSION or not self.conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone():
-            run_migrations(self.conn, app_version=__version__)
-        self.conn.commit()
+            raise
 
     def close(self) -> None:
         self.conn.close()
@@ -286,14 +289,20 @@ class Store:
                 self.conn.rollback()
             raise
 
-    def reserve_invocation(self, inv: dict[str, Any], maximum: int | None) -> None:
+    def assert_invocation_budget(self, job_id: str | None, maximum: int | None) -> None:
+        """Read-only early check; reserve_invocation rechecks atomically after preflight."""
         from ..llm.errors import ModelBudgetExceeded
+        if maximum is None:
+            return
+        count = self.conn.execute(
+            "SELECT COUNT(*) FROM model_invocations WHERE job_id=?"
+            " AND status != 'MODEL_CAPABILITY_MISMATCH'", (job_id,)).fetchone()[0]
+        if count >= maximum:
+            raise ModelBudgetExceeded(f"本篇模型调用已达到上限 {maximum}，请调整预算后再继续")
+
+    def reserve_invocation(self, inv: dict[str, Any], maximum: int | None) -> None:
         with self.transaction():
-            count = self.conn.execute(
-                "SELECT COUNT(*) FROM model_invocations WHERE job_id=?"
-                " AND status != 'MODEL_CAPABILITY_MISMATCH'", (inv.get("job_id"),)).fetchone()[0]
-            if maximum is not None and count >= maximum:
-                raise ModelBudgetExceeded(f"本篇模型调用已达到上限 {maximum}，请调整预算后再继续")
+            self.assert_invocation_budget(inv.get("job_id"), maximum)
             self.add_invocation(inv, commit=False)
 
     def finish_invocation(self, invocation_id: str, status: str, usage: dict,

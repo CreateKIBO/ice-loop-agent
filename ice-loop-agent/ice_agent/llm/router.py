@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import base64
 import time
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
@@ -55,6 +56,7 @@ class LLMResponse:
     model_id: str = ""
     adapter: str = ""
     notes: list[str] = field(default_factory=list)
+    input_preflight: dict[str, Any] = field(default_factory=dict)
     fell_back: bool = False
     usage: dict[str, Any] = field(default_factory=dict)
     finish_reason: str = ""
@@ -79,6 +81,8 @@ class RoleRouter:
         self.on_delta: Callable[[str, str], None] | None = None
         self.cancelled: Callable[[], bool] | None = None
         self._conversation_id: str = ""
+        from .admission import TokenCountCache
+        self._token_cache = TokenCountCache()
 
     @property
     def snapshot(self) -> dict[str, Any]:
@@ -164,7 +168,7 @@ class RoleRouter:
                            model_id=chat.raw_model or adapter.profile.model_id,
                            adapter=adapter.adapter_id, notes=list(chat.notes),
                            usage=chat.usage or {"usage": "usage_unknown"},
-                           finish_reason=chat.finish_reason)
+                           finish_reason=chat.finish_reason, input_preflight=chat.input_preflight)
         if want_json:
             try:
                 if req.node == 'creative_chat' and req.context.get('mode') in ('draft', 'edit', 'images'):
@@ -198,15 +202,14 @@ class RoleRouter:
             raise ModelError("CANCELLED", "任务已停止")
         # Includes system, conversation and schema; applies to format repair too.
         # Reject locally before reserving an invocation or consuming call budget.
+        if type(req.timeout) not in (int, float) or not math.isfinite(req.timeout) or req.timeout <= 0:
+            from .errors import ParamUnsupportedError
+            raise ParamUnsupportedError('模型调用总时限需为正数秒')
+        deadline = time.monotonic() + req.timeout
         validate_input(messages)
-        from .limits import output_limit
+        from .limits import output_limit, token_check_policy
         output_limit(adapter.profile)  # Invalid local settings must not reserve call budget.
-        inv = {"invocation_id": new_id("inv"), "job_id": job_id,
-               "node_key": req.node, "role": req.role, "profile_id": adapter.profile.profile_id,
-               "model_id": adapter.profile.model_id, "adapter": adapter.adapter_id,
-               "attempt": attempt, "status": "sending", "request_hash": sha256_json(messages),
-               "usage": {"usage": "usage_unknown"},
-               "conversation_id": getattr(self, "_conversation_id", "")}
+        maximum = None
         if self.store:
             job = self.store.get_job(job_id) if job_id else None
             maximum = int(job["limits"].get("max_model_calls", 20)) if job else None
@@ -214,6 +217,25 @@ class RoleRouter:
                 if req.node != 'image_prompts':
                     raise ModelError('IMAGE_ONLY_SCOPE', '补图任务只允许拟写配图提示词，原正文保持只读')
                 maximum = int(job['limits'].get('max_image_model_calls', 12))
+            self.store.assert_invocation_budget(job_id, maximum)
+        from .admission import check_input
+        from .http_io import request_control
+        from .errors import RequestTimeoutError
+        if time.monotonic() >= deadline:
+            raise RequestTimeoutError('本次总时限已到，未发送计数或生成请求')
+        with request_control(self.cancelled):
+            preflight, preflight_notes = check_input(adapter.profile, messages, self.transport,
+                cache=self._token_cache, timeout=max(.001, deadline-time.monotonic()), cancelled=self.cancelled,
+                required=token_check_policy(self.profiles.get(route.primary, adapter.profile)) == 'required')
+        if time.monotonic() >= deadline:
+            raise RequestTimeoutError('Token预检已超过本次总时限，未发送生成请求')
+        inv = {"invocation_id": new_id("inv"), "job_id": job_id,
+               "node_key": req.node, "role": req.role, "profile_id": adapter.profile.profile_id,
+               "model_id": adapter.profile.model_id, "adapter": adapter.adapter_id,
+               "attempt": attempt, "status": "sending", "request_hash": sha256_json(messages),
+               "usage": {"usage": "usage_unknown", "input_preflight": preflight},
+               "conversation_id": getattr(self, "_conversation_id", "")}
+        if self.store:
             self.store.reserve_invocation(inv, maximum)
 
         def delta(piece):
@@ -227,13 +249,15 @@ class RoleRouter:
             with request_control(self.cancelled):
                 chat = adapter.chat(messages, thinking_policy=route.thinking_policy,
                                     want_json=want_json, stream=stream, on_delta=delta,
-                                    timeout=req.timeout)
+                                    timeout=max(.001, deadline-time.monotonic()))
             chat.invocation_id = inv['invocation_id']
+            chat.input_preflight = preflight
+            chat.notes.extend(preflight_notes)
             if self.cancelled and self.cancelled():
                 raise ModelError("CANCELLED", "任务已停止，未采纳本次候选")
             if chat.finish_reason not in ("stop",):
                 raise IncompleteResponseError(f"模型正文未完成：{chat.finish_reason or 'missing'}")
-            inv.update(status="ok", usage=chat.usage or {"usage": "usage_unknown"},
+            inv.update(status="ok", usage={**(chat.usage or {"usage": "usage_unknown"}), "input_preflight": preflight},
                        finish_reason=chat.finish_reason)
             return chat
         except Exception as exc:

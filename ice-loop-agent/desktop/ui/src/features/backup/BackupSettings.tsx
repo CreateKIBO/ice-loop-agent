@@ -1,4 +1,7 @@
 import * as React from 'react';
+import {RecoveryPointList} from './RecoveryPointList';
+import {motion} from 'motion/react';
+import {ActivityRail,useActivityReducedMotion} from '../../components/ActivityRail';
 import { Banner,Button,Dialog,ErrorPanel,Spinner } from '../../components/ui';
 import { CopyButton } from '../../components/CopyButton';
 import { backupSettingsStore,settingsStore } from '../../app/uiState';
@@ -10,6 +13,8 @@ import '../../styles/backup.css';
 
 export function BackupSettings() {
   const open=backupSettingsStore.use(),account=useCurrentAccount();
+  const reduced=useActivityReducedMotion();
+  const reveal={initial:reduced?false as const:{opacity:0},animate:{opacity:1},transition:{duration:reduced?0:0.16}};
   const [busy,setBusy]=React.useState(''),lock=React.useRef(false);
   const [error,setError]=React.useState(''),[saved,setSaved]=React.useState<BackupSummary|null>(null);
   const [review,setReview]=React.useState<BackupSummary|null>(null),[confirmed,setConfirmed]=React.useState(false);
@@ -63,26 +68,28 @@ export function BackupSettings() {
         <Button variant="primary" disabled={Boolean(busy)} onClick={()=>void create()}>创建完整备份</Button>
         <Button disabled={Boolean(busy)} onClick={()=>void inspect()}>选择备份并校验</Button>
       </div>
-      {busy&&<div className="ice-backup__progress" role="status" aria-live="polite"><Spinner />{busy}</div>}
+      {busy&&<motion.div {...reveal} className="ice-backup__progress" role="status" aria-live="polite"><div className="ice-backup__progress-head"><Spinner />{busy}</div><ActivityRail /></motion.div>}
       {error&&<ErrorPanel title="操作未完成" detail={error} onDismiss={()=>setError('')} />}
       <p className="ice-backup__hint">API Key、网页登录、日志、浏览器缓存不进入备份。外部只读文章目录不复制，已导入的历史正文快照保留。恢复后需重新配置并测试模型，待执行制作任务会暂停等待确认。</p>
-      {saved&&<section className="ice-backup__card" aria-label="备份保存结果">
+      {saved&&<motion.section {...reveal} key={saved.package_hash} className="ice-backup__card" aria-label="备份保存结果">
         <h3>备份已保存并通过校验</h3><Summary value={saved} />
         <p className="ice-backup__path">{saved.file_path}</p>
         {saved.file_path&&<CopyButton text={saved.file_path} label="复制备份路径" />}
-      </section>}
-      {review&&<section className="ice-backup__card" aria-label="备份恢复预览">
+      </motion.section>}
+      {review&&<motion.section {...reveal} key={review.package_hash} className="ice-backup__card" aria-label="备份恢复预览">
         <h3>备份预览 · 尚未恢复</h3><Summary value={review} />
         <p className="ice-backup__hint">确认后选择一个 C 盘之外的父目录。程序会在其中新建工作目录；当前资料保留。预览有效期为 10 分钟，文件变化后需重新校验。</p>
         <label className="ice-backup__confirm"><input type="checkbox" checked={confirmed} disabled={Boolean(busy)} onChange={e=>setConfirmed(e.target.checked)} />我已确认备份内容，恢复到新目录并设为下次启动使用</label>
         <Button variant="primary" disabled={Boolean(busy)||!confirmed||!review.database_checked} onClick={()=>void restore()}>恢复到新目录</Button>
-      </section>}
-      {restored&&<section className="ice-backup__card" aria-label="恢复结果">
+      </motion.section>}
+      {restored&&<motion.section {...reveal} key={restored.runtime_root} className="ice-backup__card" aria-label="恢复结果">
         <h3>资料已恢复到新目录</h3><p className="ice-backup__path">{restored.runtime_root}</p>
         <CopyButton text={restored.runtime_root} label="复制恢复目录" />
+        {typeof restored.database_schema==='number'&&<p className="ice-backup__hint">数据库已在新目录校验完成：schema {restored.source_schema===restored.database_schema?restored.database_schema:`${restored.source_schema} → ${restored.database_schema}`}。原目录保留。</p>}
         {restored.selection_error?<Banner tone="warning" title="目录切换尚未完成">{restored.selection_error}</Banner>:<p>下次启动将使用恢复的资料。当前窗口仍使用原工作目录。</p>}
         {restored.restart_required?<Button variant="primary" disabled={Boolean(busy)} onClick={()=>void operation('正在保存修改并重启…',async()=>{await flushAllDirty();await relaunchApp();})}>保存当前修改并重启</Button>:<Button disabled={Boolean(busy)} onClick={()=>void activate()}>重试切换目录</Button>}
-      </section>}
+      </motion.section>}
+      <RecoveryPointList busy={Boolean(busy)} operation={operation} onReview={result=>{setReview(result);setConfirmed(false);}} />
       {queue.error&&<ErrorPanel title="待恢复任务读取失败" detail={queue.error.message} onRetry={()=>void queue.refetch()} />}
       {Boolean(queue.data?.total)&&<section className="ice-backup__card" aria-label="恢复后暂停的任务">
         <h3>当前公众号有 {queue.data!.total} 项恢复后暂停的任务</h3>
@@ -99,7 +106,8 @@ function Summary({value}:{value:BackupSummary}) {
     <div><dt>备份时间</dt><dd>{new Date(value.created_at).toLocaleString()}</dd></div>
     <div><dt>程序版本</dt><dd>{value.app_version}</dd></div>
     <div><dt>文件与解压大小</dt><dd>{value.files} 个 · {backupSize(value.bytes)}</dd></div>
-    <div><dt>数据库与迁移</dt><dd>{value.database_checked?`已校验 · schema ${value.database_schema}`:'尚未校验'}</dd></div>
+    <div><dt>数据库与迁移</dt><dd>{value.database_checked?`已校验 · schema ${value.database_schema}${value.database_target_schema&&value.database_target_schema>value.database_schema?` → ${value.database_target_schema}（恢复时迁移）`:''}`:'尚未校验'}</dd></div>
   </dl><p>公众号：{value.accounts.map(a=>a.name).join('、')}</p>
+  {Boolean(value.legacy_unverified?.length)&&<Banner tone="info" title="早期迁移记录的校验范围">迁移 {value.legacy_unverified!.join('、')} 使用旧版校验记录，未覆盖当前完整 SQL 校验。原记录保留；本次文件完整性与迁移流程已校验。</Banner>}
   <details><summary>文件校验摘要与排除项</summary><p className="ice-backup__path">SHA256 {value.package_hash}</p><p className="ice-backup__hint">{value.excluded.join('；')}</p></details></>;
 }

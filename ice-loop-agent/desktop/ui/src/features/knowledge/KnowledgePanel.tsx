@@ -4,6 +4,7 @@ import * as React from "react";
 import { motion } from "motion/react";
 
 import { Button, Input, SkeletonRows } from "../../components/ui";
+import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { citationStore, rpc, useCitations, type RpcError } from "../../data/client";
 
@@ -33,7 +34,7 @@ const MAX_CITATIONS = 8; // 与 citationStore / 后端 ContextPack 上限一致
 export function KnowledgePanel() {
   const [query, setQuery] = React.useState("");
   const [state, setState] = React.useState<
-    { phase: "idle" } | { phase: "loading" } | { phase: "error"; message: string } |
+    { phase: "idle" } | { phase: "loading" } | { phase: "error"; error: unknown } |
     { phase: "done"; hits: SearchHit[]; mode: string; query: string }
   >({ phase: "idle" });
   const [importing, setImporting] = React.useState(false);
@@ -52,7 +53,7 @@ export function KnowledgePanel() {
                                                                        { query: trimmed, limit: 20 });
       if (seq === searchSeq.current) setState({ phase: "done", hits: result.results, mode: result.mode, query: trimmed });
     } catch (error) {
-      if (seq === searchSeq.current) setState({ phase: "error", message: (error as RpcError).message });
+      if (seq === searchSeq.current) setState({ phase: "error", error });
     }
   };
 
@@ -99,8 +100,9 @@ export function KnowledgePanel() {
                     gap: "var(--ice-space-2)", alignContent: "start" }}>
         {state.phase === "loading" && <SkeletonRows rows={3} height={44} gap={8} />}
         {state.phase === "error" && (
-          <div role="alert" style={{ color: "var(--ice-danger)", fontSize: "var(--ice-font-size-sm)", padding: 4 }}>
-            {state.message}
+          <div style={{ padding: 4 }}>
+            <ErrorNote error={state.error} note="检索词保留，可重试或换词。"
+                       onRetry={() => void run(query)} retryLabel="重试检索" />
           </div>
         )}
         {state.phase === "idle" && (

@@ -22,3 +22,6 @@
 .ice-browser-dialog .ice-dialog-body { display:flex;overflow:hidden!important; }
 .ice-browser-layout { display:flex;flex-direction:column;flex:1;min-height:0; }
 .ice-browser-layout .ice-browser-region { flex:1;height:auto;min-height:160px; }
+
+/* 批C4（2026-10-22）：多参考图/长提示词时常用动作不被挤出视口——参考列表限高滚动。 */
+.ice-asset-card > ol { max-height: 200px; overflow-y: auto; margin: 0; }

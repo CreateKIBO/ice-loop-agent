@@ -1,0 +1,10 @@
+"use strict";
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {validateTaskStatus}=require('./task-status-validate.cjs');
+const data=require('./task-status-2026-10-25.json');
+const copy=()=>structuredClone(data);
+test('status source counts actual rows',()=>{const r=validateTaskStatus(data);assert.deepEqual(r.errors,[]);assert.equal(Object.values(r.counts).reduce((a,b)=>a+b,0),36);});
+test('36 unique but substituted ids still fail on missing and unknown task',()=>{const x=copy();x.items[0].id='Z9';const r=validateTaskStatus(x);assert(r.errors.some(x=>x.includes('unknown id Z9')));assert(r.errors.some(x=>x.includes('missing id A1')));});
+test('duplicates and unknown status cannot masquerade as completed work',()=>{const x=copy();x.items[1].id=x.items[0].id;x.items[2].status='done-';const r=validateTaskStatus(x);assert(r.errors.some(x=>x.includes('duplicate')));assert(r.errors.some(x=>x.includes('unknown status')));});
+test('malformed records and whitespace evidence are rejected',()=>{assert(validateTaskStatus({items:null}).errors.length);const x=copy();x.items[0].evidence='  ';x.items[1]=null;assert(validateTaskStatus(x).errors.length>=2);});
+test('provided summary must match every category, including zero',()=>{const x=copy();x.summary={done:34};assert(validateTaskStatus(x).errors.length);x.summary=validateTaskStatus(data).counts;assert.deepEqual(validateTaskStatus(x).errors,[]);});

@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Banner, Button, Input, Spinner } from '../../components/ui';
+import { Button, Input, Spinner } from '../../components/ui';
+import { ErrorNote } from '../../components/ErrorNote';
 import { CopyButton } from '../../components/CopyButton';
 import { settingsStore } from '../../app/uiState';
 import { rpc, useAccountQuery, useCurrentAccount } from '../../data/client';
@@ -14,7 +15,8 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
   const account = useCurrentAccount(), original = slotPrompt(data, slot), params = promptParams(data, slot);
   const [text, setText] = React.useState(original), [candidate, setCandidate] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false), busyRef = React.useRef(false), edits = React.useRef(0);
-  const [error, setError] = React.useState<string | null>(null), [viewer, setViewer] = React.useState<ImageTarget | null>(null);
+  const [error, setError] = React.useState<unknown>(null), [viewer, setViewer] = React.useState<ImageTarget | null>(null);
+  const [referencesOpen, setReferencesOpen] = React.useState(false); // 批D：参考区默认收起，折叠时卸载缩略图（租约走既有释放链）
   const [editingBudget, setEditingBudget] = React.useState<Budget | null>(null), [limit, setLimit] = React.useState(''), [budgetBusy, setBudgetBusy] = React.useState(false);
   const mounted = React.useRef(true);
   const references = useAccountQuery<{ references: Reference[] }>('prompts.references', params, { enabled: !disabled, staleTime: 0, gcTime: 10000 });
@@ -29,7 +31,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       const result = await rpc<{ prompt: string }>('prompts.generate', { account_id: account, ...params });
       if (!mounted.current) return;
       if (edits.current !== version) setCandidate(result.prompt); else edit(result.prompt);
-    } catch (problem) { if (mounted.current) setError((problem as Error).message); }
+    } catch (problem) { if (mounted.current) setError(problem); }
     finally { busyRef.current = false; if (mounted.current) { setBusy(false); void budget.refetch(); } }
   };
   const saveBudget = async () => {
@@ -42,20 +44,47 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     try {
       await rpc('budgets.save', { account_id: account, job_id: data.job.job_id, scope: 'job', limit: maximum, limits_hash: editingBudget.limits_hash });
       if (mounted.current) { setEditingBudget(null); await budget.refetch(); }
-    } catch (problem) { if (mounted.current) setError((problem as Error).message); }
+    } catch (problem) { if (mounted.current) setError(problem); }
     finally { busyRef.current = false; if (mounted.current) setBudgetBusy(false); }
   };
   return <section className="ice-asset-card" aria-label="生图提示词">
-    <h4>提示词与品牌参考</h4><p className="ice-asset-muted">参考图需要在 TapNow 按顺序手动上传，复制文字不会附带图片。AI 重拟会读取本文和当前公众号视觉规范，可能计费。</p>
-    {references.error && <Banner tone="warning" title="参考图读取失败">{references.error.message}</Banner>}
-    {!!references.data?.references.length && <ol className="ice-asset-grid">{references.data.references.map(row => <li key={row.image}>
-      <strong>图片 {row.image} · {({ template: '编辑底图', identity: '品牌身份参考', style: '风格参考' } as Record<string, string>)[row.role] ?? '参考图'}</strong>
-      <p className="ice-asset-muted">{row.filename || row.title}</p>
-      {row.resource_id && <ImageThumbnail target={{ kind: 'resource', accountId: account, resourceId: row.resource_id, caption: row.title }} onOpen={setViewer} />}
-    </li>)}</ol>}
+    <h4>提示词与品牌参考</h4><p className="ice-asset-muted">参考图需要在 TapNow 按顺序手动上传，复制文字不会附带图片；生成后的图片请回到「下载待归档」绑定到对应图位。AI 重拟会读取本文和当前公众号视觉规范，可能计费。</p>
+    {references.error && <ErrorNote error={references.error} onRetry={() => references.refetch()} retryLabel="重新读取参考图" />}
+    <section aria-label="品牌参考图" className="ice-asset-card" style={{ padding: 8, gap: 6 }}>
+      {/* 批C（2026-10-25 候选对照轮）：未读取/读取失败/本图位暂无参考三者分明（C1）；
+          折叠标题保留数量与上传说明（C2）；行身份用 data-reference-image（C3）。 */}
+      {references.isLoading && <span className="ice-asset-muted" role="status">正在读取本图位参考…</span>}
+      {!references.isLoading && !references.error && (references.data?.references.length
+        ? <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="ice-link-btn" aria-expanded={referencesOpen}
+                    onClick={() => setReferencesOpen(value => !value)}>
+              {referencesOpen ? '收起参考图' : `展开参考图（当前图位参考 ${references.data.references.length} 张，按上传顺序）`}
+            </button>
+            <span className="ice-asset-muted">请按图片编号依次上传到 TapNow；复制提示词文字不会附带图片文件</span>
+            <CopyButton text={references.data.references
+              .map(row => '图片 ' + row.image + ' · '
+                + (({ template: '编辑底图', identity: '品牌身份参考', style: '风格参考' } as Record<string, string>)[row.role] ?? '参考图')
+                + ' · ' + (row.filename || row.title))
+              .join('\n')}
+              label="复制文件名清单" successLabel="清单已复制" />
+          </div>
+        : <span className="ice-asset-muted">本图位暂无参考图</span>)}
+      {referencesOpen && !!references.data?.references.length && <ol className="ice-asset-grid">{references.data.references.map(row => <li key={row.image} data-reference-image={row.image}>
+        <strong>图片 {row.image} · {({ template: '编辑底图', identity: '品牌身份参考', style: '风格参考' } as Record<string, string>)[row.role] ?? '参考图'}</strong>
+        <p className="ice-asset-muted" style={{ overflowWrap: 'anywhere', margin: 0 }} title={row.filename || row.title}>{row.filename || row.title}</p>
+        {(row.filename || row.title) && <CopyButton text={row.filename || row.title} label={`复制文件名（图片 ${row.image}）`} successLabel="文件名已复制" />}
+        {row.resource_id
+          ? <ImageThumbnail target={{ kind: 'resource', accountId: account, resourceId: row.resource_id, caption: row.title }} onOpen={setViewer} />
+          : <span className="ice-asset-muted">仅有文件信息，暂无预览图</span>}
+      </li>)}</ol>}
+    </section>
     <textarea aria-label="当前图位生图提示词" rows={8} value={text} maxLength={30000} disabled={disabled} onChange={event => edit(event.target.value)} />
+    <span className="ice-asset-muted" role="status">{text.length.toLocaleString()} / 30000 字符{disabled ? '' : text !== original ? ' · 未保存' : ' · 与已保存版本一致'}</span>
     <div className="ice-asset-row"><CopyButton label="复制生图提示词" text={text} />
-      <Button disabled={disabled || busy || budgetBusy || !text.trim()} onClick={() => void onSave(text)}>保存提示词</Button>
+      {text !== original && <span className="ice-badge ice-badge--warning" role="status">未保存修改</span>}
+      <Button disabled={disabled || busy || budgetBusy} onClick={() => void onSave(text)}>保存提示词</Button>
+      <Button variant="ghost" disabled={disabled || busy || budgetBusy || text === original} title="放弃当前修改，恢复到已保存版本"
+              onClick={() => { edits.current++; setText(original); onDirty(false); }}>放弃修改</Button>
       <Button disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>{busy ? <><Spinner size={14} />正在重拟…</> : '按文章与品牌 AI 重拟'}</Button>
       <Button onClick={() => openWebsite('tapnow')}>打开内嵌 TapNow</Button></div>
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
@@ -66,7 +95,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       <p className="ice-asset-muted">1–100 次，不能低于已用次数。仅修改本篇，不重置已用次数；保存后生效。</p>
       <div className="ice-asset-row"><Button disabled={budgetBusy || disabled} onClick={() => void saveBudget()}>保存本篇预算</Button><Button disabled={budgetBusy} variant="ghost" onClick={() => setEditingBudget(null)}>取消预算调整</Button></div></div>}
     {busy && <p role="status" className="ice-asset-muted">可以继续编辑；返回的候选不会覆盖生成期间新增的修改。</p>}
-    {error && <Banner tone="danger" title="操作未完成">{error}。你已输入的内容保留。</Banner>}
+    {error != null && <ErrorNote error={error} note="你已输入的内容保留。" />}
     {candidate && <div className="ice-asset-grid"><p className="ice-asset-muted">你已继续编辑，AI 候选保留在下方，未覆盖当前内容。</p>
       <textarea aria-label="未覆盖编辑的AI提示词候选" readOnly rows={5} value={candidate} /><CopyButton label="复制AI提示词候选" text={candidate} />
       <Button disabled={disabled} onClick={() => { edit(candidate); setCandidate(null); }}>用候选替换当前提示词</Button></div>}

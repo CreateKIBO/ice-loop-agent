@@ -1,15 +1,56 @@
 // 由 scripts/gen-ts-types.mjs 从 ../../contracts/*.schema.json 生成，勿手改。
 // 权威来源：ice_agent/contracts（Pydantic）。漂移由 tests/test_v2_contracts.py 阻断。
 
+export type IChatReceiptResponse = {
+  "message_id": string;
+  "user_message_id": string;
+  "started": boolean;
+  "accepted": true;
+  "replayed": boolean;
+  "status": "streaming" | "completed" | "failed" | "stopped" | "interrupted";
+} | {
+  "accepted": false;
+  "cancelled": true;
+  "request_id": string;
+} | {
+  "accepted": false;
+  "found": false;
+};
+
 export type IChatSendRequest = {
   "conversation_id": string;
   "text"?: string;
   "mode"?: "discuss" | "draft" | "edit" | "images";
   "references"?: Array<string>;
+  "citations"?: Array<{
+    "chunk_id": string;
+    "hash"?: string | null;
+  }>;
+  "documents"?: Array<{
+    "source_name": string;
+    "text": string;
+  }>;
+  "selected_text"?: string;
+  "profile_id"?: string | null;
   "clarification_message_id"?: string | null;
+  "clarification_answers"?: Record<string, string>;
+  "retry_message_id"?: string | null;
   "candidate_id"?: string | null;
-  /** 幂等键：同一会话重复提交同 request_id 返回同一结果 */
+  /** 同一账号/会话内相同请求返回原消息；内容改变须使用新的请求标识 */
   "request_id"?: string | null;
+};
+
+export type IChatSendResponse = {
+  "message_id": string;
+  "user_message_id": string;
+  "started": boolean;
+  "accepted": true;
+  "replayed": boolean;
+  "status": "streaming" | "completed" | "failed" | "stopped" | "interrupted";
+} | {
+  "accepted": false;
+  "cancelled": true;
+  "request_id": string;
 };
 
 export type IModelDeltaPayload = {

@@ -4,33 +4,19 @@ import * as React from "react";
 import { motion, useAnimationControls } from "motion/react";
 
 import { Button, Dialog, Input, SkeletonRows } from "../components/ui";
+import { ErrorNote } from "../components/ErrorNote";
 import { toast } from "../components/toast";
-import { accountStore, queryClient, rpc, useAccountQuery, useCurrentAccount, type RpcError } from "../data/client";
+import { accountStore, queryClient, rpc, useAccountQuery, useCurrentAccount } from "../data/client";
 import { switchToClassic } from "../data/desktop";
 import { settingsStore } from "./uiState";
 import { DefaultBudgetPanel } from './DefaultBudgetPanel';
 import { SettingsDraftContext,useSettingsDraft } from './SettingsDraftGuard';
 import { createSettingsDrafts } from './settingsDrafts';
-import { writingReadiness, type ModelRoute } from './modelRoutes';
+import type { BootstrapSettings, ModelProfile } from './modelBootstrap';
+export type { BootstrapSettings, ModelProfile } from './modelBootstrap';
+export { useBootstrap, useModelReadiness } from './modelBootstrap';
 import { TextModelRoutes } from './TextModelRoutes';
 import { ModelGenerationLimits } from './ModelGenerationLimits';
-
-export type ModelProfile = {
-  provider: string; profile_id: string; model_id: string; base_url: string;
-  status: string; has_key: boolean;
-  limits_hash?:string;
-  extra?:{max_output_tokens?:number|null;model_window?:{model_id:string;base_url:string;context_window?:number;max_output_tokens?:number;checked_at?:string;state?:string}};
-};
-export type BootstrapSettings = {
-  version?: string;
-  account?: { id: string; name: string; audience?: string; positioning?: string; library_root?: string;
-    columns?: Array<{code:string;name:string}> };
-  accounts?: Array<{id:string;name:string}>;
-  account_hash?: string;
-  routes_hash?: string;
-  credential_warning?: string | null;
-  settings?: { profiles: ModelProfile[]; routes?: Record<string, ModelRoute> };
-};
 
 const PROVIDERS: Record<string, { mark: string; name: string; service: string }> = {
   qwen: { mark: "Q", name: "通义千问", service: "阿里云百炼" },
@@ -41,18 +27,8 @@ const PROVIDERS: Record<string, { mark: string; name: string; service: string }>
   minimax: { mark: "M", name: "MiniMax", service: "MiniMax 开放平台" },
 };
 
-export function useBootstrap() {
-  return useAccountQuery<BootstrapSettings>("bootstrap", {}, { staleTime: 60_000 });
-}
-
-/** Readiness follows the same writer primary/fallback chain used by the real request. */
-export function useModelReadiness() {
-  const boot = useBootstrap();
-  return writingReadiness(boot.data?.settings);
-}
-
-const refreshBootstrap = (account:string) =>
-  queryClient.invalidateQueries({ queryKey: ["ice", account, "bootstrap"] });
+const refreshBootstrap = (account:string,throwOnError=false) =>
+  queryClient.invalidateQueries({ queryKey: ["ice", account, "bootstrap"] },{throwOnError});
 
 export function ModelSettings() {
   const open = settingsStore.use();
@@ -104,10 +80,8 @@ export function ModelSettings() {
       <h3 style={{margin:'0 0 12px',fontSize:'var(--ice-font-size-md)'}}>供应商与模型</h3>
       {boot.isLoading && <SkeletonRows rows={6} height={18} />}
       {boot.error && (
-        <div role="alert" className="ice-error-text">
-          读取设置失败：{(boot.error as RpcError).message}
-          <button type="button" className="ice-link-btn" style={{ marginLeft: 8 }} onClick={() => boot.refetch()}>重试</button>
-        </div>
+        <ErrorNote error={boot.error} note="已保存的设置不受影响。"
+                   onRetry={() => boot.refetch()} retryLabel="重新读取设置" />
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(300px, 100%), 1fr))", gap: "var(--ice-space-3)" }}>
         {profiles.map((profile, index) => (
@@ -129,7 +103,7 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
   const [baseModel,setBaseModel]=React.useState(profile.model_id);
   const [key, setKey] = React.useState("");
   const [busy, setBusy] = React.useState<"key" | "model" | "probe" | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const active=React.useRef(true),busyRef=React.useRef(false);
   React.useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
   const current=()=>active.current&&accountStore.get()===account;
@@ -138,8 +112,8 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
   });
   const shake = useAnimationControls();
 
-  const fail = (message: string) => {
-    setError(message);
+  const fail = (problem: unknown) => {
+    setError(problem);
     void shake.start({ x: [0, -6, 6, -4, 4, 0], transition: { duration: 0.32 } });
   };
 
@@ -154,7 +128,7 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
       setKey("");
       toast.success({ title: `${meta.name} Key 已加密保存`, detail: "建议点「测试连接」确认可用" });
       await refreshBootstrap(account);
-    } catch (err) { if(current())fail((err as Error).message); }
+    } catch (err) { if(current())fail(err); }
     finally { busyRef.current=false;if(current())setBusy(null); }
   };
 
@@ -168,7 +142,7 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
     if(busyRef.current)return;
     busyRef.current=true;guard.processing();setBusy('model');setError(null);
     try{await persistModel();if(current())toast.success({title:meta.name+'模型已保存',detail:'尚未发送模型请求，可按需测试连接。'});}
-    catch(problem){if(current())fail((problem as Error).message);}
+    catch(problem){if(current())fail(problem);}
     finally{busyRef.current=false;if(current())setBusy(null);}
   };
   const reloadModel=async()=>{
@@ -180,7 +154,7 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
       const latest=result.settings?.profiles.find(row=>row.provider===profile.provider);
       if(!latest)throw Error('未找到该供应商的已保存配置');
       setModelId(latest.model_id);setBaseModel(latest.model_id);await refreshBootstrap(account);
-    }catch(problem){if(current())fail((problem as Error).message);}
+    }catch(problem){if(current())fail(problem);}
     finally{busyRef.current=false;if(current())setBusy(null);}
   };
 
@@ -195,7 +169,7 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
       if(!current())return;
       toast.success({ title: `${meta.name} 连接通过`, detail: "实际模型：" + result.model });
       await refreshBootstrap(account);
-    } catch (err) { if(current())fail((err as Error).message); }
+    } catch (err) { if(current())fail(err); }
     finally { busyRef.current=false;if(current())setBusy(null); }
   };
 
@@ -246,9 +220,9 @@ function ProviderCard({ profile, usedForWriting }: { profile: ModelProfile; used
       </div>
       {(modelId!==baseModel||profile.model_id!==baseModel)&&<Button size="sm" variant="ghost" disabled={busy!==null} onClick={reloadModel}>放弃当前模型输入并载入</Button>}
       <small style={{color:'var(--ice-text-secondary)',lineHeight:1.6}}>保存模型不会发起生成。测试连接会发送一次真实请求并计数，可能产生费用。</small>
-      <ModelGenerationLimits profile={profile} disabled={busy!==null||modelId!==baseModel||Boolean(key)} refresh={()=>refreshBootstrap(account)} />
+      <ModelGenerationLimits profile={profile} disabled={busy!==null||modelId!==baseModel||Boolean(key)} refresh={()=>refreshBootstrap(account,true)} />
       {busy&&<span role="status">{busy==='key'?'正在加密保存Key…':busy==='model'?'正在处理模型配置…':'正在请求供应商验证连接…'}</span>}
-      {error && <div role="alert" className="ice-error-text">{error}</div>}
+      {error != null && <ErrorNote error={error} note="本次修改未保存。" />}
     </motion.section>
   );
 }

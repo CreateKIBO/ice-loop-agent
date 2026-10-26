@@ -88,7 +88,9 @@ class TestPublications(unittest.TestCase):
         with patch('ice_agent.llm.router.OpenAIChatTransport',return_value=transport):
             result = self.service.call('brief.suggest',{'fields':self.fill_values()})
         self.assertEqual(len(transport.calls),1)
-        self.assertEqual(transport.calls[0]['timeout'],40)
+        # The count/local preflight shares this deadline; chat receives only its remainder.
+        self.assertLessEqual(transport.calls[0]['timeout'],40)
+        self.assertAlmostEqual(transport.calls[0]['timeout'],40,delta=1)
         self.assertIn('城市居民',transport.calls[0]['messages'][-1]['content'])
         self.assertNotIn('零基础在校学生',transport.calls[0]['messages'][-1]['content'])
         self.assertTrue(result['fields']['materials_text'].startswith('真实素材原文'))

@@ -1,15 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+project_root = Path(SPECPATH).resolve().parent
+cache_excludes = ["**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
 
 datas = []
-datas += collect_data_files('ice_agent')
-datas += collect_data_files('pydantic')
-datas += collect_data_files('certifi')
+datas += collect_data_files('ice_agent', excludes=cache_excludes)
+datas += collect_data_files('pydantic', excludes=cache_excludes)
+datas += collect_data_files('certifi', excludes=cache_excludes)
 
 
 a = Analysis(
-    ['engine_entry.py'],
-    pathex=['.'],
+    [str(project_root / 'build' / 'engine_entry.py')],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
     hiddenimports=collect_submodules('markdown_it')+collect_submodules('mdurl')+collect_submodules('httpx')+collect_submodules('httpcore')+collect_submodules('anyio'),
@@ -31,7 +34,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -44,7 +47,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='ice-engine',
 )

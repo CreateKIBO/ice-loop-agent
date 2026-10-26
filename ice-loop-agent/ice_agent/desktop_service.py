@@ -25,12 +25,15 @@ from .workflow.nodes import _brief_ctx, _run_rules, evidence_errors
 
 class DesktopService:
     def __init__(self, project_root: Path, runtime_root: Path | None = None,
-                 article_root: Path | None = None, *, auto_consumer: bool = True):
+                 article_root: Path | None = None, *, auto_consumer: bool = True, startup_progress=None):
         self.root = normalize(project_root)
         self.runtime = normalize(runtime_root or self.root / ".desktop-runtime")
         assert_not_c_drive(self.runtime)
         ensure_dir(self.runtime)
         self.settings_file = self.runtime / "settings.json"
+        self.settings = self._load_settings()
+        from .recovery_points import prepare_upgrade
+        self.startup_recovery_point = prepare_upgrade(self.runtime, self.settings, progress=startup_progress)
         self.workers = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ice-job")
         self.running: dict[str, Any] = {}
         # Future.cancel() may synchronously invoke a completion callback while a
@@ -39,12 +42,13 @@ class DesktopService:
         self.chat_guard = threading.RLock()
         self.chat_cancel = {}
         self._settings_guard = threading.Lock()
-        self.settings = self._load_settings()
         if not self.settings_file.exists():
             atomic_write_text(self.settings_file,json.dumps(self.settings,ensure_ascii=False,indent=2))
         if article_root is not None:
             self.settings['article_root'] = str(normalize(article_root))
             self.settings['accounts'][self.settings['active_account_id']]['article_root'] = self.settings['article_root']
+        if startup_progress:
+            startup_progress('upgrade_database' if self.startup_recovery_point else 'initialize_workspace')
         engine, _, store = self._app()
         # The previous sidecar is gone; inherited leases have no live owner here.
         store.conn.execute("UPDATE jobs SET lease=NULL, state='paused', pause_reason='程序重新启动，可继续任务' WHERE state='running' OR lease IS NOT NULL")
@@ -61,6 +65,8 @@ class DesktopService:
         # auto_consumer=False 供测试确定性控制（消费者生命周期由测试自行调用 drain）。
         self._consumer_stop = threading.Event()
         self._consumer_thread = None
+        if startup_progress:
+            startup_progress('ready')
         if auto_consumer:
             self._consumer_thread = threading.Thread(
                 target=self._consumer_loop, daemon=True, name="ice-queue-consumer")
@@ -249,6 +255,9 @@ class DesktopService:
             "assets.review":self.assets_review,
             "backup.create": self.backup_create, "backup.inspect": self.backup_inspect,
             "backup.restore": self.backup_restore,
+            "recovery.list": self.recovery_list, "recovery.create": self.recovery_create,
+            "recovery.inspect": self.recovery_inspect, "recovery.restore": self.recovery_restore,
+            "recovery.delete": self.recovery_delete,
             "backup.queue": self.backup_queue, "backup.resume_queue": self.backup_resume_queue,
             "assets.import": self.assets_import, "assets.select": self.assets_select,
             "assets.preview": self.assets_preview,
@@ -287,8 +296,9 @@ class DesktopService:
         profiles = []
         for aid, profile in self.settings["profiles"].items():
             from .llm.limits import revision
+            from .llm.admission import counter_supported
             profiles.append({**profile, "provider": aid,
-                             'limits_hash':revision(profile),
+                             'limits_hash':revision(profile), 'token_count_supported':counter_supported(ModelProfile(**profile)),
                              "has_key": bool(os.environ.get(profile["api_key_env"]))})
         from . import __version__
         return {"version": __version__, "brand": account["name"], "runtime_root": str(self.runtime),
@@ -972,7 +982,29 @@ class DesktopService:
                     raise ValueError('队列正在执行，请等待任务停止后再备份')
             finally:
                 store.close()
+            if params.get('_recovery_point'):
+                from .recovery_points import RecoveryPoints
+                return RecoveryPoints(self.runtime).create(self.settings)
             return create_backup(self.runtime, self.settings, normalize(params['file_path']))
+
+    def recovery_list(self, params):
+        from .recovery_points import RecoveryPoints
+        return RecoveryPoints(self.runtime).list()
+
+    def recovery_create(self, params):
+        return self.backup_create({'_recovery_point': True})
+
+    def recovery_inspect(self, params):
+        from .recovery_points import RecoveryPoints
+        return RecoveryPoints(self.runtime).inspect(params['point_id'])
+
+    def recovery_restore(self, params):
+        from .recovery_points import RecoveryPoints
+        return RecoveryPoints(self.runtime).restore(params['point_id'], params['destination'], params['package_hash'])
+
+    def recovery_delete(self, params):
+        from .recovery_points import RecoveryPoints
+        return RecoveryPoints(self.runtime).delete(params['point_id'], params['record_hash'])
 
     def backup_inspect(self, params):
         from .backup import inspect_backup
@@ -1361,14 +1393,29 @@ class DesktopService:
         return profile
 
     def models_limits_save(self, params):
-        from .llm.limits import output_limit
+        from .llm.limits import output_limit, token_check_policy
+        from .domain.types import now_iso
         if 'max_output_tokens' not in params:
             raise ValueError('请选择最大输出Token或明确留空')
         with self._settings_guard:
             self._limits_profile(params)
             updated=copy.deepcopy(self.settings)
             profile=updated['profiles'][params['provider']]
-            profile.setdefault('extra',{})['max_output_tokens']=params['max_output_tokens']
+            extra = profile.setdefault('extra',{})
+            extra['max_output_tokens']=params['max_output_tokens']
+            if 'context_window' in params:
+                window = params['context_window']
+                if window is None:
+                    extra.pop('context_window_override', None)
+                elif type(window) is not int or not 1 <= window <= 2**31-1:
+                    raise ValueError('手动上下文窗口需为1–2,147,483,647的整数，或留空使用端点报告值')
+                else:
+                    extra['context_window_override'] = {'base_url':profile['base_url'].rstrip('/'),
+                        'model_id':profile['model_id'], 'context_window':window,
+                        'source':'user', 'checked_at':now_iso()}
+            if 'token_check' in params:
+                extra['token_check'] = params['token_check']
+            token_check_policy(ModelProfile(**profile))
             output_limit(ModelProfile(**profile))
             atomic_write_text(self.settings_file,json.dumps(updated,ensure_ascii=False,indent=2))
             self.settings=updated
@@ -1421,6 +1468,7 @@ class DesktopService:
             if previous_identity != (profile['base_url'],profile['model_id']):
                 profile.setdefault('extra',{}).pop('model_window',None)
                 profile['extra'].pop('max_output_tokens',None)
+                profile['extra'].pop('context_window_override',None)
             for field in ('service','region'):
                 if field in params:
                     value=params[field]
@@ -1808,7 +1856,7 @@ HEAVY_METHODS = frozenset({
     'articles.export_bundle',
     'jobs.create', 'jobs.resume', 'supplements.prepare', 'supplements.execute',
     'chat.send', 'assets.analyze', 'assets.import', 'resources.vision',
-    'models.probe', 'models.catalog', 'models.window_refresh', 'vision.probe', 'backup.create', 'backup.inspect', 'backup.restore', 'backup.resume_queue',
+    'models.probe', 'models.catalog', 'models.window_refresh', 'vision.probe', 'backup.create', 'backup.inspect', 'backup.restore', 'backup.resume_queue', 'recovery.create', 'recovery.inspect', 'recovery.restore', 'recovery.delete',
     'accounts.import', 'articles.finalize', 'planning.propose',
     'outlines.preview', 'brief.suggest',
 })
@@ -1819,9 +1867,27 @@ def main():
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--runtime-root")
     parser.add_argument("--article-root")
+    parser.add_argument("--recovery-operation", choices=('workspace.inspect', 'backup.inspect', 'backup.restore', 'recovery.list', 'recovery.inspect', 'recovery.restore'))
+    parser.add_argument("--startup-session")
     args = parser.parse_args()
-    service = DesktopService(Path(args.project_root), Path(args.runtime_root) if args.runtime_root else None,
-                             Path(args.article_root) if args.article_root else None)
+    if args.recovery_operation:
+        from .startup_recovery import main as recovery_main
+        if not args.runtime_root:
+            parser.error('--runtime-root is required for recovery scratch data')
+        raise SystemExit(recovery_main(args.recovery_operation, Path(args.runtime_root)))
+    from .startup_progress import StartupProgress
+    startup = StartupProgress(Path(args.runtime_root), args.startup_session) if args.startup_session else None
+    try:
+        service = DesktopService(Path(args.project_root), Path(args.runtime_root) if args.runtime_root else None,
+                                 Path(args.article_root) if args.article_root else None, startup_progress=startup)
+    except Exception as error:
+        if startup:
+            startup.fail(error)
+            startup.close()
+            raise SystemExit(1) from None
+        raise
+    if startup:
+        startup.close()
     from .rpc_channel import RpcChannel
     # M1-04：重操作（模型调用/执行/备份）进串行工作池，读循环保持响应，
     # 轻查询与取消即时处理。串行锁保留 v1.5.3 的"同时至多一个重操作"语义。

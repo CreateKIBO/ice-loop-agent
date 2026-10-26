@@ -119,9 +119,15 @@ class AssetsGraphHandler(Handler):
         file_path = params.get("file_path")
         if not isinstance(file_path, str) or not file_path:
             raise ValueError("缺少下载文件路径")
-        store = self._store()
+        # Native downloads retain their original publication across account switches.
+        # Missing account_id preserves the existing manual/RPC caller contract.
+        owner = params.get("account_id")
+        if "account_id" in params and (not isinstance(owner, str) or not owner):
+            raise ValueError("下载来源公众号无效")
+        account = self.service._account(owner)
+        _, _, store = self.service._app(account_id=account["id"])
         try:
-            return assets_v2.stage_download(store, self._account()["id"], file_path,
+            return assets_v2.stage_download(store, account["id"], file_path,
                                             origin_url=str(params.get("origin_url", "")))
         finally:
             store.close()

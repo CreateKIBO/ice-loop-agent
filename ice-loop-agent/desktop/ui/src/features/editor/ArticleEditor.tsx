@@ -7,13 +7,14 @@ import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Banner, Button, ErrorPanel, Spinner } from "../../components/ui";
+import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { accountStore, dirtyStore, editorStore, flushAllDirty, registerDirtyFlush, rpc, useObjectDirty, type RpcError } from "../../data/client";
 import { CopyButton } from '../../components/CopyButton';
 import { exportProblems } from './exportModel';
 import type { ExportResult } from './exportModel';
 import "../../styles/editor.css";
-import { docToMarkdown, markdownToDoc, type EditorBlockJSON } from "./markdownBridge";
+import { docToMarkdown, markdownToDoc, markdownHeadings, type MarkdownHeading, type EditorBlockJSON } from "./markdownBridge";
 import { ImageSlot, RawBlock, RunOutput } from "./nodes";
 import { PatchReview } from "./PatchReview";
 import { DeliveryReviewDialog, refreshDeliverySnapshot, reviewBadge, useDeliverySnapshot } from "./DeliveryReview";
@@ -45,16 +46,22 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [loadTick, setLoadTick] = React.useState(0);
   const [saveState, setSaveState] = React.useState<"saved" | "saving" | "error" | "dirty">("saved");
-  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [saveError, setSaveError] = React.useState<unknown>(null);
   const [conflict, setConflict] = React.useState<string | null>(null);
   const [savedDraft, setSavedDraft] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"rich" | "source">("rich");
   const [sourceText, setSourceText] = React.useState("");
+  const [sourceNavigation, setSourceNavigation] = React.useState<{ line: number; token: number } | null>(null);
+  const deferredText = React.useDeferredValue(sourceText);
+  const headings = React.useMemo(() => markdownHeadings(deferredText), [deferredText]);
   const persistence = React.useMemo(() => new EditorPersistence(rpc, jobId), [jobId]);
   const latestText = React.useRef("");
   const editSequence = React.useRef(0);
+  const headingFocusTimer = React.useRef<number | undefined>(undefined);
   const mounted = React.useRef(true);
   const versionPending = React.useRef(false);
+  const reviewApplyingRef = React.useRef(false);
+  const [reviewApplying, setReviewApplying] = React.useState(false);
   const [editorBody, setEditorBody] = React.useState<{ text: string } | null>(null);
   const debounceTimer = React.useRef<number | undefined>(undefined);
   const draftSequence = React.useRef(0);
@@ -74,7 +81,7 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
       } catch (error) {
         if (mounted.current && sequence === draftSequence.current) {
           setSaveState("error");
-          setSaveError((error as Error).message);
+          setSaveError(error);
         }
       }
     }, 800);
@@ -115,6 +122,31 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
     editorProps: { attributes: { class: "ice-editor", spellcheck: "false" } },
   });
 
+  const navigateHeading = (heading: MarkdownHeading) => {
+    if (deferredText !== sourceText || reviewApplyingRef.current) return;
+    window.clearTimeout(headingFocusTimer.current);
+    if (mode === "source") {
+      setSourceNavigation(previous => ({ line: heading.line, token: (previous?.token ?? 0) + 1 }));
+    } else if (editor) {
+      let index = 0;
+      editor.state.doc.forEach((node, position) => {
+        if (node.type.name === "heading" && index++ === heading.index) {
+          const document = editor.state.doc, opener = window.document.activeElement;
+          // Tiptap focus() waits for rAF. An occluded Windows view can throttle that indefinitely.
+          // Defer beyond React's event commit, then focus the existing view without an animation frame.
+          headingFocusTimer.current = window.setTimeout(() => {
+            if (!mounted.current || reviewApplyingRef.current || editor.isDestroyed || !editor.view.dom.isConnected || editor.state.doc !== document) return;
+            const active = window.document.activeElement;
+            if (active !== opener && active !== window.document.body && !editor.view.dom.contains(active)) return;
+            editor.commands.setTextSelection(position + 1);
+            editor.view.focus();
+            editor.commands.scrollIntoView();
+          }, 0);
+        }
+      });
+    }
+  };
+
   // Only an explicit document load/recovery installs content. A late save acknowledgement
   // updates the baseline without replacing the text currently being edited.
   React.useEffect(() => {
@@ -127,6 +159,7 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
     return () => {
       mounted.current = false;
       window.clearTimeout(debounceTimer.current);
+      window.clearTimeout(headingFocusTimer.current);
       draftSequence.current += 1;
     };
   }, []);
@@ -154,6 +187,18 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
     setLoadTick(tick => tick + 1);
     void refreshDeliverySnapshot();
   };
+  const beginProposalApply = () => {
+    if (versionPending.current || reviewApplyingRef.current || dirtyStore.isDirty(dirtyKey) || savedDraft !== null) {
+      throw Error("正文还有未保存为版本的修改或恢复草稿，请先保存新版本或处理恢复草稿；审阅决定继续保留。");
+    }
+    reviewApplyingRef.current = true; setReviewApplying(true);
+    editor?.setEditable(false, false);
+    return () => {
+      reviewApplyingRef.current = false;
+      if (mounted.current) setReviewApplying(false);
+      if (editor && !editor.isDestroyed) editor.setEditable(true, false);
+    };
+  };
   const [reviewOpen, setReviewOpen] = React.useState(false);
   const [assetFigure, setAssetFigure] = React.useState<number | null>(null);
   const showAssets = (figure = 0) => {
@@ -168,7 +213,7 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
     : sourceText;
 
   const saveVersion = async () => {
-    if (!data || versionPending.current) return;
+    if (!data || versionPending.current || reviewApplyingRef.current) return;
     versionPending.current = true;
     window.clearTimeout(debounceTimer.current);
     draftSequence.current += 1;
@@ -196,7 +241,7 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
       if (!mounted.current) return;
       const rpcError = error as RpcError;
       setSaveState("error");
-      setSaveError(rpcError.message);
+      setSaveError(error);
       if ((rpcError.message ?? "").includes("已变化")) {
         setConflict("正文在别处已被修改。你的内容仍在编辑器中，可先复制或另存工作草稿，再刷新合并。");
       }
@@ -212,6 +257,7 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
   savingRef.current = versionPending.current;
   React.useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.isComposing) return; // IME 组词期间的组合键不触发保存
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (!savingRef.current) void saveRef.current();
@@ -223,11 +269,11 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
 
   const backToChat = async () => {
     try { await flushAllDirty(); editorStore.set(null); }
-    catch (error) { setSaveError((error as Error).message); }
+    catch (error) { setSaveError(error); }
   };
 
   const adoptDraft = () => {
-    if (savedDraft === null) return;
+    if (savedDraft === null || reviewApplyingRef.current) return;
     if (editor) editor.commands.setContent(markdownToDoc(savedDraft) as never, { emitUpdate: false });
     setSourceText(savedDraft);
     setSavedDraft(null);
@@ -239,11 +285,12 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
       await flushDraft();
       setConflict(null);
       setLoadTick(tick => tick + 1);
-    } catch (error) { setSaveError((error as Error).message); }
+    } catch (error) { setSaveError(error); }
   };
 
   const switchMode = () => {
-    if (!editor) return;
+    if (!editor || reviewApplyingRef.current) return;
+    window.clearTimeout(headingFocusTimer.current);
     if (mode === "rich") {
       setSourceText(docToMarkdown(editor.getJSON() as EditorBlockJSON));
       setMode("source");
@@ -343,25 +390,25 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
             </span>
           </div>
           <Button variant="primary" loading={versionPending.current} onClick={saveVersion}
-                disabled={versionPending.current} title="Ctrl+S">
+                disabled={versionPending.current || reviewApplying} title="Ctrl+S">
             保存新版本
           </Button>
         </div>
         <div className="ice-editor-bar__secondary">
           <span className="ice-editor-bar__count" title="包括 Markdown 标记在内的字符数">{sourceText.length.toLocaleString()} 字符</span>
           <div className="ice-editor-bar__actions" role="group" aria-label="文章操作">
-            <Button onClick={switchMode} title="在富文本和 Markdown 源码之间切换">
+            <Button disabled={reviewApplying} onClick={switchMode} title="在富文本和 Markdown 源码之间切换">
               {mode === "rich" ? "源模式" : "富文本"}
             </Button>
-            <Button onClick={() => showAssets()}>准备配图</Button>
-            <Button onClick={() => setReviewOpen(true)} title="核对标题、正文、配图与检查结果，确认后才能导出发布就绪包">
+            <Button disabled={reviewApplying} onClick={() => showAssets()}>准备配图</Button>
+            <Button disabled={reviewApplying} onClick={() => setReviewOpen(true)} title="核对标题、正文、配图与检查结果，确认后才能导出发布就绪包">
               交付审阅
               {delivery.data && <span className={"ice-badge" + (deliveryBadge.tone ? " ice-badge--" + deliveryBadge.tone : "")}
                 style={{ marginLeft: 2 }}>{deliveryBadge.label}</span>}
             </Button>
-            <Button loading={exporting === "draft"} disabled={exporting !== null && exporting !== "draft"}
+            <Button loading={exporting === "draft"} disabled={reviewApplying || exporting !== null && exporting !== "draft"}
                     onClick={() => exportBundle("draft")}>导出草稿包</Button>
-            <Button loading={exporting === "ready"} disabled={exporting !== null && exporting !== "ready"}
+            <Button loading={exporting === "ready"} disabled={reviewApplying || exporting !== null && exporting !== "ready"}
                     onClick={() => exportBundle("ready")}>导出发布就绪包</Button>
           </div>
         </div>
@@ -408,12 +455,13 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
           <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }} transition={{ duration: 0.18 }} key="draft-banner">
             <Banner tone="info" title="检测到未保存的工作草稿" actions={
-              <><Button onClick={adoptDraft}>恢复草稿</Button>
-                <Button variant="ghost" onClick={async () => {
+              <><Button disabled={reviewApplying} onClick={adoptDraft}>恢复草稿</Button>
+                <Button variant="ghost" disabled={reviewApplying} onClick={async () => {
+                  if (reviewApplyingRef.current) return;
                   try {
                     await rpc("articles.editor_draft_clear", { job_id: jobId });
                     setSavedDraft(null);
-                  } catch (error) { setSaveError((error as Error).message); }
+                  } catch (error) { setSaveError(error); }
                 }}>丢弃草稿</Button></>}>
               草稿与当前正文不同；恢复不会影响已批准版本。
             </Banner>
@@ -421,8 +469,20 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
         )}
       </AnimatePresence>
 
-      {saveError && <div role="alert" style={{ color: "var(--ice-danger)", fontSize: "var(--ice-font-size-sm)" }}>{saveError}</div>}
+      {saveError != null && <ErrorNote error={saveError} note="编辑器中的内容保留，可按提示处理后重试。" />}
 
+      <details className="ice-article-outline">
+        <summary>文章目录 · {headings.length} 个章节</summary>
+        <nav aria-label="文章目录">
+          {headings.length ? headings.map(heading => <button type="button" key={heading.index}
+            disabled={deferredText !== sourceText} style={{ paddingInlineStart: 12 + (heading.level - 1) * 12 }}
+            onClick={() => navigateHeading(heading)} title={heading.text}>
+            <span aria-hidden="true">H{heading.level}</span> {heading.text}
+          </button>) : <p>正文尚无章节标题，添加标题后可在这里定位。</p>}
+        </nav>
+      </details>
+
+      <div inert={reviewApplying} aria-label="正文编辑区域" aria-busy={reviewApplying} style={{ display: "grid", gap: 8, flexShrink: 0 }}>
       {mode === "rich" ? (
         <>
           <Toolbar editor={editor} />
@@ -430,16 +490,19 @@ export function ArticleEditor({ jobId }: { jobId: string }) {
           <EditorContent editor={editor} style={{ flexShrink: 0 }} />
         </>
       ) : (
-        <SourceEditor value={sourceText} onChange={value => {
+        <SourceEditor navigation={sourceNavigation} value={sourceText} onChange={value => {
           setSourceText(value);
           scheduleDraft(value);
         }} />
       )}
 
-      <PatchReview jobId={jobId} onApplied={refresh} />
+      </div>
+      {reviewApplying && <div role="status">正在应用提案，正文编辑暂时锁定…</div>}
+      <PatchReview jobId={jobId} onApplied={refresh} bodyBlocked={isDirty || savedDraft !== null || versionPending.current} beginApply={beginProposalApply} />
       <WorkflowDisclosure jobId={jobId} />
       <DeliveryReviewDialog jobId={jobId} open={reviewOpen} onOpenChange={setReviewOpen} dirty={isDirty}
                             onFixImages={showAssets}
+                            onFixBody={() => { setReviewOpen(false); editor?.commands.focus(); }}
                             onExportReady={() => void exportBundle("ready")} />
       {assetFigure !== null && <React.Suspense fallback={<div role="status"><Spinner />正在打开配图工作台…</div>}>
         <AssetWorkspace jobId={jobId} figureNo={assetFigure || undefined} onClose={() => { setAssetFigure(null); void refreshDeliverySnapshot(); }} />
@@ -491,24 +554,34 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
 }
 
 // 源模式：CodeMirror 优先，运行时异常回退 textarea（保输入、可保存）。
-function SourceEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+type SourceNavigation = { line: number; token: number } | null;
+function SourceEditor({ value, onChange, navigation }: { value: string; onChange: (v: string) => void; navigation: SourceNavigation }) {
   const [failed, setFailed] = React.useState(false);
+  const fallback = React.useRef<HTMLTextAreaElement>(null);
+  React.useEffect(() => {
+    if (!failed || !navigation || !fallback.current) return;
+    const area = fallback.current, lines = value.split("\n");
+    const start = lines.slice(0, Math.min(navigation.line - 1, lines.length - 1)).reduce((sum, line) => sum + line.length + 1, 0);
+    area.focus(); area.setSelectionRange(start, start);
+    area.scrollTop = (navigation.line - 1) * (Number.parseFloat(getComputedStyle(area).lineHeight) || 22);
+  }, [failed, navigation]);
   if (failed) {
-    return <textarea value={value} onChange={event => onChange(event.target.value)} rows={18}
+    return <textarea ref={fallback} value={value} onChange={event => onChange(event.target.value)} rows={18}
                      aria-label="正文源码"
                      style={{ fontFamily: "var(--ice-font-mono)", padding: 12, borderRadius: 8,
                               border: "1px solid var(--ice-border)", resize: "vertical" }} />;
   }
-  return <CodeMirrorSource value={value} onChange={onChange} onError={() => setFailed(true)} />;
+  return <CodeMirrorSource navigation={navigation} value={value} onChange={onChange} onError={() => setFailed(true)} />;
 }
 
-function CodeMirrorSource({ value, onChange, onError }: {
-  value: string; onChange: (v: string) => void; onError: () => void;
+function CodeMirrorSource({ value, onChange, onError, navigation }: {
+  value: string; onChange: (v: string) => void; onError: () => void; navigation: SourceNavigation;
 }) {
   const host = React.useRef<HTMLDivElement | null>(null);
   const latest = React.useRef({ value, onChange, onError });
   latest.current = { value, onChange, onError };
   const viewRef = React.useRef<import("@codemirror/view").EditorView | null>(null);
+  const [ready, setReady] = React.useState(false);
   const syncing = React.useRef(false);
   React.useEffect(() => {
     let view: import("@codemirror/view").EditorView | null = null;
@@ -530,6 +603,7 @@ function CodeMirrorSource({ value, onChange, onError }: {
           parent: host.current,
         });
         viewRef.current = view;
+        setReady(true);
       } catch {
         if (!cancelled) latest.current.onError();
       }
@@ -545,6 +619,13 @@ function CodeMirrorSource({ value, onChange, onError }: {
     try { view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } }); }
     finally { syncing.current = false; }
   }, [value]);
+  React.useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !navigation) return;
+    const line = view.state.doc.line(Math.max(1, Math.min(navigation.line, view.state.doc.lines)));
+    view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    view.focus();
+  }, [navigation, ready]);
   return <div ref={host} aria-label="正文源码" style={{
     border: "1px solid var(--ice-border)", borderRadius: "var(--ice-radius-md)",
     minHeight: 320, background: "var(--ice-surface)", overflow: "auto",

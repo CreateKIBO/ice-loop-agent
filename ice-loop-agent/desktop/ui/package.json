@@ -8,7 +8,8 @@
     "gen:types": "node scripts/gen-ts-types.mjs",
     "gen": "npm run gen:validators && npm run gen:types",
     "build": "npm run gen && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:bundle": "node scripts/bundle-report.mjs dist"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

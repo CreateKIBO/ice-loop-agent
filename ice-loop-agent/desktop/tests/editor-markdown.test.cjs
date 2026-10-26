@@ -64,3 +64,16 @@ test('run output ref survives and placeholder fields intact', () => {
   const run = doc.content.find(n => n.type === 'runOutput');
   assert.strictEqual(run.attrs.runRef, 'run-abc123');
 });
+
+
+test('outline shares Markdown syntax: fenced/quoted examples excluded, duplicate and setext headings retained', () => {
+  const md = '# **Main** `code`\r\n\r\n```python\r\n# fake\r\n```\r\n\r\n> ## quoted\r\n\r\n## Same\r\n\r\nSame\r\n----\r\n';
+  const headings = bridge.markdownHeadings(md);
+  assert.deepStrictEqual(headings, [
+    {index:0, level:1, text:'Main code', line:1},
+    {index:1, level:2, text:'Same', line:9},
+    {index:2, level:2, text:'Same', line:11},
+  ]);
+  assert.strictEqual(bridge.markdownToDoc(md).content.filter(n=>n.type==='heading').length,headings.length);
+  assert.deepStrictEqual(bridge.markdownHeadings('plain text\n\n    # indented code\n'),[]);
+});

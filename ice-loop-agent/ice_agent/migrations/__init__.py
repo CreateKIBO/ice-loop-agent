@@ -83,6 +83,8 @@ _PRAGMA_APPLY: dict[int, Callable[[sqlite3.Connection], None]] = {
     17: lambda conn: conn.execute("PRAGMA user_version=17"),
     18: lambda conn: conn.execute("PRAGMA user_version=18"),
     19: lambda conn: conn.execute("PRAGMA user_version=19"),
+    20: lambda conn: conn.execute("PRAGMA user_version=20"),
+    21: lambda conn: conn.execute("PRAGMA user_version=21"),
 }
 
 
@@ -105,6 +107,8 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
     ``stop_after`` injects a failure after the given migration for fault-injection
     tests; the database must stay at the previous version afterwards.
     """
+    if conn.in_transaction:
+        raise ValueError("请先完成当前事务，再执行数据库迁移")
     if dry_run:
         # Rolling back each migration separately erases tables required by the
         # next one. Run the whole chain on a memory snapshot instead. Exceptions
@@ -120,34 +124,24 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
                     "dry_run_rolled_back": [item["version"] for item in result["applied"]]}
         finally:
             snapshot.close()
-    # R15：dry-run 结束后原库必须完全未变——若本调用新建了跟踪表，结束时删掉。
+    # Admission is read-only and runs before even creating the tracking table.
+    # Unknown histories must not partly migrate and only fail at the final PRAGMA.
+    validate_migration_state(conn)
     tracking_existed = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone() is not None
     _ensure_tracking_table(conn)
     before = conn.execute("PRAGMA user_version").fetchone()[0]
-    # 已记录的迁移视作已应用（user_version 可能被旧工具/测试手动降级）；
-    # 结束时把 user_version 修复为已应用集合的最大版本。
-    # R15：已记录行的 checksum 必须与当前构建一致，漂移即拒绝执行。
-    # 算法过渡：v18、v19 使用 co_code+co_consts 算法，之前的 co_code-only checksum
-    # 属于已知历史构建（不是未知漂移），只审计 v18+。
-    CHECKSUM_ALGORITHM_TRANSITION = 18
     recorded: dict[int, str] = {row[0]: row[1] for row in conn.execute(
         "SELECT version, checksum FROM schema_migrations")}
-    for version, checksum in recorded.items():
-        item = next((m for m in MIGRATIONS if m.version == version), None)
-        if item is None:
-            continue  # 未知版本（可能来自其他构建），不误报
-        if version >= CHECKSUM_ALGORITHM_TRANSITION and item.checksum != checksum:
-            raise ValueError(
-                f"迁移 {version} 的记录 checksum 与当前构建不一致（数据库可能被其他版本写入）")
     applied: list[dict] = []
     rolled_back: list[int] = []
     for item in pending_migrations(before):
         try:
             conn.execute("BEGIN IMMEDIATE")
             # Re-read inside the write lock: another process may have advanced.
-            current = conn.execute("PRAGMA user_version").fetchone()[0]
-            tracked = {row[0] for row in conn.execute("SELECT version FROM schema_migrations")}
+            state = validate_migration_state(conn)
+            current = state['current_version']
+            tracked = set(state['recorded'])
             if item.version <= current or item.version in tracked:
                 conn.execute("ROLLBACK")
                 if item.version in tracked:
@@ -174,11 +168,19 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
             conn.execute("ROLLBACK")
             raise
     effective = max([before, *recorded]) if recorded else before
-    if effective != conn.execute("PRAGMA user_version").fetchone()[0] and not dry_run:
-        # 修复路径：recorded 非空时 effective 必为注册表版本（10-19），
-        # 有对应字面量语句；recorded 为空时 effective==before 不会进入本分支。
-        _write_user_version(conn, effective)
-        conn.commit()
+    if effective > conn.execute("PRAGMA user_version").fetchone()[0]:
+        # A historical tool may have lowered the version while leaving the full
+        # audited history intact. Repair only forward, under the write lock.
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            state = validate_migration_state(conn)
+            effective = max([state['current_version'], *state['recorded']])
+            if effective > state['current_version']:
+                _write_user_version(conn, effective)
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
     if dry_run and not tracking_existed:
         # dry-run 不留任何痕迹：本调用新建的跟踪表一并移除。
         conn.execute("DROP TABLE schema_migrations")
@@ -197,16 +199,56 @@ MAX_KNOWN_VERSION = max([BASELINE_VERSION] + [m.version for m in MIGRATIONS])
 
 
 def verify_migrations(conn: sqlite3.Connection) -> dict:
-    """Audit trail check: recorded rows must match the registry checksums."""
-    _ensure_tracking_table(conn)
-    rows = conn.execute(
-        "SELECT version, description, checksum FROM schema_migrations ORDER BY version").fetchall()
-    registry = {m.version: m for m in MIGRATIONS}
-    problems = []
-    for version, _description, checksum in rows:
-        item = registry.get(version)
+    """Read-only admission/audit; never create or rewrite migration history.
+
+    Versions 10–17 retain the existing legacy checksum policy, but differences
+    are explicitly reported as unverified instead of being called verified.
+    """
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    registry = {item.version: item for item in MIGRATIONS}
+    latest = max([BASELINE_VERSION, *registry])
+    tracking_object = conn.execute(
+        "SELECT type FROM sqlite_master WHERE name='schema_migrations'").fetchone()
+    tracking = tracking_object is not None and tracking_object[0] == 'table'
+    problems, legacy_unverified, rows = [], [], []
+    if tracking_object is not None and not tracking:
+        problems.append('迁移历史不是有效的数据表，请使用对应版本程序或从备份恢复')
+    if current < 0 or current > latest:
+        problems.append('数据库来自较新或不支持的版本，请使用对应版本程序打开')
+    if tracking:
+        try:
+            rows = conn.execute(
+                "SELECT version, description, checksum FROM schema_migrations ORDER BY version").fetchall()
+        except sqlite3.Error:
+            problems.append('迁移历史无法读取，请使用对应版本程序或从备份恢复')
+    elif current > BASELINE_VERSION:
+        problems.append('数据库缺少迁移历史记录，当前资料已保留，请使用对应版本程序或从备份恢复')
+    known = set()
+    for version, description, checksum in rows:
+        item = registry.get(version) if type(version) is int else None
         if item is None:
-            problems.append(f"version {version} 来自未知构建")
+            problems.append(f'迁移历史包含未知版本 {str(version)[:32]}，请使用对应版本程序打开')
+            continue
+        known.add(version)
+        if version >= 18:
+            if item.checksum != checksum:
+                problems.append(f'迁移 {version} 的记录 checksum 与当前构建不一致（数据库可能被其他版本写入）')
+            if item.description != description:
+                problems.append(f'迁移 {version} 的说明与当前构建不一致')
         elif item.checksum != checksum:
-            problems.append(f"version {version} checksum 不匹配")
-    return {"recorded": [row[0] for row in rows], "problems": problems}
+            legacy_unverified.append(version)
+    # Lowered user_version is recoverable only when an unbroken, known history
+    # remains. A higher version without its receipts must never be re-certified.
+    upper = max([current, *known])
+    missing = sorted(version for version in registry if version <= upper and version not in known)
+    if tracking and missing:
+        problems.append('迁移历史缺少记录：' + '、'.join(map(str, missing)))
+    return {'recorded': [row[0] for row in rows], 'problems': problems,
+            'current_version': current, 'legacy_unverified': legacy_unverified}
+
+
+def validate_migration_state(conn: sqlite3.Connection) -> dict:
+    state = verify_migrations(conn)
+    if state['problems']:
+        raise ValueError('；'.join(state['problems']))
+    return state

@@ -53,3 +53,5 @@ from . import agent as _agent  # noqa: E402,F401
 from . import workflow_review as _workflow_review  # noqa: E402,F401
 from . import assets_graph as _assets_graph  # noqa: E402,F401
 from . import ops_export as _ops_export  # noqa: E402,F401
+
+from . import image_sources as _image_sources  # noqa: E402,F401

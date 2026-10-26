@@ -402,3 +402,27 @@ def _capture_provenance(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_capture_assets_slot"
         " ON capture_assets(account_id, job_id, figure_no)"
     )
+
+
+@migration(20, "提案审阅决定草稿：独立保存、账号隔离及乐观并发校验")
+def _proposal_decision_drafts(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE proposal_decision_drafts ("
+        " account_id TEXT NOT NULL, article_id TEXT NOT NULL, proposal_id TEXT NOT NULL,"
+        " base_hash TEXT NOT NULL, decisions_json TEXT NOT NULL,"
+        " version INTEGER NOT NULL, updated_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, article_id, proposal_id))"
+    )
+
+
+@migration(21, "创作发送回执：账号/会话/请求幂等与消息原子受理")
+def _creative_send_receipts(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE creative_send_receipts ("
+        " account_id TEXT NOT NULL, conversation_id TEXT NOT NULL, request_id TEXT NOT NULL,"
+        " input_hash TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('accepted','cancelled')),"
+        " message_id TEXT UNIQUE, user_message_id TEXT, created_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, conversation_id, request_id),"
+        " CHECK((state='accepted' AND message_id IS NOT NULL AND user_message_id IS NOT NULL) OR"
+        " (state='cancelled' AND message_id IS NULL AND user_message_id IS NULL)))"
+    )

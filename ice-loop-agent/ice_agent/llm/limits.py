@@ -27,10 +27,22 @@ def window_metadata(profile: dict, rows: list[dict]) -> dict:
 
 
 def bound_window(profile: ModelProfile) -> dict:
+    def scoped(value):
+        return (isinstance(value, dict) and value.get('model_id') == profile.model_id
+                and value.get('base_url') == profile.base_url.rstrip('/'))
     metadata = profile.extra.get('model_window')
-    if not isinstance(metadata, dict) or metadata.get('model_id') != profile.model_id or metadata.get('base_url') != profile.base_url.rstrip('/'):
-        return {}
-    return metadata
+    result = dict(metadata) if scoped(metadata) else {}
+    manual = profile.extra.get('context_window_override')
+    if scoped(manual) and type(manual.get('context_window')) is int and 1 <= manual['context_window'] <= 2**31-1:
+        result.update(context_window=manual['context_window'], context_source='user')
+    return result
+
+
+def token_check_policy(profile: ModelProfile) -> str:
+    policy = profile.extra.get('token_check', 'auto')
+    if policy not in ('auto', 'required', 'off'):
+        raise ParamUnsupportedError('Token预检策略需为自动、严格或关闭')
+    return policy
 
 
 def output_limit(profile: ModelProfile) -> int | None:

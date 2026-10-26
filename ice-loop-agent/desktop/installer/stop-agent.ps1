@@ -5,6 +5,8 @@ param(
     [ValidateRange(1,30)][int]$GraceSeconds = 8,
     [ValidateRange(1,30)][int]$ForceSeconds = 12,
     [string]$ReportPath,
+    [string]$InstallRoot,
+    [string]$PreviousRoot,
     [switch]$DiscoverOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -15,7 +17,9 @@ $taskForced = @{}
 $taskWindows = @{}
 $taskFailures = @()
 
-Add-Type -TypeDefinition @'
+# NSIS uses a native System.dll in its working directory. Bind the managed reference
+# by its already-loaded framework location, never by a relative assembly name.
+Add-Type -ReferencedAssemblies ([System.ComponentModel.Win32Exception].Assembly.Location) -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -61,24 +65,41 @@ function Test-IcePackagedRoot([string]$taskDirectory) {
     (Test-Path -LiteralPath (Join-Path $taskDirectory 'resources/app.asar') -PathType Leaf) -and
     (Test-Path -LiteralPath (Join-Path $taskDirectory 'resources/engine/ice-engine.exe') -PathType Leaf)
 }
+$taskScopeRoots = @()
+foreach($taskScope in @($InstallRoot, $PreviousRoot)) {
+    if(-not $taskScope) { continue }
+    if($taskScope -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)') { throw 'Installation scope must be an absolute directory.' }
+    $taskNormalized = [IO.Path]::GetFullPath($taskScope).TrimEnd([char[]]'\/')
+    if($taskNormalized.Length -le 3) { throw 'Installation scope cannot be a drive root.' }
+    $taskScopeRoots += $taskNormalized
+}
+$taskScopeRoots = @($taskScopeRoots | Select-Object -Unique)
+function Test-IceScope([string]$taskDirectory) {
+    if(-not $taskScopeRoots.Count) { return [bool]$DiscoverOnly }
+    $taskNormalized = [IO.Path]::GetFullPath($taskDirectory).TrimEnd([char[]]'\/')
+    return $taskNormalized -in $taskScopeRoots
+}
 function Test-IceRoot($taskProcess) {
     if(-not $taskProcess.ExecutablePath) { return $false }
     $taskPath = $taskProcess.ExecutablePath
     if($taskProcess.Name -ieq 'ICE Loop Studio.exe') {
-        return Test-IcePackagedRoot (Split-Path -Parent $taskPath)
+        $taskDirectory = Split-Path -Parent $taskPath
+        return (Test-IceScope $taskDirectory) -and (Test-IcePackagedRoot $taskDirectory)
     }
     if($taskProcess.Name -ieq 'ice-engine.exe') {
         $taskDirectory = Split-Path -Parent $taskPath
         if((Split-Path -Leaf $taskDirectory) -ine 'engine') { return $false }
         $taskResources = Split-Path -Parent $taskDirectory
         if((Split-Path -Leaf $taskResources) -ine 'resources') { return $false }
-        return Test-IcePackagedRoot (Split-Path -Parent $taskResources)
+        $taskDirectory = Split-Path -Parent $taskResources
+        return (Test-IceScope $taskDirectory) -and (Test-IcePackagedRoot $taskDirectory)
     }
     if($taskProcess.Name -ine 'electron.exe' -or -not $taskProcess.CommandLine) { return $false }
     foreach($taskArgument in [IceInstallerArguments]::Parse($taskProcess.CommandLine)) {
         if($taskArgument -notmatch '^(?:[A-Za-z]:[\\/]|\\\\)') { continue }
         $taskSource = $taskArgument
         if((Split-Path -Leaf $taskSource) -ieq 'main.cjs') { $taskSource = Split-Path -Parent $taskSource }
+        if(-not (Test-IceScope $taskSource)) { continue }
         $taskPackage = Join-Path $taskSource 'package.json'
         if(-not (Test-Path -LiteralPath $taskPackage -PathType Leaf)) { continue }
         try { $taskMetadata = Get-Content -LiteralPath $taskPackage -Raw -Encoding UTF8 | ConvertFrom-Json } catch { continue }
@@ -99,7 +120,8 @@ function Update-IceTracked($taskSnapshot) {
             $taskId = [int]$taskProcess.ProcessId; $taskParentId = [int]$taskProcess.ParentProcessId
             if($taskTracked.ContainsKey($taskId)) { continue }
             if($taskTracked.ContainsKey($taskParentId) -and $taskById.ContainsKey($taskParentId) -and
-               $taskTracked[$taskParentId] -eq (Get-IceIdentity $taskById[$taskParentId])) {
+               $taskTracked[$taskParentId] -eq (Get-IceIdentity $taskById[$taskParentId]) -and
+               $taskProcess.CreationDate -ge $taskById[$taskParentId].CreationDate) {
                 $taskTracked[$taskId] = Get-IceIdentity $taskProcess; $taskAdded = $true
             }
         }
@@ -112,7 +134,7 @@ function Get-IceAlive($taskSnapshot) {
 }
 function Write-IceReport([int]$taskExitCode, $taskRemaining) {
     $taskResult = [ordered]@{
-        exit_code = $taskExitCode; session = $taskSession; discovered = @($taskTracked.Keys | Sort-Object)
+        exit_code = $taskExitCode; session = $taskSession; installation_roots = @($taskScopeRoots); discovered = @($taskTracked.Keys | Sort-Object)
         close_requested = @($taskClosed.Keys | Sort-Object); force_stopped = @($taskForced.Keys | Sort-Object)
         window_classes = $taskWindows
         remaining = @($taskRemaining | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_.ProcessId }); failures = @($taskFailures)
@@ -122,6 +144,7 @@ function Write-IceReport([int]$taskExitCode, $taskRemaining) {
     Write-Output $taskJson
 }
 try {
+    if(-not $DiscoverOnly -and -not $taskScopeRoots.Count) { throw 'An explicit installation directory is required before stopping processes.' }
     $taskSnapshot = Get-IceSnapshot
     # ExecutablePath can disappear while a known process exits. Only diagnose a stable,
     # inaccessible instance before tracking; subsequent ownership uses PID + creation time.

@@ -54,7 +54,7 @@ const sourceRows=()=>rpc('outlines.list');
   let rows=(await sourceRows()).rows;
   assert('saving_import_keeps_later_issues_and_edits',rows.length===26&&rows.find(r=>r.episode===11).title==='从一条街道开始观察'&&rows.some(r=>r.episode===100));
   await click('读取大纲文档');await idle();await click('识别并预览题目');await until(`Boolean(document.querySelector('[aria-label="期题 1 标题"]'))`);await idle();
-  await click('确认并保存期题');await until(`document.querySelector('.ice-editorial').innerText.includes('请确认覆盖已有期的选题')`);await idle();
+  await click('需先勾选覆盖确认');await until(`document.querySelector('.ice-editorial').innerText.includes('请确认覆盖已有期的选题')`);await idle();
   assert('existing_issue_is_not_silently_overwritten',(await sourceRows()).rows.find(r=>r.episode===11).title==='从一条街道开始观察');
   await field('期题 1 标题','经过确认的新观察题目');
   await clickSelector(`document.querySelector('.ice-editorial__check input')`);await click('确认并保存期题');await until(`!document.querySelector('[aria-label="大纲识别预览"]')`);await idle();

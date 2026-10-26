@@ -10,9 +10,9 @@ v2 响应显式 kind=response，事件 kind=event。旧客户端只看得到 v1 
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 PROTOCOL_VERSION = 2
 
@@ -84,16 +84,60 @@ class ChatMode(str, Enum):
     images = "images"
 
 
+class ChatCitation(StrictModel):
+    chunk_id: str = Field(min_length=1, max_length=100)
+    hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class ChatDocument(StrictModel):
+    source_name: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=30000)
+
+
 class ChatSendRequest(StrictModel):
-    """chat.send 参数合同（与 creative_chat.CreativeChat.send 对齐）。"""
+    """chat.send 参数；同一账号/会话/请求标识仅受理一次，不把重放当重新生成。"""
     conversation_id: str = Field(min_length=1, max_length=100)
     text: str = Field(default="", max_length=12000)
     mode: ChatMode = ChatMode.discuss
     references: list[str] = Field(default_factory=list, max_length=8)
+    citations: list[ChatCitation] = Field(default_factory=list, max_length=8)
+    documents: list[ChatDocument] = Field(default_factory=list, max_length=3)
+    selected_text: str = Field(default="", max_length=8000)
+    profile_id: str | None = Field(default=None, max_length=100)
     clarification_message_id: str | None = Field(default=None, max_length=100)
+    clarification_answers: dict[str, Annotated[str,Field(min_length=1,max_length=2000)]] = Field(default_factory=dict,max_length=3)
+    retry_message_id: str | None = Field(default=None, max_length=100)
     candidate_id: str | None = Field(default=None, max_length=100)
-    request_id: str | None = Field(default=None, max_length=100,
-                                   description="幂等键：同一会话重复提交同 request_id 返回同一结果")
+    request_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,100}$",
+                                   description="同一账号/会话内相同请求返回原消息；内容改变须使用新的请求标识")
+
+
+class ChatSendAccepted(StrictModel):
+    message_id: str = Field(min_length=1,max_length=100)
+    user_message_id: str = Field(min_length=1,max_length=100)
+    started: bool
+    accepted: Literal[True]
+    replayed: bool
+    status: Literal['streaming','completed','failed','stopped','interrupted']
+
+
+class ChatSendCancelled(StrictModel):
+    accepted: Literal[False]
+    cancelled: Literal[True]
+    request_id: str = Field(min_length=1,max_length=100)
+
+
+class ChatSendMissing(StrictModel):
+    accepted: Literal[False]
+    found: Literal[False]
+
+
+class ChatSendResponse(RootModel[ChatSendAccepted | ChatSendCancelled]):
+    pass
+
+
+class ChatReceiptResponse(RootModel[ChatSendAccepted | ChatSendCancelled | ChatSendMissing]):
+    pass
 
 
 class ModelDeltaPayload(StrictModel):
@@ -111,5 +155,7 @@ def payload_registry() -> dict[str, type[BaseModel]]:
         "rpc.error": RpcErrorBody,
         "protocol.event": ProtocolEvent,
         "chat.send.request": ChatSendRequest,
+        "chat.send.response": ChatSendResponse,
+        "chat.receipt.response": ChatReceiptResponse,
         "model.delta.payload": ModelDeltaPayload,
     }

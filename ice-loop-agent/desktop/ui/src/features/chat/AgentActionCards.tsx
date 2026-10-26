@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { rpc, type RpcError } from "../../data/client";
 import { TOOL_LABEL } from "../../data/eventStream";
+import { formatDuration } from "../../components/display";
 
 type Card = {
   call_id: string; turn_id: string; tool: string; status: string;
@@ -25,10 +26,6 @@ const STATUS_TONE: Record<string, string> = {
   succeeded: "success", failed: "danger", unknown_tool: "danger", invalid: "warning", running: "info",
 };
 
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${ms} 毫秒` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} 秒`;
-}
-
 export function AgentActionCards({ conversationId, refreshSignal = 0 }: {
   conversationId: string | null; refreshSignal?: number;
 }) {
@@ -41,7 +38,6 @@ export function AgentActionCards({ conversationId, refreshSignal = 0 }: {
     if (!conversationId) { setRuns([]); setCards([]); return; }
     let cancelled = false;
     let timer: number | undefined;
-    let generation = 0;
     // setTimeout 链而不是 setInterval：上一轮请求没回来前不会叠加新请求。
     // 工具事件到来时递增 refreshSignal，立即再拉一次，不必等下个轮询周期。
     const tick = async () => {
@@ -62,7 +58,7 @@ export function AgentActionCards({ conversationId, refreshSignal = 0 }: {
       } catch (err) {
         if (!cancelled) setError((err as RpcError).message);
       }
-      if (!cancelled && generation === refreshSignal) timer = window.setTimeout(tick, running ? POLL_RUNNING_MS : POLL_IDLE_MS);
+      if (!cancelled) timer = window.setTimeout(tick, running ? POLL_RUNNING_MS : POLL_IDLE_MS);
     };
     void tick();
     return () => { cancelled = true; window.clearTimeout(timer); };

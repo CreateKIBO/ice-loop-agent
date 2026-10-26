@@ -5,10 +5,11 @@ import { motion } from "motion/react";
 import { Banner, Button } from "../../components/ui";
 import { toast } from "../../components/toast";
 import { createConversation } from "../../data/actions";
-import { useBootstrap, useModelReadiness } from "../../app/ModelSettings";
+import { useBootstrap, useModelReadiness } from "../../app/modelBootstrap";
 import { editorialStore,paletteStore, publicationSettingsStore, settingsStore,openPublicationSetup } from "../../app/uiState";
 import { useCurrentAccount } from '../../data/client';
 import { loadComposerDraft,saveComposerDraft,type ComposerMode } from '../../data/composerDraft';
+import { checklistStatus, loadStartChecklistDismissed, saveStartChecklistDismissed } from './startChecklist';
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.2, 0, 0, 1] as const } } };
@@ -38,6 +39,14 @@ function WelcomeForAccount({account}:{account:string}) {
   const [requestId,setRequestId]=React.useState(()=>crypto.randomUUID());
   const processing=React.useRef(false);
   const [creating, setCreating] = React.useState(false);
+  // 批A6：入门清单可收起，偏好按账号持久化；完成状态只来自可观察数据。
+  const [checklistOpen,setChecklistOpen]=React.useState(()=>!loadStartChecklistDismissed(window.localStorage,account));
+  const items=checklistStatus({hasAccount:Boolean(publication),columnCount:columns.length,
+    readiness:readiness,hasLibrary:Boolean(publication?.library_root)});
+  // 注意参数语义：save 的第三参是“是否收起”，与新的打开状态相反（2026-10-23 曾接反，
+  // 收起时走 removeItem 分支静默不写——由 start-guide-native 的真实旅程发现）。
+  const toggleChecklist=()=>{const next=!checklistOpen;setChecklistOpen(next);
+    saveStartChecklistDismissed(window.localStorage,account,!next);};
   React.useEffect(()=>{setPersisted(saveComposerDraft(window.localStorage,account,GUIDE_DRAFT,{text:topic,mode}));},[account,topic,mode]);
   const changeTopic=(value:string)=>{setTopic(value);setRequestId(crypto.randomUUID());};
   const start = async (withIdea=false) => {
@@ -87,19 +96,27 @@ function WelcomeForAccount({account}:{account:string}) {
         </motion.div>}
 
         <motion.section variants={item} className="ice-start-guide" aria-label="开始指南">
-          <div className="ice-start-guide__heading"><h2>从你的公众号开始</h2><span>资料保存在本地，随时可以回来调整</span></div>
-          <ol>
+          <div className="ice-start-guide__heading"><h2>从你的公众号开始</h2>
+            <span>{items.every(item=>item.done)?'三步都已就绪':'资料保存在本地，随时可以回来调整'}</span>
+            <button type="button" className="ice-link-btn" aria-expanded={checklistOpen}
+                    onClick={toggleChecklist} style={{marginLeft:'auto',flexShrink:0}}>
+              {checklistOpen?'收起清单':'重新打开清单'}
+            </button></div>
+          {checklistOpen && <ol>
             <li><span className="ice-start-guide__number" aria-hidden>1</span><div><strong>确认公众号与栏目</strong>
+              <span className={"ice-badge"+(items[0].done?" ice-badge--success":"")} style={{marginLeft:6}}>{items[0].done?'已就绪':'待处理'}</span>
               <p>当前使用「{accountName||'正在载入…'}」{columns.length?` · ${columns.length} 个栏目`:''}。为其他公众号创作时，可新增或导入自己的品牌资料。</p>
               <div className="ice-start-guide__actions"><Button size="sm" disabled={!publication} onClick={()=>openPublicationSetup('identity')}>查看当前资料</Button>
                 <Button size="sm" disabled={!publication} onClick={()=>openPublicationSetup('new')}>新增或导入公众号</Button></div></div></li>
             <li><span className="ice-start-guide__number" aria-hidden>2</span><div><strong>接入文字模型</strong>
+              <span className={"ice-badge"+(items[1].done?" ice-badge--success":"")} style={{marginLeft:6}}>{items[1].done?'已就绪':'待处理'}</span>
               <p>当前写作主模型：{writer?`${writer.provider} · ${writer.model_id}`:'尚未读取'}。{readiness==='ready'?'写作链中已有通过连接测试的模型。':readiness==='untested'?'写作链已配置Key，可手动测试连接。':readiness==='unrouted'?'已有Key，但当前写作链未使用它。':'请配置Key，并保存文字模型分工。'}</p>
               <Button size="sm" onClick={()=>settingsStore.set(true)}>配置模型与分工</Button></div></li>
             <li><span className="ice-start-guide__number" aria-hidden>3</span><div><strong>关联已有文章 <span className="ice-start-guide__optional">可稍后</span></strong>
+              <span className={"ice-badge"+(items[2].done?" ice-badge--success":"")} style={{marginLeft:6}}>{items[2].done?'已就绪':'可选'}</span>
               <p>{publication?.library_root?'已设置历史目录，可打开检查原稿。':'关联Markdown原稿目录后，可用于历史分析与选题。没有旧文也可以直接开始。'}</p>
               <Button size="sm" disabled={!publication} onClick={()=>openPublicationSetup('history')}>关联历史文章</Button></div></li>
-          </ol>
+          </ol>}
           <form onSubmit={event=>{event.preventDefault();void start(true);}}>
             <fieldset disabled={creating||!publication}>
               <label htmlFor="ice-first-idea"><strong>第一篇想写什么</strong></label>

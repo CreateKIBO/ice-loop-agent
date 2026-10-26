@@ -8,20 +8,19 @@ const readline = require('node:readline');
 const { randomUUID, createHash } = require('node:crypto');
 const {copyTextVerified}=require('./clipboard.cjs');
 const exportApprovals = new (require('./export-approval.cjs').ExportApprovals)();
+const originalImages = new (require('./original-images.cjs').OriginalImages)();
 
 const project = app.isPackaged ? path.join(process.resourcesPath,'engine-project') : path.resolve(__dirname, '..');
 const dataSelection = app.isPackaged ? path.join(app.getPath('appData'),'ICE Loop Studio','workspace-path.json') : path.join(project, '.desktop-data-path.json');
-const selectedRuntime = !process.env.ICE_DESKTOP_RUNTIME && fs.existsSync(dataSelection)
-  ? JSON.parse(fs.readFileSync(dataSelection, 'utf8')).runtime_root : null;
+const {resolveWorkspace,StartupRecovery,recoveryRequest}=require('./startup-recovery.cjs');
 const installDirectory=process.env.PORTABLE_EXECUTABLE_DIR||path.dirname(process.execPath);
 const nonSystemDrive=['G:/','D:/','E:/','F:/'].find(drive=>fs.existsSync(drive));
 const userWorkspace='ICE-Workspace-'+createHash('sha256').update(app.getPath('appData')).digest('hex').slice(0,8);
 const defaultRuntime=app.isPackaged ? (!/^c:/i.test(installDirectory)?path.join(installDirectory,userWorkspace):nonSystemDrive?path.join(nonSystemDrive,'ICE Loop Studio',userWorkspace):null) : path.join(project,'.desktop-runtime');
-if(!process.env.ICE_DESKTOP_RUNTIME&&!selectedRuntime&&!defaultRuntime){dialog.showErrorBox('工作目录不可用','请准备C盘之外的数据盘，或设置ICE_DESKTOP_RUNTIME后启动。');app.quit();process.exit(1);}
-const runtime = process.env.ICE_DESKTOP_RUNTIME || selectedRuntime || defaultRuntime;
-const firstPackagedStart=app.isPackaged&&!process.env.ICE_DESKTOP_RUNTIME&&!selectedRuntime;
-if (!path.isAbsolute(runtime) || /^c:/i.test(runtime)) throw Error('工作数据目录必须使用 C 盘之外的绝对路径');
-if(selectedRuntime&&!JSON.parse(fs.readFileSync(dataSelection,'utf8')).fresh&&(!fs.existsSync(path.join(runtime,'app.db'))||!fs.existsSync(path.join(runtime,'settings.json'))))throw Error('恢复后的工作目录不存在或不完整，请检查工作目录选择记录');
+if(!defaultRuntime){dialog.showErrorBox('工作目录不可用','请准备C盘之外的数据盘，或设置ICE_DESKTOP_RUNTIME后启动。');app.quit();process.exit(1);}
+const workspace=resolveWorkspace({selection:dataSelection,override:process.env.ICE_DESKTOP_RUNTIME,fallback:defaultRuntime});
+const runtime=workspace.runtime;
+const firstPackagedStart=app.isPackaged&&workspace.firstRun;
 fs.mkdirSync(runtime, { recursive: true });
 const chatLifecycle=stage=>{
   if(process.argv.includes('--chat-smoke'))fs.appendFileSync(path.join(runtime,'chat-lifecycle.log'),new Date().toISOString()+' '+stage+'\n');
@@ -40,6 +39,7 @@ let window;
 let embeddedBrowser;
 let python;
 let shuttingDown = false;
+let starting = true, startupProgress = null, startupCancelTimer = null, startupDeadline = null, startupFailure = '';
 let credentialWarning='';
 let smokeClipboard=null;
 let nextId = 0;
@@ -88,7 +88,8 @@ function request(method, params = {}) {
   if (!python || python.killed || !python.stdin.writable) return Promise.reject(new Error('文章引擎尚未连接，请重新启动工作台'));
   const id = ++nextId;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error('操作超时，请检查任务状态后重试')); }, 135000);
+    const timeout=method.startsWith('recovery.')||(starting&&(method==='bootstrap'||method==='secrets.set'))?30*60*1000:135000;
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error('操作超时，请检查任务状态后重试')); }, timeout);
     pending.set(id, { resolve, reject, timer,method });
     python.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => {
       if (error) { clearTimeout(timer); pending.delete(id); reject(new Error('引擎连接中断')); }
@@ -197,6 +198,7 @@ async function startEngine() {
   const command=engineCommand();const executable = command.file;
   if (!executable) throw new Error('找不到 Python 3.12+。请运行项目的安装脚本，或设置 ICE_PYTHON 指向解释器。');
   const args = [...command.args, '--project-root', project, '--runtime-root', runtime];
+  if(startupProgress)args.push('--startup-session',startupProgress.session);
   if (process.argv.includes('--smoke')||process.argv.includes('--browser-smoke')) args.push('--article-root', path.join(runtime, 'articles'));
   python = spawn(executable, args, {
     cwd: project, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
@@ -205,6 +207,12 @@ async function startEngine() {
   readline.createInterface({ input: python.stdout }).on('line', line => {
     try {
       const response = JSON.parse(line);
+      if(starting&&response.kind==='startup.error'&&typeof response.message==='string'){startupFailure=response.message.slice(0,1500);return;}
+      if(starting&&startupProgress?.accept(response)){
+        // Real progress renews only boot requests, with a separate hard deadline.
+        if(Date.now()-startupProgress.started<30*60*1000)for(const entry of pending.values())if(entry.method==='bootstrap'||entry.method==='secrets.set')entry.timer.refresh();
+        return;
+      }
       const entry = pending.get(response.id);
       if (!entry) return;
       clearTimeout(entry.timer); pending.delete(response.id);
@@ -214,12 +222,13 @@ async function startEngine() {
         error.code = response.error.code || 'INTERNAL';
         error.recoverable = Boolean(response.error.recoverable);
         error.action = response.error.action || null;
+        error.engineReply = true;
         entry.reject(error);
       } else entry.resolve(entry.method==='bootstrap'?{...response.result,credential_warning:credentialWarning}:response.result);
     } catch { /* A protocol error must never become renderer HTML. */ }
   });
   python.stderr.on('data', data => {
-    fs.appendFileSync(path.join(runtime, 'sidecar.log'), data);
+    try{fs.appendFileSync(path.join(runtime, 'sidecar.log'), data);}catch{/* A disk error must still reach startup recovery. */}
   });
   let exitReported = false;
   const exited = (code, signal, spawnError = null) => {
@@ -229,7 +238,7 @@ async function startEngine() {
     try { fs.appendFileSync(path.join(runtime,'logs','engine-exit.jsonl'),JSON.stringify({
       at:new Date().toISOString(),code,signal,spawn_error:spawnError,expected:shuttingDown
     })+'\n'); } catch { /* A full disk must not prevent rejecting pending requests. */ }
-    for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error('文章引擎已退出，请重启工作台')); }
+    for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error(starting&&startupFailure?startupFailure:'文章引擎已退出，请重启工作台')); }
     pending.clear();
     if (!shuttingDown && window && !window.isDestroyed()) window.webContents.send('ice:engine-exit');
   };
@@ -274,6 +283,17 @@ function registerIPC() {
     if(selected.canceled)return null;
     return request('outlines.read',{file_path:selected.filePaths[0],account_id:accountId});
   });
+  ipcMain.handle('ice:original-image-open', async (event, params) => {
+    assertSender(event);
+    if (!params || !['candidate','resource'].includes(params.kind) || typeof params.account_id!=='string' || !params.account_id || params.account_id.length>200) throw Error('原图请求无效');
+    const keys=params.kind==='candidate'?['job_id','candidate_id']:['resource_id'];
+    if(keys.some(key=>typeof params[key]!=='string'||!params[key]||params[key].length>200))throw Error('原图编号无效');
+    const epoch=originalImages.epoch;
+    const source=await request('images.original_source',params);
+    if(source.account_id!==params.account_id)throw Error('公众号已切换，请重新打开图片');
+    return originalImages.open(source,epoch);
+  });
+  ipcMain.handle('ice:original-image-release', (event, token) => { assertSender(event); return originalImages.release(token); });
   embeddedBrowser=require('./browser.cjs').installBrowser({window:()=>window,assertSender,request,runtime});
   require('./tools.cjs').installTools({window:()=>window,assertSender,request,runtime});
   ipcMain.handle('ice:import-outline',async(event,accountId)=>{
@@ -299,6 +319,25 @@ function registerIPC() {
   ipcMain.handle('ice:create-backup', async event => {
     assertSender(event);
     return backupActions.create();
+  });
+  ipcMain.handle('ice:inspect-recovery-point', async(event,pointId)=>{
+    assertSender(event);return backupActions.inspectPoint(pointId);
+  });
+  ipcMain.handle('ice:delete-recovery-point', async(event,pointId,recordHash)=>{
+    assertSender(event);
+    return backupActions.exclusive(async()=>{
+      const list=await request('recovery.list');const point=list.points.find(p=>p.point_id===pointId&&p.record_hash===recordHash&&p.can_delete);
+      if(!point)throw Error('恢复点状态已变化，请刷新后检查');
+      const answer=await dialog.showMessageBox(window,{type:'warning',title:'删除恢复点',message:'删除所选恢复点？',
+        detail:new Date(point.created_at).toLocaleString()+'\n仅删除此恢复点的已验证备份和索引。当前工作区文章与配图保留。此操作无法撤销。',
+        buttons:['保留','删除此恢复点'],defaultId:0,cancelId:0,noLink:true});
+      if(answer.response!==1)return null;
+      return request('recovery.delete',{point_id:pointId,record_hash:recordHash});
+    });
+  });
+  ipcMain.handle('ice:open-recovery-folder',async event=>{
+    assertSender(event);const list=await request('recovery.list');if(!fs.existsSync(list.directory))throw Error('尚未创建恢复点');
+    const error=await shell.openPath(list.directory);if(error)throw Error('无法打开恢复点目录');return {ok:true};
   });
   ipcMain.handle('ice:inspect-backup', async event => {
     assertSender(event);
@@ -344,13 +383,20 @@ function registerIPC() {
     fs.writeFileSync(file, screenshot.toPNG());
     return { file };
   });
+  ipcMain.handle('ice:chat-send',async(event,params)=>{
+    assertSender(event);
+    if(!params||typeof params!=='object'||Array.isArray(params)||JSON.stringify(params).length>500000)throw Error('无效的发送请求');
+    try{return {ok:true,result:await request('chat.send',params)};}
+    catch(error){return {ok:false,error:{message:String(error.message||'发送回执未确认').slice(0,2000),code:error.code||'NETWORK',
+      recoverable:Boolean(error.recoverable),action:error.action||null,settled:error.engineReply===true}};}
+  });
   ipcMain.handle('ice:request', async (event, method, params) => {
     assertSender(event);
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > 500000) throw new Error('无效请求');
     if (method === 'articles.export_bundle') exportApprovals.assert(params.destination);
     const result=await request(method, params);
     if (method === 'articles.export_bundle') result.can_open=exportApprovals.complete(params.destination);
-    if(['accounts.switch','accounts.save','accounts.import'].includes(method)){embeddedBrowser.reset();exportApprovals.clear();}
+    if(['accounts.switch','accounts.save','accounts.import'].includes(method)){embeddedBrowser.reset();void originalImages.clear();exportApprovals.clear();}
     return result;
   });
   ipcMain.handle('ice:import-image', async (event, jobId, figureNo) => {
@@ -367,7 +413,7 @@ function registerIPC() {
     const file = choice.filePaths[0];
     if (fs.statSync(file).size > 128000) throw Error('文件过大，请使用小于128KB的配置或品牌说明');
     const result=await request('accounts.import', { text: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''), format: path.extname(file).slice(1).toLowerCase(), name: path.basename(file, path.extname(file)) });
-    embeddedBrowser.reset();exportApprovals.clear();
+    embeddedBrowser.reset();void originalImages.clear();exportApprovals.clear();
     return result;
   });
   ipcMain.handle('ice:choose-publication-dir', async (event,kind) => {
@@ -472,7 +518,8 @@ async function createWindow() {
     catch(error){fs.writeFileSync(path.join(runtime,'chat-error.txt'),error.stack||error.message);}finally{app.quit();}
   },1200));
   window.on('resize',()=>embeddedBrowser.resize());
-  window.on('closed',()=>embeddedBrowser.reset());
+  window.on('closed',()=>{embeddedBrowser.reset();void originalImages.clear();});
+  window.webContents.on('did-start-navigation',(_event,_url,_inPlace,isMainFrame)=>{if(isMainFrame)void originalImages.clear();});
   // New UI reports credential_warning from bootstrap; only the classic UI has
   // a global toast function. Do not throw during new-workbench startup.
   if(credentialWarning)window.webContents.once('did-finish-load',()=>{window.webContents.executeJavaScript('if(typeof toast === "function") toast('+JSON.stringify(credentialWarning)+')').catch(()=>{});});
@@ -531,6 +578,59 @@ async function createWindow() {
         fs.writeFileSync(path.join(runtime, 'dpi-smoke-error.txt'), error.stack || error.message);
       } finally { app.quit(); }
     })();
+  }
+  if (process.argv.includes('--widths-smoke')) {
+    // 批次B-07：500/800/1024/1280 CSS 视口（窗口尺寸模拟）下注入长中文标题与
+    // 超长无空格串，验收页面不产生横向溢出。这是视口级检查；网页缩放由
+    // --dpi-smoke（zoomFactor 近似）覆盖，物理系统 DPI 需真机另行验收，不混用结论。
+    // 仅在本检查中放宽产品最小窗口宽度，让 500/800 视口真实生效。
+    window.setMinimumSize(480, 600);
+    const runWidths = async () => {
+      const report = { widths: [500, 800, 1024, 1280], rows: [], ok: true };
+      try {
+        const injected = await window.webContents.executeJavaScript(`(() => {
+          const unbroken = 'Agent'.repeat(80) + '超长无空格压力串'.repeat(20);
+          const longTitle = '这是一个用于验收窄窗口截断与换行行为的超长中文会话标题'.repeat(4);
+          const touched = [];
+          const search = document.querySelector('[aria-label="搜索会话或草稿"]');
+          if (search) { search.value = unbroken; search.dispatchEvent(new Event('input', { bubbles: true })); touched.push('search'); }
+          const heading = document.querySelector('h1');
+          if (heading) { heading.textContent = longTitle; touched.push('h1'); }
+          return touched;
+        })()`);
+        report.injected = injected;
+        for (const width of report.widths) {
+          window.setContentSize(width, 800);
+          await new Promise(resolve => setTimeout(resolve, 700));
+          const metrics = await window.webContents.executeJavaScript(`(() => {
+            const de = document.documentElement;
+            const offenders = [];
+            for (const el of de.querySelectorAll('*')) {
+              if (el.scrollWidth > de.clientWidth + 1 && !el.closest('.ice-chat-log')) offenders.push(el);
+              if (offenders.length >= 5) break;
+            }
+            return { viewport: de.clientWidth, scrollWidth: de.scrollWidth,
+                     overflowX: de.scrollWidth > de.clientWidth,
+                     offenders: offenders.map(el => String(el.className || el.tagName).slice(0, 60)) };
+          })()`);
+          const shot = await window.webContents.capturePage();
+          const file = path.join(runtime, 'widths-' + width + '.png');
+          fs.writeFileSync(file, shot.toPNG());
+          report.rows.push({ width, ...metrics, screenshot: path.basename(file) });
+          if (metrics.overflowX) report.ok = false;
+        }
+      } catch (error) {
+        report.ok = false;
+        report.error = error.stack || error.message;
+      }
+      fs.writeFileSync(path.join(runtime, 'widths-report.json'), JSON.stringify(report, null, 2));
+      app.quit();
+    };
+    const startWhenLoaded = () => {
+      if (window.webContents.isLoading()) { setTimeout(startWhenLoaded, 300); return; }
+      setTimeout(runWidths, 1200);
+    };
+    startWhenLoaded();
   }
   if(process.argv.includes('--browser-smoke')){
     setTimeout(async()=>{try{const result=await require('./browser-smoke.cjs').run({window,controller:embeddedBrowser,request,runtime});fs.writeFileSync(path.join(runtime,'browser-result.json'),JSON.stringify(result,null,2));}catch(error){fs.writeFileSync(path.join(runtime,'browser-error.txt'),error.stack||error.message);}finally{app.quit();}},1200);
@@ -663,14 +763,11 @@ app.whenReady().then(async () => {
       smokeClipboard.push(new ClipboardItem(payload));
     }
   }
-  if(firstPackagedStart){
-    fs.mkdirSync(path.dirname(dataSelection),{recursive:true});
-    fs.writeFileSync(dataSelection,JSON.stringify({runtime_root:runtime},null,2));
-  }
   protocol.handle('ice', request => {
     const url = new URL(request.url);
     if (url.hostname !== 'app') return new Response('not found', { status: 404 });
     const pathname = decodeURIComponent(url.pathname);
+    if (pathname.startsWith('/__image/')) return originalImages.respond(request).catch(() => new Response('image unavailable', {status:410}));
     // 新版工作台（v2.0）挂载在 /ui/ 前缀，产物来自 desktop/ui/dist；
     // 其余路径仍走旧 renderer，过渡期两套页面并存（ADR-001）。
     const uiPrefix = '/ui/';
@@ -688,7 +785,14 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   registerIPC();
   try {
+    if(workspace.error)throw workspace.error;
+    startupProgress=new (require('./startup-progress.cjs').StartupProgress)({BrowserWindow,ipcMain,runtime,preload:path.join(__dirname,'preload.cjs'),
+      onCancel:()=>{startupCancelTimer=setTimeout(()=>{if(python&&!python.killed)python.kill();},10000);}});
+    startupDeadline=setTimeout(()=>{startupFailure='工作区准备超过30分钟，已停止本次启动，请检查资料大小与磁盘状态后重试';if(python&&!python.killed)python.kill();},30*60*1000);
     await startEngine();
+    if(startupProgress.cancelled)throw Error('启动已取消');
+    clearTimeout(startupCancelTimer);clearTimeout(startupDeadline);
+    if(firstPackagedStart||workspace.fresh)require('./startup-recovery.cjs').publishWorkspace(dataSelection,runtime);
     if(process.argv.includes('--provider-smoke')){
       const profiles=(await request('bootstrap')).settings.profiles;const results=[];
       for(const profile of profiles){
@@ -699,6 +803,7 @@ app.whenReady().then(async () => {
       fs.writeFileSync(path.join(runtime,'provider-smoke.json'),JSON.stringify({credential_warning:credentialWarning,results},null,2));app.quit();return;
     }
     await createWindow();
+    startupProgress?.end();starting=false;
     const {PreparationQueue}=require('./automation.cjs');
     const preparationQueue=new PreparationQueue(request,captureRun);
     const preparationTimer=setInterval(()=>{if(!shuttingDown&&!process.argv.includes('--prompt-smoke'))preparationQueue.tick().catch(()=>{});},5000);
@@ -706,16 +811,43 @@ app.whenReady().then(async () => {
     app.once('before-quit',()=>clearInterval(preparationTimer));
   }
   catch (error) {
+    const cancelled=startupProgress?.cancelled;
+    // Keep cancellation marker until the owned sidecar has stopped.
+    if(cancelled){
+      if(python&&python.exitCode===null&&python.signalCode===null){
+        python.kill();await new Promise(resolve=>{python.once('close',resolve);setTimeout(resolve,3000);});
+      }
+    }
+    startupProgress?.end();starting=false;clearTimeout(startupCancelTimer);clearTimeout(startupDeadline);
+    if(cancelled){app.quit();return;}
     if (process.argv.includes('--smoke')||process.argv.includes('--review-smoke')||process.argv.includes('--provider-smoke')||process.argv.includes('--ui-smoke')) fs.writeFileSync(path.join(runtime, process.argv.includes('--provider-smoke')?'provider-error.txt':process.argv.includes('--review-smoke')?'review-error.txt':process.argv.includes('--ui-smoke')?'ui-smoke-error.txt':'desktop-smoke-error.txt'), error.message);
-    else dialog.showErrorBox('ICE Loop 启动失败', error.message);
+    else {
+      // Stop only our sidecar before standalone recovery. A rejected database
+      // must never be opened by a second background engine/queue consumer.
+      if(python&&!python.killed){
+        const child=python;
+        await new Promise(resolve=>{
+          const timer=setTimeout(()=>child.kill(),1500);
+          child.once('close',()=>{clearTimeout(timer);resolve();});
+          if(child.exitCode!==null||child.signalCode!==null){clearTimeout(timer);resolve();}
+          else child.stdin.end();
+        });
+      }
+      const recovery=new StartupRecovery({dialog,selection:dataSelection,project,
+        request:(method,params)=>recoveryRequest(engineCommand(),project,path.join(runtime,'staging','startup-recovery'),method,params),
+        restart:async()=>{delete process.env.ICE_DESKTOP_RUNTIME;app.relaunch();}});
+      await recovery.run(error);
+    }
     app.quit();
   }
 });
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {if(!starting)app.quit();});
 app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
 app.on('before-quit', event => {
   if(smokeClipboard){event.preventDefault();const saved=smokeClipboard;smokeClipboard=null;clipboard.write(saved).catch(()=>{}).finally(()=>app.quit());return;}
   shuttingDown = true;
+  startupProgress?.end();clearTimeout(startupCancelTimer);clearTimeout(startupDeadline);
   embeddedBrowser?.reset();
+  void originalImages.clear();
   if (python && !python.killed) { python.stdin.end(); setTimeout(() => python.kill(), 1000).unref(); }
 });

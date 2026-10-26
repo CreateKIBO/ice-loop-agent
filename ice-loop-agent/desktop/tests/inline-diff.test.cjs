@@ -66,3 +66,16 @@ test('very long rewrites fall back to whole-block replacement without hanging', 
   assert.equal(join(diff.before), before);
   assert.equal(join(diff.after), after);
 });
+
+
+test('large common ranges and asymmetric insertions reconstruct without character expansion', () => {
+ const shared='共同😀'.repeat(100000);
+ for(const [a,b] of [[shared+'甲'+shared,shared+'乙'+shared],['',shared],[shared,'']]) {
+  const d=inlineDiff(a,b);assert.equal(join(d.before),a);assert.equal(join(d.after),b);
+ }
+});
+
+test('UTF-16 prefix/suffix boundaries preserve emoji and every original code unit', () => {
+ const texts=['','a','😀','😁','𐀀','𠀀','a😀b','a😁b','\ud800','\udc00'];
+ for(const a of texts)for(const b of texts){const d=inlineDiff(a,b);assert.equal(join(d.before),a);assert.equal(join(d.after),b);}
+});

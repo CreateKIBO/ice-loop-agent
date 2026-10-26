@@ -10,3 +10,9 @@
 .ice-backup__progress{display:flex;gap:10px;align-items:center;padding:12px;border-radius:var(--ice-radius-md);background:var(--ice-info-bg);font-size:var(--ice-font-size-sm)}
 .ice-backup__task{display:flex;gap:10px;align-items:center;border-top:1px solid var(--ice-border);padding-top:10px}.ice-backup__task span{flex:1;min-width:0;overflow-wrap:anywhere}
 @media(max-width:550px){.ice-backup__summary{grid-template-columns:1fr}.ice-backup__card{padding:12px}.ice-backup__task{align-items:start}}
+
+.ice-backup__progress { display:grid;gap:8px; }
+.ice-backup__progress-head { display:flex;align-items:flex-start;gap:8px;overflow-wrap:anywhere; }
+.ice-backup__progress-head .ice-spinner { flex-shrink:0;margin-top:3px; }
+
+.ice-backup__points{display:grid;gap:12px;max-height:360px;overflow:auto;overscroll-behavior:contain}.ice-backup__point{padding:14px 0;border-top:1px solid var(--ice-border);display:grid;gap:10px;overflow-wrap:anywhere}
