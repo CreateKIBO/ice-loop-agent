@@ -71,7 +71,7 @@ export function CandidateHistory({ conversationId, latest, refresh }: {
       compareSelected={effectivePicks.some(pick => pick.id === candidate.id)}
       onToggleCompare={() => togglePick(candidate)}
       onChanged={async () => { await refresh(); if (position) await query.refetch({ throwOnError: true }); }} />)}
-    {comparePair.length === 2 && <CandidateCompareDialog open={compareOpen} onOpenChange={setCompareOpen} pair={comparePair} narrow={typeof window !== "undefined" && window.innerWidth < 1000} />}
+    {comparePair.length === 2 && <CandidateCompareDialog open={compareOpen} onOpenChange={setCompareOpen} pair={comparePair} />}
   </section>;
 }
 

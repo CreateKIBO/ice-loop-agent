@@ -36,6 +36,12 @@ with sqlite3.connect(runtime/'app.db') as db:
         + ('before section\n\n' * 12) + '##### level-five\n\n'
         + ('middle section\n\n' * 12) + '###### level-six\n\n'
         + ('after section\n\n' * 12) + '## tail-section')
+    # Legacy/pasted Markdown can contain lone CR line endings as well as CRLF.
+    # Keep a third current-page candidate for a separate exact-source probe.
+    cr_body = compare_body.replace('\n', '\r')
+    db.execute('UPDATE creative_candidates SET title=?,body=? WHERE id=?',
+               ('仅 CR 换行候选', cr_body, 'reading-recent-3'))
+    f['compare_cr_candidate'] = 'reading-recent-3'
     # 目标一（2026-10-26）：setext 二级标题与重复标题文本（保持首栏 h1=1 的既有断言）。
     # 最后一个标题之后留足正文（≥一栏高度），保证重复标题第二处能滚到本栏顶部附近。
     compare_body=compare_body+chr(10)+chr(10)+'Setext 小节'+chr(10)+'-'+chr(10)+chr(10)+chr(10)+('setext 之后内容行'+chr(10)+chr(10))*10+chr(10)+chr(10)+'## 重复标题'+chr(10)+chr(10)+('第一处重复内容'+chr(10)+chr(10))*10+chr(10)+chr(10)+'## 重复标题'+chr(10)+chr(10)+('第二处重复内容'+chr(10)+chr(10))*24
