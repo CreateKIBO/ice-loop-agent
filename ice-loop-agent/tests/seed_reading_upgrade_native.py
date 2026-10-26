@@ -36,11 +36,16 @@ with sqlite3.connect(runtime/'app.db') as db:
         + ('before section\n\n' * 12) + '##### level-five\n\n'
         + ('middle section\n\n' * 12) + '###### level-six\n\n'
         + ('after section\n\n' * 12) + '## tail-section')
+    # 目标一（2026-10-26）：setext 二级标题与重复标题文本（保持首栏 h1=1 的既有断言）。
+    # 最后一个标题之后留足正文（≥一栏高度），保证重复标题第二处能滚到本栏顶部附近。
+    compare_body=compare_body+chr(10)+chr(10)+'Setext 小节'+chr(10)+'-'+chr(10)+chr(10)+chr(10)+('setext 之后内容行'+chr(10)+chr(10))*10+chr(10)+chr(10)+'## 重复标题'+chr(10)+chr(10)+('第一处重复内容'+chr(10)+chr(10))*10+chr(10)+chr(10)+'## 重复标题'+chr(10)+chr(10)+('第二处重复内容'+chr(10)+chr(10))*24
     db.execute('UPDATE creative_candidates SET body=? WHERE id=?',(compare_body,'reading-recent-4'))
-    compare_body_b=compare_body.replace('对照正文标题甲','对照正文标题乙')
+    # 乙份整体改为 CRLF 行尾：检验 AST 行号、原文锚点偏移、展示与复制的字符级保留。
+    compare_body_b=compare_body.replace('对照正文标题甲','对照正文标题乙').replace(chr(10),chr(13)+chr(10))
     db.execute('UPDATE creative_candidates SET body=? WHERE id=?',(compare_body_b,'reading-recent-5'))
     f['compare_candidates']=['reading-recent-4','reading-recent-5']
     f['compare_titles']=['键盘验收候选稿','键盘验收候选稿']
+    f['compare_body_crlf']=True
 service=DesktopService(repo,runtime,root/'articles',auto_consumer=False)
 try:
     service.call('resources.import_style',{'account_id':f['account_a']})
