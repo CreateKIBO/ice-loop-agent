@@ -30,6 +30,12 @@ with sqlite3.connect(runtime/'app.db') as db:
         db.execute('INSERT INTO creative_candidates VALUES (?,?,?,?,?,?,?,?,?,?,?)',row)
     # 对照正文：真标题/代码围栏伪标题/表格/长无空格串
     compare_body=('# 对照正文标题甲'+chr(10)+chr(10)+'## 数据表'+chr(10)+chr(10)+'| 列 | 值 |'+chr(10)+'| --- | --- |'+chr(10)+'| A | 1 |'+chr(10)+chr(10)+'~~~'+chr(10)+'# fence-not-heading'+chr(10)+'~~~'+chr(10)+chr(10)+'long-no-space:'+'z'*300+chr(10)+chr(10)+'## tail-section'+chr(10)+chr(10)+('padding section line '+chr(10)+chr(10))*60)
+    # Distinguish top-level headings from quoted examples and include h5/h6;
+    # enough following content lets directory targets align inside either view.
+    compare_body=compare_body.replace('## tail-section', '> ## quoted-not-heading\n\n'
+        + ('before section\n\n' * 12) + '##### level-five\n\n'
+        + ('middle section\n\n' * 12) + '###### level-six\n\n'
+        + ('after section\n\n' * 12) + '## tail-section')
     db.execute('UPDATE creative_candidates SET body=? WHERE id=?',(compare_body,'reading-recent-4'))
     compare_body_b=compare_body.replace('对照正文标题甲','对照正文标题乙')
     db.execute('UPDATE creative_candidates SET body=? WHERE id=?',(compare_body_b,'reading-recent-5'))

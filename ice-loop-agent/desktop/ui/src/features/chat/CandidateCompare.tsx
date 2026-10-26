@@ -40,6 +40,20 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const [scrolled, setScrolled] = React.useState(false);
   const headings = React.useMemo(() => markdownHeadings(candidate.body), [candidate.body]);
+  // Anchor only real top-level headings, preserving every source character.
+  // The AST supplies source lines, including setext headings and CRLF input.
+  const sourceSections = React.useMemo(() => {
+    let offset = 0;
+    const lines = candidate.body.split('\n').map(line => {
+      const start = offset; offset += line.length + 1; return start;
+    });
+    const starts = headings.map(heading => lines[heading.line - 1]);
+    return {
+      prefix: candidate.body.slice(0, starts[0] ?? candidate.body.length),
+      sections: headings.map((heading, index) => ({ index: heading.index,
+        text: candidate.body.slice(starts[index], starts[index + 1] ?? candidate.body.length) })),
+    };
+  }, [candidate.body, headings]);
   const [tocOpen, setTocOpen] = React.useState(false);
   const reduced = usePrefersReducedMotion();
   const onScroll = () => {
@@ -56,11 +70,13 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
   const gotoHeading = (heading: MarkdownHeading) => {
     const node = scrollRef.current;
     if (!node) return;
-    // 从已渲染标题定位（与阅读视图同一棵 DOM）：按目录索引找对应 heading 元素。
-    const nodes = node.querySelectorAll("h1,h2,h3,h4");
-    const element = nodes[heading.index];
-    if (element) scrollToPoint((element as HTMLElement).offsetTop - node.offsetTop - 8);
-    else scrollToPoint("top");
+    // Match the AST's top-level h1–h6 only; headings inside quoted examples
+    // must not shift the directory index. Raw view uses exact source anchors.
+    const root = node.querySelector('.ice-markdown');
+    const element = reading
+      ? Array.from(root?.children ?? []).filter(child => /^H[1-6]$/.test(child.tagName))[heading.index]
+      : node.querySelector(`[data-compare-heading="${heading.index}"]`);
+    if (element) scrollToPoint(node.scrollTop + element.getBoundingClientRect().top - node.getBoundingClientRect().top - 10);
   };
   return (
     <div style={{ display: "grid", gap: 6, minWidth: 0, flex: narrow ? "1 1 auto" : "1 1 0" }}>
@@ -94,8 +110,9 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
       <div ref={scrollRef} onScroll={onScroll} style={{ minHeight: 200, maxHeight: 460, overflowY: "auto", background: "var(--ice-surface-muted)",
                            padding: 10, borderRadius: 8, fontSize: "var(--ice-font-size-sm)", minWidth: 0 }}>
         {reading
-          ? <div className="ice-markdown"><MarkdownContent text={candidate.body} /></div>
-          : <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "var(--ice-font-mono)", overflowWrap: "anywhere" }}>{candidate.body}</pre>}
+          ? <MarkdownContent text={candidate.body} />
+          : <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "var(--ice-font-mono)", overflowWrap: "anywhere" }}>{sourceSections.prefix}{sourceSections.sections.map(section =>
+              <span key={section.index} data-compare-heading={section.index}>{section.text}</span>)}</pre>}
       </div>
     </div>
   );

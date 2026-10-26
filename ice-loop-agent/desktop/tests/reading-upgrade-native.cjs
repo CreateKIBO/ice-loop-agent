@@ -12,6 +12,8 @@ const evidence=path.join(repo,'.test-tmp/codex-copy-reading-20261025',Date.now()
 const report={state:'running',runtime:f.runtime,evidenceDir:evidence,scope:'source Electron; offline real SQLite/service; CDP keyboard and explicit DOM clicks; main-process in-memory clipboard adapter',checks:{},errors:[]};
 const save=()=>{for(const file of [path.join(out,'reading-upgrade-native.json'),path.join(evidence,'result.json')])fs.writeFileSync(file,JSON.stringify(report,null,2));};
 let s;
+const originalFault=fs.readFileSync(f.fault,'utf8');
+const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
 (async()=>{try{
  const copy=scriptedClipboard(repo,f);s=await openNativeSession(repo,f.runtime,{entryPath:copy.entry});report.clipboardOutcomes=copy.results;const {evaluate:e,call,until}=s;
  const check=(name,value)=>{report.checks[name]=Boolean(value);save();assert(value,name);};
@@ -22,7 +24,7 @@ let s;
  const shot=async name=>{const r=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(evidence,name+'.png'),Buffer.from(r.data,'base64'));};
  const trace=()=>fs.existsSync(f.trace)?fs.readFileSync(f.trace,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
  const count=method=>trace().filter(row=>row.method===method&&row.phase==='resolved').length;
- const waitCount=async(method,before)=>{const end=Date.now()+15000;while(Date.now()<end){if(count(method)>before)return;await wait(100);}throw Error('Missing settled request '+method);};
+ const waitCount=async(method,before,timeout=15000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(count(method)>before)return;await wait(100);}throw Error('Missing settled request '+method);};
  await until(`document.querySelectorAll('.ice-nav-row__main').length>=4`);
  // Set A through real controls; B has not mounted yet. Avoid a reload/context race.
  const aKey='ice.ui.jobview.v1.'+f.account_a,bKey='ice.ui.jobview.v1.'+f.account_b;
@@ -45,8 +47,27 @@ let s;
  check('account_b_own_prefs_and_no_a_reset_notice',await e(`document.querySelector('[aria-label="任务列表紧凑视图"]').checked&&!document.body.textContent.includes('已恢复默认视图')`));
  await setSelect('#ice-account-select',f.account_a);
  await until(`document.querySelector('[aria-label="任务状态筛选"]')?.value==='all'`);
- // Historical candidate via real paging; each wait fails rather than silently returning false.
+ // B6: the live candidate window, then a failed background read and recovery.
+ // A new latest object alone never remounted a stable candidate ID. The pane's
+ // full-screen error branch did: it discarded both card and historical-page state.
  await click(`document.querySelector('button[title="键盘验收会话1"]')`);
+ const liveId='candidate-expand-reading-recent-5';
+ const live=`document.getElementById(${JSON.stringify(liveId)})`;
+ await click(live);await click(btn('Markdown 原文'));
+ await until(`Boolean(document.querySelector('.ice-candidate-reader pre'))`);
+ await e(`void(window.__liveExpand=${live});void(window.__liveBody=document.querySelector('.ice-candidate-reader pre').textContent)`);
+ const liveState=`window.__liveExpand===${live}&&window.__liveExpand.isConnected&&${live}.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre')?.textContent===window.__liveBody`;
+ const livePoll=count('chat.get');await waitCount('chat.get',livePoll);await wait(200);
+ check('latest_candidate_survives_successful_poll',await e(liveState));
+ const failedBefore=trace().filter(row=>row.method==='chat.get'&&row.phase==='rejected').length;
+ fault({fail:['chat.get']});
+ await until(`document.body.textContent.includes('会话刷新失败')`);
+ check('background_chat_read_really_failed',trace().filter(row=>row.method==='chat.get'&&row.phase==='rejected').length>failedBefore);
+ check('latest_candidate_survives_failed_poll',await e(liveState));
+ fs.writeFileSync(f.fault,originalFault);
+ const recoveryPoll=count('chat.get');await waitCount('chat.get',recoveryPoll);await wait(200);
+ check('latest_candidate_source_survives_recovery',await e(liveState));
+ // Historical candidate via real paging; each wait fails rather than silently returning false.
  // 2026-10-25 候选对照轮：seed 增加了更多历史候选（同题对照稿），分页深度变化——
  // 逐页向前翻直到目标候选出现（有界：最多 8 页），不再假设一次到位。
  for(let page=0;page<8;page++){
@@ -70,19 +91,32 @@ let s;
  check('copy_entire_source_not_summary_or_rendering',copy.rows().at(-1)?.ok&&copy.rows().at(-1)?.sha256===sha(f.candidate_body)&&copy.rows().at(-1)?.length===f.candidate_body.length);
  await shot('candidate-source');const polls=count('chat.get');await waitCount('chat.get',polls);await wait(200);
  check('same_expanded_card_and_source_after_real_poll',await e(`window.__expand===${expand}&&${expand}.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre').textContent===${JSON.stringify(f.candidate_body)}`));
+ fault({fail:['chat.get']});await until(`document.body.textContent.includes('会话刷新失败')`);
+ check('historical_candidate_survives_failed_live_poll',await e(`window.__expand===${expand}&&${expand}.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre')?.textContent===${JSON.stringify(f.candidate_body)}`));
+ fs.writeFileSync(f.fault,originalFault);
+ const historicalRecovery=count('chat.get');await waitCount('chat.get',historicalRecovery);await wait(200);
+ check('historical_page_and_source_survive_live_recovery',await e(`window.__expand===${expand}&&${expand}.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre')?.textContent===${JSON.stringify(f.candidate_body)}`));
  await click(btn('保存为草稿'));await until(`document.body.textContent.includes('已保存为草稿')`);
  const saved=await rpc('chat.get',{conversation_id:f.conversations[0],before_candidate_id:'reading-recent-0',candidate_limit:3});
  check('save_keeps_candidate_source_and_draft_semantics',saved.candidates.find(c=>c.id===f.candidate)?.body===f.candidate_body&&saved.candidates.find(c=>c.id===f.candidate)?.status==='draft');
  check('saved_draft_in_sidebar',(await rpc('chat.drafts')).some(row=>row.conversation_id===f.conversations[0]));
- // Same task-reset prelude, actual Enter activation. No timers or polling disabled.
+ // Repeat reset immediately before opening: its feedback timer must still be
+ // active while the editor and lazy workspace mount. Keep real polling enabled.
+ await e(`document.querySelector('[aria-label="任务列表紧凑视图"]').click()`);
+ await until(`document.querySelector('[aria-label="任务列表紧凑视图"]')?.checked===true`);
+ await click(btn('恢复默认视图'));
  const editorBtn=`[...document.querySelectorAll('[data-job-id="${f.jobs.completed}"] button')].find(b=>b.textContent.trim()==='编辑正文')`;
  await until(`Boolean(${editorBtn})`);await e(`(${editorBtn}).focus()`);
  check('editor_keyboard_target_focused',await e(`document.activeElement===${editorBtn}`));
  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',windowsVirtualKeyCode:13,text:'\r'});await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',windowsVirtualKeyCode:13});
  await until(`Boolean(document.querySelector('.ice-editor[contenteditable="true"]'))`);
+ await e(`document.querySelector('.ice-editor').focus()`);await call('Input.insertText',{text:'原生阅读验收正文 '});
+ check('editor_body_changed_before_save',await e(`document.querySelector('.ice-editor').textContent.includes('原生阅读验收正文')`));
  const saves=count('articles.save');await click(btn('保存新版本'));await waitCount('articles.save',saves);
+ await until(`Boolean(${btn('保存新版本')})`);
  await until(`Boolean(${btn('准备配图')})`);await click(btn('准备配图'));await until(`Boolean(document.querySelector('.ice-asset-tabs'))`);
- await e(`void(window.__tabs=document.querySelector('.ice-asset-tabs'))`);await wait(3000);
+ await e(`void(window.__tabs=document.querySelector('.ice-asset-tabs'))`);
+ const taskPoll=count('jobs.list');await waitCount('jobs.list',taskPoll,25000);await wait(3000);
  check('asset_workspace_stable_after_reset_and_keyboard',await e(`window.__tabs===document.querySelector('.ice-asset-tabs')`));
  const refs=`document.querySelector('[aria-label="品牌参考图"]')`;
  await until(`Boolean(${refs})`);
@@ -107,6 +141,6 @@ let s;
  await click(btn('关闭配图工作台'));await until(`!document.querySelector('.ice-asset-tabs')`);
  check('no_renderer_errors',s.errors.length===0);report.state='finished';
 }catch(error){report.state='failed';report.error=String(error.stack||error);if(s){report.errors=s.errors;report.body=await s.evaluate('document.body.innerText').catch(()=>null);}}
-finally{if(s)await s.close();save();}
+finally{fs.writeFileSync(f.fault,originalFault);if(s)await s.close();save();}
 console.log(JSON.stringify({state:report.state,checks:report.checks,error:report.error,evidence}));process.exitCode=report.state==='finished'?0:1;
 })();
