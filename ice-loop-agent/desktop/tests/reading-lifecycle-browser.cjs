@@ -7,7 +7,7 @@ const { spawn } = require('node:child_process');
 const readline = require('node:readline'), assert = require('node:assert/strict');
 const { startTrace, expectRemoval, finishAction, stopTrace, auditRemovals } = require('./lifecycle-trace.cjs');
 const scope = process.env.ICE_LIFECYCLE_SCOPE || 'full';
-assert(['full', 'round2', 'round3', 'codex1', 'codex2'].includes(scope), 'Unknown lifecycle scope');
+assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3'].includes(scope), 'Unknown lifecycle scope');
 const WebSocketImpl = globalThis.WebSocket || require('ws');
 const repo = path.resolve(__dirname, '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/reading-upgrade-fixture.json')));
@@ -157,7 +157,7 @@ async function run() {
     assert(Object.values(report.checks).every(Boolean), 'Round2 lifecycle assertions failed');
     return;
   }
-  if (['round3', 'codex1', 'codex2'].includes(scope)) {
+  if (['round3', 'codex1', 'codex2', 'codex3'].includes(scope)) {
     report.scope += '; targeted round3 background writes';
     if (scope === 'codex2') faults.set('budgets.get', { fail: true });
     await require('./reading-lifecycle-round3.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
@@ -168,6 +168,10 @@ async function run() {
     if (scope === 'codex2') {
       report.scope += '; real running consumer stopped inside bounded demo node';
       await require('./reading-lifecycle-codex2.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    }
+    if (scope === 'codex3') {
+      report.scope += '; budget adjustment error lifecycle; no production consumer enabled';
+      await require('./reading-lifecycle-codex3.cjs')({ e, ui, click, check, until, rpc, requests, faults, fixture, report });
     }
     await until(() => requests.every(row => row.finished) && pending.size === 0, 'all targeted RPCs settled');
     check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
