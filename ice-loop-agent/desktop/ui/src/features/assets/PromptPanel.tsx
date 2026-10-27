@@ -91,7 +91,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       <Button disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>{busy ? <><Spinner size={14} />正在重拟…</> : '按文章与品牌 AI 重拟'}</Button>
       <Button onClick={() => openWebsite('tapnow')}>打开内嵌 TapNow</Button></div>
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
-      <Button size="sm" disabled={!budget.data || disabled || busy || budgetBusy} onClick={() => { setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
+      <Button size="sm" disabled={!budget.data || disabled || busy || budgetBusy || editingBudget !== null} onClick={() => { setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
       <Button size="sm" variant="ghost" onClick={() => settingsStore.set(true)}>模型与 Key 设置</Button></div>
     {budget.error && <ErrorNote error={budget.error} onRetry={() => void budget.refetch()} retryLabel="重新读取预算"
       note={budget.data ? '已保留上次读取的预算；当前刷新失败，请核对后重试。' : '本篇预算读取失败；已输入的提示词保留，可重新读取。'} />}
