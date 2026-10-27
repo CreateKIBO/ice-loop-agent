@@ -27,19 +27,22 @@ module.exports = async function round3(ctx) {
     await e(`(()=>{const n=document.querySelector('#ice-account-select');n.value=${JSON.stringify(account)};n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await ui(`document.querySelector('#ice-account-select').value===${JSON.stringify(account)}&&!document.querySelector('#ice-account-select').disabled&&!document.querySelector('.ice-editor')&&!document.querySelector('[role="dialog"]')`);
   };
-  report.r3 = { boundary: 'harness-channel real-service writes (downloads.stage/bind, jobs.stop); consumer thread not enabled; slow reply delay applied at bridge delivery', writes: [] };
+  report.r3 = { boundary: 'harness-channel real-service writes (downloads.stage/bind, jobs.stop); '
+    + (report.consumerEnabled ? 'consumer thread enabled but no queued tasks until separate codex1 probe; ' : 'consumer thread not enabled; ')
+    + 'slow reply delay applied at bridge delivery', writes: [] };
   // B6 紧凑回归：真实后台读败→恢复，阅读器节点保留。
   await click(`document.querySelector('button[title="键盘验收会话1"]')`);
   const latest = 'candidate-expand-reading-recent-5';
   await click(`document.getElementById('${latest}')`); await click(btn('Markdown 原文'));
-  await e(`void(window.__b6=document.getElementById('${latest}'))`);
+  await e(`void(window.__b6=document.getElementById('${latest}'));void(window.__b6Body=document.querySelector('.ice-candidate-reader pre').textContent)`);
   const failureStart = requests.length; faults.set('chat.get', { fail: true });
   await until(() => requests.slice(failureStart).some(r => r.method === 'chat.get' && r.failed), 'r3 B6 failed background read');
   await ui(`document.body.textContent.includes('会话刷新失败')`);
-  check('r3_b6_failed_poll_preserves_reader', await e(`window.__b6===document.getElementById('${latest}')&&window.__b6.getAttribute('aria-expanded')==='true'&&Boolean(document.querySelector('.ice-candidate-reader pre'))`));
+  check('r3_b6_failed_poll_preserves_reader', await e(`window.__b6===document.getElementById('${latest}')&&window.__b6.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre')?.textContent===window.__b6Body`));
   faults.delete('chat.get');
   const recovered = count('chat.get'); await until(() => count('chat.get') > recovered, 'r3 B6 recovery');
-  check('r3_b6_recovery_preserves_reader', await e(`window.__b6===document.getElementById('${latest}')&&window.__b6.getAttribute('aria-expanded')==='true'`));
+  await ui(`!document.body.textContent.includes('会话刷新失败')`);
+  check('r3_b6_recovery_preserves_reader', await e(`window.__b6===document.getElementById('${latest}')&&window.__b6.getAttribute('aria-expanded')==='true'&&document.querySelector('.ice-candidate-reader pre')?.textContent===window.__b6Body`));
   // 真实链打开：复位→真实 Enter 打开编辑器→实际改文→保存新版本→等待解锁→准备配图。
   await e(`document.querySelector('[aria-label="任务列表紧凑视图"]').click()`);
   await ui(`document.querySelector('[aria-label="任务列表紧凑视图"]')?.checked===true`);
@@ -55,7 +58,6 @@ module.exports = async function round3(ctx) {
   await ui(`Boolean(${btn('保存新版本')})`);
   await click(btn('准备配图')); await ui(`Boolean(document.querySelector('.ice-asset-tabs'))`);
   await e(`void(window.__r3Tabs=document.querySelector('.ice-asset-tabs'))`);
-  const pollBase = count('jobs.list');
   const before = planSummary(await rpc('jobs.get', detailParams));
   report.r3.planBefore = before;
   check('r3_workspace_initial_identity', before.job === fixture.jobs.completed && before.account === fixture.account_a && Boolean(before.body_hash));
@@ -86,6 +88,7 @@ module.exports = async function round3(ctx) {
   await click(inButton(workspace, '刷新配图'));
   await until(() => requests.slice(slowStart).some(r => r.method === 'jobs.get' && r.received && !r.finished), 'r3 slow detail captured');
   const slow = requests.slice(slowStart).find(r => r.method === 'jobs.get' && r.received && !r.finished);
+  check('r3_held_snapshot_has_two_valid_slots', slow.plan?.filter(slot => slot.valid).length === 2);
   faults.delete('jobs.get');
   // 离线构造第二份真实下载（复制隔离夹具内 PNG → 真实 downloads.stage 链）。
   const extra = path.join(fixture.root, 'download-r3-extra.png');
@@ -108,8 +111,12 @@ module.exports = async function round3(ctx) {
   check('r3_plan_converges_three_of_four', after2.slots.filter(s => s.valid).length === 3 && after2.body_hash === before.body_hash
     && JSON.stringify(after2.slots.map(s => s.slot_id)) === JSON.stringify(before.slots.map(s => s.slot_id)));
   await audit('r3_write_during_slow');
-  // 序列三：后台任务状态写入（jobs.stop running→paused）→ A→B→A 往返。
+  // 序列三：jobs.stop 幂等写入（名为 running 的夹具实际已暂停）→ A→B→A。
+  // 不把 paused→paused 当成真实 running→paused 状态迁移。
   await startTrace(e, 'r3-task-write-and-handoff');
+  const stopBefore = await rpc('jobs.get', { account_id: fixture.account_a, job_id: fixture.jobs.running });
+  report.r3.stopBefore = { job: stopBefore.job.job_id, state: stopBefore.job.state };
+  check('r3_stop_precondition_already_paused', stopBefore.job.state === 'paused');
   const stopIndex = requests.length;
   await rpc('jobs.stop', { account_id: fixture.account_a, job_id: fixture.jobs.running });
   const w3 = requests[stopIndex];
@@ -122,7 +129,11 @@ module.exports = async function round3(ctx) {
       if (row && row.state === 'paused') { paused = true; break; }
       await wait(200);
     } }
-  check('r3_task_write_paused_running_job', paused);
+  check('r3_idempotent_stop_keeps_paused_job', paused);
+  await until(() => requests.some(r => r.method === 'jobs.list' && r.source === 'renderer' && r.started >= w3.finished && r.finished && !r.failed), 'r3 renderer task poll before account navigation', 30000);
+  await ui(`document.querySelector('[data-job-id="${fixture.jobs.running}"] .ice-badge')?.textContent==='已暂停'`);
+  check('r3_real_task_poll_observed', true);
+  report.r3.rendererPoll = requests.find(r => r.method === 'jobs.list' && r.source === 'renderer' && r.started >= w3.finished && r.finished && !r.failed);
   check('r3_task_write_workspace_unaffected', await e(`window.__r3Tabs===document.querySelector('.ice-asset-tabs')&&window.__r3Tabs.isConnected&&(${workspace}).contains(document.activeElement)`));
   await expectRemoval(e, 'r3-explicit-account-switch', `[...document.querySelectorAll('[role="dialog"],.ice-asset-tabs,.ice-editor')]`);
   await switchAccount(fixture.account_b); await finishAction(e);
@@ -141,8 +152,6 @@ module.exports = async function round3(ctx) {
   check('r3_after_aba_plan_persists', afterAba.slots.filter(s => s.valid).length === 3 && afterAba.body_hash === before.body_hash
     && JSON.stringify(afterAba.slots.map(s => s.slot_id)) === JSON.stringify(before.slots.map(s => s.slot_id)));
   check('r3_no_cross_account_detail_requests', requests.filter(r => r.method === 'jobs.get' && r.identity?.job === fixture.jobs.completed).every(r => r.params.account_id === fixture.account_a && r.identity?.account === fixture.account_a));
-  await until(() => count('jobs.list') > pollBase, 'r3 real task poll during workspace window', 30000);
-  check('r3_real_task_poll_observed', count('jobs.list') > pollBase);
   const trace3 = await audit('r3_task_write_handoff');
   trace3.handoff = { switchedToB, returnedToA, taskWrite: { started: w3?.started, committed: w3?.finished } };
   // 写审计：恰一次文章保存；计划写两次+暂存一次；任务写一次；无模型/聊天写。

@@ -34,6 +34,9 @@ module.exports = async function round2(ctx) {
   // hardcoded heading ordinal; verify actual scroll and the untouched other pane.
   const pair = [fixture.compare_candidates[1], fixture.compare_cr_candidate];
   for (const id of pair) await click(`[...document.getElementById('candidate-expand-${id}').parentElement.querySelectorAll('button')].find(n=>n.textContent.trim()==='加入对照')`);
+  // DOM click does not focus like a pointer/keyboard action. Establish the
+  // actual trigger as the return target, as full/native journeys already do.
+  await e(`(${btn('打开对照')}).focus()`);
   await click(btn('打开对照'));
   const compare = `document.querySelector('[role="dialog"]')`;
   const flex = `(${compare}).querySelector('.ice-dialog-body > div')`;
@@ -44,6 +47,7 @@ module.exports = async function round2(ctx) {
   await click(inButton(pane, 'Markdown 原文'));
   const cr = (await rpc('chat.get', { account_id: fixture.account_a, conversation_id: fixture.conversations[0] })).candidates.find(n => n.id === fixture.compare_cr_candidate).body;
   check('cr_source_exact', await e(`(${pane}).querySelector('pre').textContent===${JSON.stringify(cr)}`) && cr.includes('\r') && !cr.includes('\n'));
+  check('cr_source_has_visual_breaks', await e(`(${pane}).querySelectorAll('pre br').length>0`));
   await click(`(${pane}).querySelector('button[aria-label="复制此份原文"]')`);
   await ui(`window.__copies.at(-1)===${JSON.stringify(cr)}`); check('cr_copy_exact', true);
   await click(`(${pane}).querySelector('button[aria-controls="compare-toc-${fixture.compare_cr_candidate}"]')`);
@@ -65,7 +69,14 @@ module.exports = async function round2(ctx) {
     report.viewport.push({ width, matched, afterMs: Date.now() - started });
     check('viewport_' + width + '_' + report.viewport.length, matched && await e(`window.__round2Pane===${pane}&&window.__round2Scroll.isConnected&&Boolean(window.__round2Pane.querySelector('pre'))&&Boolean(window.__round2Pane.querySelector('nav'))`));
   }
+  await click(inButton(pane, '阅读预览'));
+  await e('window.__round2Scroll.scrollTop=0');
+  await click(inButton(`(${pane}).querySelector('nav')`, 'tail-section'));
+  await until(() => e(`(()=>{const s=window.__round2Scroll;const h=[...s.querySelector('.ice-markdown').children].find(n=>/^H[1-6]$/.test(n.tagName)&&n.textContent==='tail-section');const offset=h?.getBoundingClientRect().top-s.getBoundingClientRect().top;return s.scrollTop>30&&offset>=0&&offset<40;})()`), 'CR reading directory actual scroll', 5000);
+  check('cr_reading_toc_scrolls_only_own_pane', await e('window.__round2OtherScroll.scrollTop===window.__round2OtherTop'));
   await escape(); await ui('!document.querySelector(\'[role="dialog"]\')');
+  await ui(`document.activeElement===[...document.querySelectorAll('button')].find(n=>n.textContent.trim()==='打开对照')`);
+  check('compare_escape_returns_focus', true);
   await call('Emulation.clearDeviceMetricsOverride');
   await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const edit = `[...document.querySelectorAll('[data-job-id="${fixture.jobs.completed}"] button')].find(n=>n.textContent.trim()==='编辑正文'&&!n.disabled)`;

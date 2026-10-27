@@ -92,6 +92,8 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
       <Button size="sm" disabled={!budget.data || disabled || busy || budgetBusy} onClick={() => { setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
       <Button size="sm" variant="ghost" onClick={() => settingsStore.set(true)}>模型与 Key 设置</Button></div>
+    {budget.error && <ErrorNote error={budget.error} onRetry={() => void budget.refetch()} retryLabel="重新读取预算"
+      note={budget.data ? '已保留上次读取的预算；当前刷新失败，请核对后重试。' : '本篇预算读取失败；已输入的提示词保留，可重新读取。'} />}
     {editingBudget && <div className="ice-asset-card"><label className="ice-asset-row">本篇模型调用上限
       <Input aria-label="本篇模型调用上限" type="number" min={Math.max(1, editingBudget.used)} max={100} value={limit} disabled={budgetBusy} onChange={event => setLimit(event.target.value)} /></label>
       <p className="ice-asset-muted">1–100 次，不能低于已用次数。仅修改本篇，不重置已用次数；保存后生效。</p>

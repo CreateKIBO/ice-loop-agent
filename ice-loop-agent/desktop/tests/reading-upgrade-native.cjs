@@ -180,7 +180,7 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  await click(`${refs}.querySelector('[aria-expanded]')`);
  // Electron 弹窗内缩略图带 loading="lazy"：先滚动进入视口（等价用户滚动查看）再等待完成。
  await e(`[...${refs}.querySelectorAll('li')].forEach(n=>n.scrollIntoView({block:'center'}))`);
- await until(`${refs}.querySelectorAll('img').length>=2&&[...${refs}.querySelectorAll('img')].every(n=>n.complete)`);
+ await until(`${refs}.querySelectorAll('img').length>=2&&[...${refs}.querySelectorAll('img')].every(n=>n.complete&&n.naturalWidth>0)`);
  const names=await e(`[...${refs}.querySelectorAll('li')].map(n=>({heading:n.querySelector('strong').textContent,name:n.querySelector('p').textContent}))`);
  check('reference_order_and_roles',names.length===2&&names[0].heading.includes('图片 1')&&names[0].heading.includes('编辑底图')&&names[1].heading.includes('品牌身份参考'));
  await click(`${refs}.querySelector('button[aria-label^="复制文件名（图片"]')`);await until(`${refs}.querySelector('button[aria-label^="复制文件名（图片"]')?.textContent.includes('文件名已复制')`);
