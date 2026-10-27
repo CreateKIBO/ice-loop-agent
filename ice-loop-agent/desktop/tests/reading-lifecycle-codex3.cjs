@@ -10,7 +10,7 @@ module.exports = async function codex3({ e, ui, click, check, until, rpc, reques
   const input = `(${prompt}).querySelector('input[aria-label="本篇模型调用上限"]')`;
   const field = async value => e(`(()=>{const n=${input};Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(n,${JSON.stringify(value)});n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   report.c3 = { boundary: 'real renderer budget validation/cancel/reopen; injected failures before dispatch; no same-article consumer claim' };
-  await require('./reading-resume-blocker.cjs')({ e, check, until, rpc, requests, fixture, report });
+  await require('./reading-resume-blocker.cjs')({ e, ui, click, check, until, rpc, requests, fixture, report });
   await ui(`Boolean(${button('调整本篇预算')})`);
   await e(`(()=>{window.__c3Tabs=document.querySelector('.ice-asset-tabs');const n=(${prompt}).querySelector('textarea[aria-label="当前图位生图提示词"]');window.__c3Prompt=n;window.__c3Text=n.value+${JSON.stringify('\n预算取消时保留的未保存修改')};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(n,window.__c3Text);n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   const retained = `window.__c3Tabs===document.querySelector('.ice-asset-tabs')&&window.__c3Prompt===(${prompt}).querySelector('textarea[aria-label="当前图位生图提示词"]')&&window.__c3Prompt.value===window.__c3Text&&(${prompt}).textContent.includes('未保存修改')`;

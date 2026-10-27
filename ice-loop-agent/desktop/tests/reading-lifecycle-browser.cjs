@@ -57,7 +57,7 @@ async function rpc(method, params, source = 'harness') {
     pending.set(id, async packet => {
       clearTimeout(timer); row.received = Date.now(); row.failed = Boolean(packet.error);
       if (method === 'jobs.get' && packet.result) row.identity = {
-        job: packet.result.job?.job_id, account: packet.result.article?.spec?.account_id,
+        job: packet.result.job?.job_id, article: packet.result.article?.article_id, account: packet.result.article?.spec?.account_id,
         body_hash: packet.result.body_hash, slots: packet.result.slots?.map(s => s.slot_id),
       };
       if (method === 'jobs.get' && packet.result) row.plan = (packet.result.slots || []).map(slot => ({ slot_id: slot.slot_id, valid: Boolean(slot.valid) }));
