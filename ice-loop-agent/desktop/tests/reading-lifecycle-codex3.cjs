@@ -10,19 +10,7 @@ module.exports = async function codex3({ e, ui, click, check, until, rpc, reques
   const input = `(${prompt}).querySelector('input[aria-label="本篇模型调用上限"]')`;
   const field = async value => e(`(()=>{const n=${input};Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(n,${JSON.stringify(value)});n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   report.c3 = { boundary: 'real renderer budget validation/cancel/reopen; injected failures before dispatch; no same-article consumer claim' };
-  // Readable runtime evidence for the recovery blocker. The actual resume RPC
-  // must reject this completed article without changing its body or plan.
-  const params = { account_id: fixture.account_a, job_id: fixture.jobs.completed };
-  const identity = detail => ({ job: detail.job.job_id, article: detail.article.article_id,
-    account: detail.article.spec.account_id, state: detail.job.state, node: detail.job.current_node,
-    body_hash: detail.body_hash, slots: detail.slots.map(s => [s.slot_id, s.content_hash, s.valid]) });
-  const before = identity(await rpc('jobs.get', params));
-  let rejection;
-  try { await rpc('jobs.resume', params); } catch (error) { rejection = error.message; }
-  const after = identity(await rpc('jobs.get', params));
-  report.c3.recoveryBlocker = { before, rejection, after };
-  check('c3_completed_article_resume_rejected_without_plan_change', rejection === '该任务不能继续' && before.state === 'completed' && JSON.stringify(before) === JSON.stringify(after));
-  check('c3_existing_editor_entries_require_completed', await e(`Boolean([...document.querySelectorAll('[data-job-id="${fixture.jobs.completed}"] button')].find(n=>n.textContent.trim()==='编辑正文'))&&!([...document.querySelectorAll('[data-job-id="${fixture.jobs.paused}"] button')].some(n=>n.textContent.trim()==='编辑正文'))`));
+  await require('./reading-resume-blocker.cjs')({ e, check, until, rpc, requests, fixture, report });
   await ui(`Boolean(${button('调整本篇预算')})`);
   await e(`(()=>{window.__c3Tabs=document.querySelector('.ice-asset-tabs');const n=(${prompt}).querySelector('textarea[aria-label="当前图位生图提示词"]');window.__c3Prompt=n;window.__c3Text=n.value+${JSON.stringify('\n预算取消时保留的未保存修改')};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(n,window.__c3Text);n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   const retained = `window.__c3Tabs===document.querySelector('.ice-asset-tabs')&&window.__c3Prompt===(${prompt}).querySelector('textarea[aria-label="当前图位生图提示词"]')&&window.__c3Prompt.value===window.__c3Text&&(${prompt}).textContent.includes('未保存修改')`;
