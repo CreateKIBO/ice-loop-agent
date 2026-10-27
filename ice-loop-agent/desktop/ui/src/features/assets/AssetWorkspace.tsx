@@ -170,17 +170,18 @@ function ResourcePicker({ account, slot, disabled, onUse, onOpen }: { account: s
     <Button aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? '收起资源库' : '从资源库选图'}</Button></div>
     {open && <>
       <Input aria-label="搜索配图资源" placeholder="搜索名称、说明或标签" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
-      <p className="ice-asset-muted">共 {result.total} 张，按图位用途优先列出。采用前核对图意与来源，旧截图不能替代本文代码的执行证据。</p>
+      {list.data && <p className="ice-asset-muted">共 {result.total} 张，按图位用途优先列出。采用前核对图意与来源，旧截图不能替代本文代码的执行证据。</p>}
       {list.error && <ErrorPanel title="资源读取失败" detail={list.error.message} onRetry={() => void list.refetch()} />}
+      {list.error && list.data && <p className="ice-asset-muted" role="status">已保留上次读取的资源；当前刷新失败，请核对后重试。</p>}
       {list.isLoading && <Spinner />}
       <div className="ice-asset-cards">{result.rows.map(row => <article className="ice-asset-card" key={row.resource_id}>
         <ImageThumbnail target={{ kind: 'resource', accountId: account, resourceId: row.resource_id, caption: row.title }} onOpen={onOpen} />
         <strong>{row.title}</strong><span className="ice-asset-muted">{row.width} × {row.height}</span>
         <Button disabled={disabled} onClick={() => void onUse(row)}>采用此资源</Button>
       </article>)}</div>
-      {!list.isLoading && !result.rows.length && <p>没有匹配资源，可先导入图片或调整搜索词。</p>}
-      <div className="ice-asset-row"><Button disabled={result.current === 0} onClick={() => setPage(result.current - 1)}>上一页资源</Button>
-        <span>{result.current + 1}/{result.pages}</span><Button disabled={result.current + 1 >= result.pages} onClick={() => setPage(result.current + 1)}>下一页资源</Button></div>
+      {list.data && !list.isLoading && !result.rows.length && <p>没有匹配资源，可先导入图片或调整搜索词。</p>}
+      {list.data && <div className="ice-asset-row"><Button disabled={result.current === 0} onClick={() => setPage(result.current - 1)}>上一页资源</Button>
+        <span>{result.current + 1}/{result.pages}</span><Button disabled={result.current + 1 >= result.pages} onClick={() => setPage(result.current + 1)}>下一页资源</Button></div>}
     </>}
   </section>;
 }

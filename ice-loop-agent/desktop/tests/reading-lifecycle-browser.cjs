@@ -7,14 +7,14 @@ const { spawn } = require('node:child_process');
 const readline = require('node:readline'), assert = require('node:assert/strict');
 const { startTrace, expectRemoval, finishAction, stopTrace, auditRemovals } = require('./lifecycle-trace.cjs');
 const scope = process.env.ICE_LIFECYCLE_SCOPE || 'full';
-assert(['full', 'round2', 'round3'].includes(scope), 'Unknown lifecycle scope');
+assert(['full', 'round2', 'round3', 'codex1', 'codex2'].includes(scope), 'Unknown lifecycle scope');
 const WebSocketImpl = globalThis.WebSocket || require('ws');
 const repo = path.resolve(__dirname, '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/reading-upgrade-fixture.json')));
 assert.equal(path.dirname(fixture.root), path.join(repo, '.test-tmp/release-interaction-lists'));
 assert(fs.existsSync(path.join(fixture.root, '.test-owner.json')));
 const evidence = fs.mkdtempSync(path.join(fixture.root, 'browser-lifecycle-'));
-const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', runtime: fixture.runtime, checks: {}, errors: [] };
+const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', consumerEnabled: ['codex1', 'codex2'].includes(scope), runtime: fixture.runtime, checks: {}, errors: [] };
 const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx'];
 const fingerprint = () => Object.fromEntries(productFiles.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(repo, 'desktop/ui/src', file))).digest('hex')]));
 report.sources = fingerprint();
@@ -27,16 +27,23 @@ import json, sys
 from pathlib import Path
 from ice_agent.desktop_service import DesktopService
 from ice_agent.rpc_channel import RpcChannel
-s = DesktopService(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), auto_consumer=False)
-c = RpcChannel(s.call)
+consumer = None
+if sys.argv[4] == 'codex1':
+    from tests.reading_lifecycle_consumer import ConsumerProbe
+    consumer = ConsumerProbe(Path(sys.argv[1]), Path(sys.argv[2]))
+elif sys.argv[4] == 'codex2':
+    from tests.reading_lifecycle_cancel import CancelProbe
+    consumer = CancelProbe(Path(sys.argv[1]), Path(sys.argv[2]))
+s = DesktopService(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), auto_consumer=consumer is not None)
+c = RpcChannel((lambda method, params: consumer.call(s, method, params)) if consumer else s.call)
 try:
     for line in sys.stdin.buffer:
         c.handle_raw(line)
 finally:
     s.close()
 `;
-async function rpc(method, params) {
-  const row = { method, params, started: Date.now() }; requests.push(row);
+async function rpc(method, params, source = 'harness') {
+  const row = { method, params, source, started: Date.now() }; requests.push(row);
   const fault = faults.get(method);
   if (fault?.delay) await wait(fault.delay);
   if ((method === 'chat.get' && failChat) || fault?.fail) {
@@ -53,6 +60,8 @@ async function rpc(method, params) {
         job: packet.result.job?.job_id, account: packet.result.article?.spec?.account_id,
         body_hash: packet.result.body_hash, slots: packet.result.slots?.map(s => s.slot_id),
       };
+      if (method === 'jobs.get' && packet.result) row.plan = (packet.result.slots || []).map(slot => ({ slot_id: slot.slot_id, valid: Boolean(slot.valid) }));
+      if (method === 'jobs.list' && Array.isArray(packet.result)) row.jobs = packet.result.map(job => ({ job_id: job.job_id, state: job.state }));
       if (fault?.replyDelay) { row.replyDelay = fault.replyDelay; await wait(fault.replyDelay); }
       row.finished = Date.now();
       packet.error ? reject(Error(packet.error.message)) : resolve(packet.result);
@@ -69,7 +78,7 @@ async function until(test, label, timeout = 25000) {
 async function run() {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.endsWith('_API_KEY')) delete env[key];
-  engine = spawn(process.env.ICE_PYTHON || 'python3', ['-u', '-c', python, repo, fixture.runtime, path.join(fixture.root, 'articles')], { cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  engine = spawn(process.env.ICE_PYTHON || 'python3', ['-u', '-c', python, repo, fixture.runtime, path.join(fixture.root, 'articles'), scope], { cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe'] });
   engine.stderr.pipe(fs.createWriteStream(path.join(evidence, 'engine.log')));
   readline.createInterface({ input: engine.stdout }).on('line', line => {
     const packet = JSON.parse(line), reply = pending.get(packet.id);
@@ -86,7 +95,8 @@ async function run() {
       if (req.url === '/rpc' && req.method === 'POST') {
         let body = ''; for await (const chunk of req) body += chunk;
         const { method, params } = JSON.parse(body);
-        const result = await rpc(method, params);
+        assert(!method.startsWith('test.'), 'Test controls are harness-only');
+        const result = await rpc(method, params, 'renderer');
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result })); return;
       }
       if (req.url === '/test-bridge.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bridge); return; }
@@ -147,14 +157,23 @@ async function run() {
     assert(Object.values(report.checks).every(Boolean), 'Round2 lifecycle assertions failed');
     return;
   }
-  if (scope === 'round3') {
+  if (['round3', 'codex1', 'codex2'].includes(scope)) {
     report.scope += '; targeted round3 background writes';
+    if (scope === 'codex2') faults.set('budgets.get', { fail: true });
     await require('./reading-lifecycle-round3.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    if (scope === 'codex1') {
+      report.scope += '; real production consumer thread with offline demo payload';
+      await require('./reading-lifecycle-codex1.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    }
+    if (scope === 'codex2') {
+      report.scope += '; real running consumer stopped inside bounded demo node';
+      await require('./reading-lifecycle-codex2.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    }
     await until(() => requests.every(row => row.finished) && pending.size === 0, 'all targeted RPCs settled');
     check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
     check('no_renderer_errors', report.errors.length === 0);
     check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
-    assert(Object.values(report.checks).every(Boolean), 'Round3 lifecycle assertions failed');
+    assert(Object.values(report.checks).every(Boolean), scope + ' lifecycle assertions failed');
     return;
   }
   await click(`document.querySelector('button[title="键盘验收会话1"]')`);
