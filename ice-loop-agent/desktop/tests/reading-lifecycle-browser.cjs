@@ -7,7 +7,7 @@ const { spawn } = require('node:child_process');
 const readline = require('node:readline'), assert = require('node:assert/strict');
 const { startTrace, expectRemoval, finishAction, stopTrace, auditRemovals } = require('./lifecycle-trace.cjs');
 const scope = process.env.ICE_LIFECYCLE_SCOPE || 'full';
-assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3', 'codex4'].includes(scope), 'Unknown lifecycle scope');
+assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3', 'codex4', 'codex5'].includes(scope), 'Unknown lifecycle scope');
 const WebSocketImpl = globalThis.WebSocket || require('ws');
 const repo = path.resolve(__dirname, '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/reading-upgrade-fixture.json')));
@@ -71,8 +71,9 @@ async function rpc(method, params, source = 'harness') {
 }
 const count = method => requests.filter(row => row.method === method && row.finished && !row.failed).length;
 async function until(test, label, timeout = 25000) {
-  const end = Date.now() + timeout;
+  const started = Date.now(), monotonic = performance.now(), end = started + timeout;
   while (Date.now() < end) { if (await test()) return; await wait(100); }
+  (report.waitTimeouts ??= []).push({ label, timeout, elapsedWall: Date.now() - started, elapsedMonotonic: performance.now() - monotonic });
   throw Error('Timeout: ' + label);
 }
 async function run() {
@@ -110,7 +111,7 @@ async function run() {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = 'http://127.0.0.1:' + server.address().port;
-  chrome = spawn(process.env.ICE_TEST_CHROME || '/opt/google/chrome/chrome', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--window-size=1440,1000', '--user-data-dir=' + path.join(evidence, 'chrome-profile'), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chrome = spawn(process.env.ICE_TEST_CHROME || '/opt/google/chrome/chrome', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-background-networking', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--disable-component-update', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--window-size=1440,1000', '--user-data-dir=' + path.join(evidence, 'chrome-profile'), 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   chrome.stderr.pipe(fs.createWriteStream(path.join(evidence, 'chrome.log')));
   const portFile = path.join(evidence, 'chrome-profile/DevToolsActivePort');
   await until(() => fs.existsSync(portFile), 'Chrome startup');
@@ -146,6 +147,7 @@ async function run() {
   await call('Runtime.enable'); await call('Network.enable');
   await call('Network.setBlockedURLs', { urls: ['https://*'] });
   await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await call('Page.bringToFront');
   await call('Page.navigate', { url });
   if (scope === 'round2') {
     report.scope += '; targeted round2';
@@ -157,7 +159,7 @@ async function run() {
     assert(Object.values(report.checks).every(Boolean), 'Round2 lifecycle assertions failed');
     return;
   }
-  if (['round3', 'codex1', 'codex2', 'codex3', 'codex4'].includes(scope)) {
+  if (['round3', 'codex1', 'codex2', 'codex3', 'codex4', 'codex5'].includes(scope)) {
     report.scope += '; targeted round3 background writes';
     if (scope === 'codex2') faults.set('budgets.get', { fail: true });
     await require('./reading-lifecycle-round3.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
@@ -169,13 +171,17 @@ async function run() {
       report.scope += '; real running consumer stopped inside bounded demo node';
       await require('./reading-lifecycle-codex2.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
     }
-    if (['codex3', 'codex4'].includes(scope)) {
+    if (['codex3', 'codex4', 'codex5'].includes(scope)) {
       report.scope += '; budget adjustment error lifecycle; no production consumer enabled';
       await require('./reading-lifecycle-codex3.cjs')({ e, ui, click, check, until, rpc, requests, faults, fixture, report });
     }
-    if (scope === 'codex4') {
+    if (['codex4', 'codex5'].includes(scope)) {
       report.scope += '; repeated budget adjustment preserves the open form';
       await require('./reading-lifecycle-codex4.cjs')({ e, ui, click, check, requests, report });
+    }
+    if (scope === 'codex5') {
+      report.scope += '; real budget save receipts/conflict; refresh failure; focus and loading feedback';
+      await require('./reading-lifecycle-codex5.cjs')({ e, call, ui, click, check, until, rpc, requests, faults, fixture, evidence, report });
     }
     await until(() => requests.every(row => row.finished) && pending.size === 0, 'all targeted RPCs settled');
     check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
@@ -624,7 +630,8 @@ async function run() {
 }
 (async () => {
   try { await run(); report.state = 'passed'; }
-  catch (error) { report.state = 'failed'; report.error = error.stack; report.body = await evaluate?.('document.body.innerText').catch(() => null); process.exitCode = 1; }
+  catch (error) { report.state = 'failed'; report.error = error.stack; report.body = await evaluate?.('document.body.innerText').catch(() => null);
+    report.environment = await evaluate?.('({visibility:document.visibilityState,focused:document.hasFocus(),now:Date.now()})').catch(() => null); process.exitCode = 1; }
   finally {
     failChat = false; faults.clear(); ws?.close();
     if (chrome && chrome.exitCode === null) { chrome.kill(); await Promise.race([new Promise(r => chrome.once('exit', r)), wait(3000)]); if (chrome.exitCode === null) chrome.kill('SIGKILL'); }
