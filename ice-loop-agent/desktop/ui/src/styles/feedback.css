@@ -63,7 +63,11 @@
 }
 .ice-toast__body { flex: 1; min-width: 0; }
 .ice-toast__title { font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
-.ice-toast__detail { margin-top: 2px; font-size: var(--ice-font-size-sm); opacity: 0.75; word-break: break-word; }
+.ice-toast__detail {
+  margin-top: 2px; font-size: var(--ice-font-size-sm); opacity: 0.75; word-break: break-word;
+  white-space: pre-wrap; max-height: min(180px, 25vh); overflow-y: auto; overscroll-behavior: contain;
+}
+.ice-toaster--modal .ice-toast__detail { max-height: min(64px, 10vh); }
 .ice-toast__action {
   flex-shrink: 1; min-width: 0; max-width: 45%; overflow-wrap: anywhere;
   border: 1px solid rgba(243, 242, 237, 0.3); background: transparent; color: inherit;
