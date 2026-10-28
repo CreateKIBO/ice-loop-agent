@@ -5,13 +5,16 @@
 const fs = require('node:fs'), path = require('node:path'), http = require('node:http');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline'), assert = require('node:assert/strict');
+const { startTrace, expectRemoval, finishAction, stopTrace, auditRemovals } = require('./lifecycle-trace.cjs');
+const scope = process.env.ICE_LIFECYCLE_SCOPE || 'full';
+assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3', 'codex4'].includes(scope), 'Unknown lifecycle scope');
 const WebSocketImpl = globalThis.WebSocket || require('ws');
 const repo = path.resolve(__dirname, '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/reading-upgrade-fixture.json')));
 assert.equal(path.dirname(fixture.root), path.join(repo, '.test-tmp/release-interaction-lists'));
 assert(fs.existsSync(path.join(fixture.root, '.test-owner.json')));
 const evidence = fs.mkdtempSync(path.join(fixture.root, 'browser-lifecycle-'));
-const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', runtime: fixture.runtime, checks: {}, errors: [] };
+const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', consumerEnabled: ['codex1', 'codex2'].includes(scope), runtime: fixture.runtime, checks: {}, errors: [] };
 const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx'];
 const fingerprint = () => Object.fromEntries(productFiles.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(repo, 'desktop/ui/src', file))).digest('hex')]));
 report.sources = fingerprint();
@@ -24,16 +27,23 @@ import json, sys
 from pathlib import Path
 from ice_agent.desktop_service import DesktopService
 from ice_agent.rpc_channel import RpcChannel
-s = DesktopService(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), auto_consumer=False)
-c = RpcChannel(s.call)
+consumer = None
+if sys.argv[4] == 'codex1':
+    from tests.reading_lifecycle_consumer import ConsumerProbe
+    consumer = ConsumerProbe(Path(sys.argv[1]), Path(sys.argv[2]))
+elif sys.argv[4] == 'codex2':
+    from tests.reading_lifecycle_cancel import CancelProbe
+    consumer = CancelProbe(Path(sys.argv[1]), Path(sys.argv[2]))
+s = DesktopService(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), auto_consumer=consumer is not None)
+c = RpcChannel((lambda method, params: consumer.call(s, method, params)) if consumer else s.call)
 try:
     for line in sys.stdin.buffer:
         c.handle_raw(line)
 finally:
     s.close()
 `;
-async function rpc(method, params) {
-  const row = { method, params, started: Date.now() }; requests.push(row);
+async function rpc(method, params, source = 'harness') {
+  const row = { method, params, source, started: Date.now() }; requests.push(row);
   const fault = faults.get(method);
   if (fault?.delay) await wait(fault.delay);
   if ((method === 'chat.get' && failChat) || fault?.fail) {
@@ -43,12 +53,17 @@ async function rpc(method, params) {
   const id = String(++sequence);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pending.delete(id); reject(Error('RPC timeout ' + method)); }, 30000);
-    pending.set(id, packet => {
-      clearTimeout(timer); row.finished = Date.now(); row.failed = Boolean(packet.error);
+    row.dispatched = Date.now();
+    pending.set(id, async packet => {
+      clearTimeout(timer); row.received = Date.now(); row.failed = Boolean(packet.error);
       if (method === 'jobs.get' && packet.result) row.identity = {
-        job: packet.result.job?.job_id, account: packet.result.article?.spec?.account_id,
+        job: packet.result.job?.job_id, article: packet.result.article?.article_id, account: packet.result.article?.spec?.account_id,
         body_hash: packet.result.body_hash, slots: packet.result.slots?.map(s => s.slot_id),
       };
+      if (method === 'jobs.get' && packet.result) row.plan = (packet.result.slots || []).map(slot => ({ slot_id: slot.slot_id, valid: Boolean(slot.valid) }));
+      if (method === 'jobs.list' && Array.isArray(packet.result)) row.jobs = packet.result.map(job => ({ job_id: job.job_id, state: job.state }));
+      if (fault?.replyDelay) { row.replyDelay = fault.replyDelay; await wait(fault.replyDelay); }
+      row.finished = Date.now();
       packet.error ? reject(Error(packet.error.message)) : resolve(packet.result);
     });
     engine.stdin.write(JSON.stringify({ id, method, params }) + '\n');
@@ -63,7 +78,7 @@ async function until(test, label, timeout = 25000) {
 async function run() {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.endsWith('_API_KEY')) delete env[key];
-  engine = spawn(process.env.ICE_PYTHON || 'python3', ['-u', '-c', python, repo, fixture.runtime, path.join(fixture.root, 'articles')], { cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  engine = spawn(process.env.ICE_PYTHON || 'python3', ['-u', '-c', python, repo, fixture.runtime, path.join(fixture.root, 'articles'), scope], { cwd: repo, env, stdio: ['pipe', 'pipe', 'pipe'] });
   engine.stderr.pipe(fs.createWriteStream(path.join(evidence, 'engine.log')));
   readline.createInterface({ input: engine.stdout }).on('line', line => {
     const packet = JSON.parse(line), reply = pending.get(packet.id);
@@ -80,7 +95,8 @@ async function run() {
       if (req.url === '/rpc' && req.method === 'POST') {
         let body = ''; for await (const chunk of req) body += chunk;
         const { method, params } = JSON.parse(body);
-        const result = await rpc(method, params);
+        assert(!method.startsWith('test.'), 'Test controls are harness-only');
+        const result = await rpc(method, params, 'renderer');
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result })); return;
       }
       if (req.url === '/test-bridge.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bridge); return; }
@@ -131,6 +147,43 @@ async function run() {
   await call('Network.setBlockedURLs', { urls: ['https://*'] });
   await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   await call('Page.navigate', { url });
+  if (scope === 'round2') {
+    report.scope += '; targeted round2';
+    await require('./reading-lifecycle-round2.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    await until(() => requests.every(row => row.finished) && pending.size === 0, 'all targeted RPCs settled');
+    check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
+    check('no_renderer_errors', report.errors.length === 0);
+    check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
+    assert(Object.values(report.checks).every(Boolean), 'Round2 lifecycle assertions failed');
+    return;
+  }
+  if (['round3', 'codex1', 'codex2', 'codex3', 'codex4'].includes(scope)) {
+    report.scope += '; targeted round3 background writes';
+    if (scope === 'codex2') faults.set('budgets.get', { fail: true });
+    await require('./reading-lifecycle-round3.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    if (scope === 'codex1') {
+      report.scope += '; real production consumer thread with offline demo payload';
+      await require('./reading-lifecycle-codex1.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    }
+    if (scope === 'codex2') {
+      report.scope += '; real running consumer stopped inside bounded demo node';
+      await require('./reading-lifecycle-codex2.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, count, requests, faults, fixture, report });
+    }
+    if (['codex3', 'codex4'].includes(scope)) {
+      report.scope += '; budget adjustment error lifecycle; no production consumer enabled';
+      await require('./reading-lifecycle-codex3.cjs')({ e, ui, click, check, until, rpc, requests, faults, fixture, report });
+    }
+    if (scope === 'codex4') {
+      report.scope += '; repeated budget adjustment preserves the open form';
+      await require('./reading-lifecycle-codex4.cjs')({ e, ui, click, check, requests, report });
+    }
+    await until(() => requests.every(row => row.finished) && pending.size === 0, 'all targeted RPCs settled');
+    check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
+    check('no_renderer_errors', report.errors.length === 0);
+    check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
+    assert(Object.values(report.checks).every(Boolean), scope + ' lifecycle assertions failed');
+    return;
+  }
   await click(`document.querySelector('button[title="键盘验收会话1"]')`);
   // Latest window: object replacement and failed background reads must preserve the card.
   const latestId = 'candidate-expand-reading-recent-5';
@@ -306,6 +359,24 @@ async function run() {
   await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
   await ui(`Boolean(${paneRootB}.querySelector('pre'))`);
   check('viewport_restored_pane_b_body_unchanged', await e(`${paneRootB}.querySelector('pre').textContent===${JSON.stringify(bodyB)}`));
+  // Small resizes across the compare breakpoint must not depend on chat row
+  // remeasurement or the next service poll to trigger a React render.
+  report.viewport.breakpoint = [];
+  for (const width of [1001, 999, 1001]) {
+    await call('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+    const started = Date.now(); let matches = false;
+    while (Date.now() - started < 1500) {
+      const direction = await e(`getComputedStyle(${flexRoot}).flexDirection`);
+      if (direction === (width < 1000 ? 'column' : 'row')) { matches = true; break; }
+      await wait(50);
+    }
+    const snapshot = { width, matches, afterMs: Date.now() - started,
+      direction: await e(`getComputedStyle(${flexRoot}).flexDirection`),
+      chatScroll: await e(`document.querySelector('.ice-chat-log').scrollTop`) };
+    report.viewport.breakpoint.push(snapshot);
+    check('viewport_small_resize_' + report.viewport.breakpoint.length, matches);
+  }
+  await call('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
   await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', windowsVirtualKeyCode: 27 });
   await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
   await ui(`!${dialog}`);
@@ -315,6 +386,30 @@ async function run() {
   try { await until(() => e(`document.activeElement===[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='打开对照')`), 'compare close focus return', 2000); focusReturned = true; } catch {}
   report.closeFocus.returned = focusReturned;
   check('compare_close_focus_returns_to_trigger', focusReturned);
+  // Reuse the current-page selection UI for legacy CR-only Markdown. The raw
+  // view must preserve every character, just like the CRLF candidate above.
+  for (const id of [fixture.compare_candidates[1], fixture.compare_cr_candidate]) {
+    await click(`[...document.getElementById('candidate-expand-${id}').parentElement.querySelectorAll('button')].find(b=>/^(加入|移出)对照$/.test(b.textContent.trim()))`);
+  }
+  await click(btn('打开对照'));
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
+  const crCandidate = (await rpc('chat.get', { account_id: fixture.account_a, conversation_id: fixture.conversations[0] })).candidates.find(c => c.id === fixture.compare_cr_candidate);
+  await ui(`Boolean(${paneRootB}.querySelector('pre'))`);
+  report.crOnly = await e(`(()=>{const expected=${JSON.stringify(crCandidate.body)},actual=${paneRootB}.querySelector('pre').textContent;return {expected:expected.length,actual:actual.length,exact:actual===expected,hasCR:expected.includes(String.fromCharCode(13)),hasLF:expected.includes(String.fromCharCode(10))};})()`);
+  check('cr_only_source_display_exact', report.crOnly.exact && report.crOnly.hasCR && !report.crOnly.hasLF);
+  await click(`${paneRootB}.querySelector('button[aria-label="复制此份原文"]')`);
+  check('cr_only_copy_exact', await e(`window.__copies.at(-1)===${JSON.stringify(crCandidate.body)}`));
+  await click(`[...${paneRootB}.querySelectorAll('button')].find(b=>b.textContent.startsWith('目录（'))`);
+  await click(`[...${paneRootB}.querySelectorAll('nav button')].find(b=>b.textContent==='tail-section')`);
+  const crTarget = `[...${paneRootB}.querySelectorAll('[data-compare-heading]')].find(n=>n.textContent.startsWith(${JSON.stringify('## tail-section\r')}))`;
+  const crAnchor = await e(`(${crTarget}).textContent.slice(0,16)`);
+  const crPosition = await settleTo(`${paneRootB}.querySelector('pre').parentElement`, crTarget);
+  check('cr_only_toc_scrolls_to_own_section', crPosition.settled);
+  report.crOnly.tailAnchor = crAnchor;
+  check('cr_only_toc_anchors_own_section', crAnchor === '## tail-section\r');
+  await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', windowsVirtualKeyCode: 27 });
+  await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
+  await ui(`!${dialog}`);
   // Historical page also stays mounted while the independent live query fails.
   for (let page = 0; page < 8; page++) {
     await ui(`document.querySelectorAll('[id^="candidate-expand-"]').length>0`);
@@ -330,23 +425,15 @@ async function run() {
   failChat = false;
   await click(btn('复制全文'));
   check('history_copy_complete_source', await e(`window.__copies.at(-1)===${JSON.stringify(fixture.candidate_body)}`));
-  const startD6 = async label => {
-    await e(`(()=>{
-      const trace=window.__d6={label:${JSON.stringify(label)},started:Date.now(),samples:[],removals:[],insertions:[]};
-      const ids=new WeakMap();let seq=0;
-      const id=n=>{if(!n)return null;if(!ids.has(n))ids.set(n,++seq);return ids.get(n);};
-      const relevant=n=>n.nodeType===1?[...(n.matches('.ice-asset-tabs,[role="dialog"],.ice-editor')?[n]:[]),...n.querySelectorAll('.ice-asset-tabs,[role="dialog"],.ice-editor')]:[];
-      const describe=n=>({id:id(n),kind:n.matches('.ice-asset-tabs')?'tabs':n.matches('.ice-editor')?'editor':'dialog',title:n.querySelector('h2')?.textContent});
-      const sample=()=>trace.samples.push({at:Date.now(),tabs:[...document.querySelectorAll('.ice-asset-tabs')].map(describe),dialogs:[...document.querySelectorAll('[role="dialog"]')].map(describe),editor:id(document.querySelector('.ice-editor')),account:document.querySelector('#ice-account-select')?.value,focus:{tag:document.activeElement?.tagName,text:document.activeElement?.getAttribute('aria-label')||document.activeElement?.textContent?.slice(0,60)},resetNote:document.body.textContent.includes('已恢复默认视图'),detailError:document.body.textContent.includes('图位读取失败')});
-      window.__d6Observer=new MutationObserver(rows=>{for(const row of rows){for(const n of row.removedNodes)for(const t of relevant(n))trace.removals.push({at:Date.now(),...describe(t)});for(const n of row.addedNodes)for(const t of relevant(n))trace.insertions.push({at:Date.now(),...describe(t)});}sample();});
-      window.__d6Observer.observe(document.body,{childList:true,subtree:true});
-      window.__d6Sample=setInterval(sample,100);sample();
-    })()`);
-  };
-  const stopD6 = async label => {
-    const trace = await e(`(()=>{window.__d6Observer.disconnect();clearInterval(window.__d6Sample);window.__d6.finished=Date.now();return window.__d6;})()`);
+  const startD6 = label => startTrace(e, label);
+  const stopD6 = async (label, expectedClosedDialog) => {
+    const trace = await stopTrace(e);
     (report.d6 ??= []).push(trace);
-    check('d6_' + label + '_no_tabs_or_dialog_removal', !trace.removals.some(n => n.kind === 'tabs' || n.kind === 'dialog') && trace.insertions.some(n => n.kind === 'tabs'));
+    trace.removalAudit = auditRemovals(trace);
+    check('d6_' + label + (expectedClosedDialog ? '_no_unexpected_tabs_or_dialog_removal' : '_no_tabs_or_dialog_removal'),
+      !trace.removalAudit.unexpected.length && !trace.removalAudit.missingOrRepeated.length
+      && trace.insertions.some(n => n.kind === 'tabs')
+      && (!expectedClosedDialog || trace.actions.length === 1));
     check('d6_' + label + '_account_stable', trace.samples.every(s => s.account === fixture.account_a));
     if (trace.label.includes('reset')) check('d6_' + label + '_tabs_cross_actual_reset_expiry',
       trace.samples.some(s => s.tabs.length && s.resetNote) && trace.samples.some(s => s.tabs.length && !s.resetNote));
@@ -480,9 +567,6 @@ async function run() {
   check('initial_read_recovery_populates_same_dialog', await e(`document.querySelectorAll('[role="dialog"]').length===1&&window.__d6.insertions.filter(n=>n.kind==='dialog').length===1`));
   // This label has no reset-expiry assertion: it focuses on initial error vs removal.
   await wait(2800); await stopD6('cold_failure');
-  for (const trace of report.d6) {
-    check('d6_' + trace.label + '_real_job_identity', requests.some(r => r.method === 'jobs.get' && r.started >= trace.started && r.finished <= trace.finished && r.identity?.job === fixture.jobs.completed && r.identity?.account === fixture.account_a));
-  }
   // Closing during a real delayed read must stay closed when that reply arrives.
   faults.set('jobs.get', { delay: 1500 });
   const lateStart = requests.length;
@@ -492,6 +576,47 @@ async function run() {
   await until(() => requests.slice(lateStart).some(r => r.method === 'jobs.get' && r.finished), 'late closed detail response');
   faults.delete('jobs.get'); await wait(200);
   check('late_detail_reply_does_not_reopen_closed_workspace', await e(`!document.querySelector('[role="dialog"]')&&!document.querySelector('.ice-asset-tabs')`));
+  // Visit a different task without resuming it, then navigate from delivery
+  // review into images. These two dialogs use different jobs.get cache keys.
+  const navigationStart = requests.length;
+  await click(`[...document.querySelectorAll('[data-job-id="${fixture.jobs.paused}"] button')].find(b=>b.textContent.trim()==='查看处理进度')`);
+  await ui(`document.querySelector('[role="dialog"] h2')?.textContent==='文章制作与审阅'&&Boolean(document.querySelector('.ice-task-review'))`);
+  check('other_task_review_has_own_job_identity', requests.slice(navigationStart).some(r => r.method === 'jobs.get' && r.identity?.job === fixture.jobs.paused && r.identity?.account === fixture.account_a));
+  await click(`[...${dialog}.querySelectorAll('button')].find(b=>b.textContent.trim()==='关闭')`);
+  await ui(`!${dialog}`);
+  await click(`document.querySelector('.ice-editor-bar__actions button[title="核对标题、正文、配图与检查结果，确认后才能导出发布就绪包"]')`);
+  await ui(`${dialog}.querySelector('h2')?.textContent==='最终交付审阅'`);
+  const imageNavigation = `[...${dialog}.querySelectorAll('button')].find(b=>/^准备图[0-9]+$/.test(b.textContent.trim())&&!b.disabled)`;
+  await ui(`Boolean(${imageNavigation})`);
+  // Cached data already renders the image buttons during the on-open refetch.
+  // Wait for the footer refresh button to become enabled before injecting.
+  await ui(`Boolean([...${dialog}.querySelectorAll('button')].find(b=>b.textContent.trim()==='刷新'&&!b.disabled))`);
+  faults.set('articles.delivery_snapshot', { fail: true });
+  await click(`[...${dialog}.querySelectorAll('button')].find(b=>b.textContent.trim()==='刷新'&&!b.disabled)`);
+  await ui(`${dialog}.textContent.includes('读取审阅快照失败')`);
+  check('delivery_read_failure_retains_image_navigation', await e(`Boolean(${imageNavigation})`));
+  faults.delete('articles.delivery_snapshot');
+  await startD6('delivery-handoff');
+  const handoffStart = requests.length;
+  await expectRemoval(e, 'prepare-image', `[${dialog}]`);
+  await click(imageNavigation);
+  await ui(`document.querySelector('[role="dialog"] h2')?.textContent==='文章配图工作台'&&Boolean(document.querySelector('.ice-asset-tabs'))`);
+  await finishAction(e);
+  await e(`void(window.__handoffTabs=document.querySelector('.ice-asset-tabs'))`);
+  await ui(`document.querySelectorAll('[role="dialog"]').length===1&&document.querySelector('[role="dialog"]').contains(document.activeElement)`);
+  check('delivery_handoff_focus_stays_in_workspace', true);
+  await until(() => requests.slice(handoffStart).some(r => r.method === 'jobs.list' && r.finished && !r.failed), 'real task poll after delivery handoff');
+  const handoffRefresh = count('jobs.get');
+  await click(btn('刷新配图'));
+  await until(() => count('jobs.get') > handoffRefresh, 'handoff detail refresh');
+  check('delivery_handoff_workspace_keeps_same_tabs', await e(`window.__handoffTabs===document.querySelector('.ice-asset-tabs')&&window.__handoffTabs.isConnected`));
+  await stopD6('delivery_handoff', '最终交付审阅');
+  await click(btn('关闭配图工作台')); await ui(`!${dialog}`);
+  for (const trace of report.d6) {
+    check('d6_' + trace.label + '_real_job_identity', requests.some(r => r.method === 'jobs.get' && r.started >= trace.started && r.finished <= trace.finished && r.identity?.job === fixture.jobs.completed && r.identity?.account === fixture.account_a));
+  }
+  await until(() => requests.every(row => row.finished) && pending.size === 0, 'all RPCs settled');
+  check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
   check('no_renderer_errors', report.errors.length === 0);
   check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
   check('three_explicit_article_saves_and_no_model_calls', requests.filter(r => r.method === 'articles.save').length === 3 && !requests.some(r => /^(prompts.generate|chat.send|jobs.resume)$/.test(r.method)));
