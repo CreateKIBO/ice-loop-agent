@@ -16,6 +16,9 @@ const originalFault=fs.readFileSync(f.fault,'utf8');
 const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
 (async()=>{try{
  const copy=scriptedClipboard(repo,f);s=await openNativeSession(repo,f.runtime,{entryPath:copy.entry});report.clipboardOutcomes=copy.results;const {evaluate:e,call,until}=s;
+ // Windows 桌面遮挡会让 Electron 页面 visibility=hidden，TanStack 默认暂停后台轮询（环境因素，非产品缺陷）。
+ // 置前页面保证真实轮询持续；注入的失败仍须命中真实轮询，不构成断言放宽。
+ await call('Page.bringToFront');
  const check=(name,value)=>{report.checks[name]=Boolean(value);save();assert(value,name);};
  const btn=text=>`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)}&&!b.disabled)`;
  const click=async expression=>{await until(`Boolean(${expression})`);await e(`(${expression}).click()`);};
@@ -169,6 +172,8 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  check('editor_body_changed_before_save',await e(`document.querySelector('.ice-editor').textContent.includes('原生阅读验收正文')`));
  const saves=count('articles.save');await click(btn('保存新版本'));await waitCount('articles.save',saves);
  await until(`Boolean(${btn('保存新版本')})`);
+ // 目标一（2026-10-27）：真实 IPC 预算读败注入——工作台打开时 budgets.get 真实失败，稍后就地重试。
+ fault({fail:['budgets.get']});
  await until(`Boolean(${btn('准备配图')})`);await click(btn('准备配图'));await until(`Boolean(document.querySelector('.ice-asset-tabs'))`);
  await e(`void(window.__tabs=document.querySelector('.ice-asset-tabs'))`);
  const taskPoll=count('jobs.list');await waitCount('jobs.list',taskPoll,25000);await wait(3000);
@@ -188,6 +193,108 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  const urls=await e(`[...${refs}.querySelectorAll('img')].map(n=>n.src)`);
  await shot('references-expanded');await click(`${refs}.querySelector('[aria-expanded]')`);
  check('fold_releases_reference_leases',await e(`${refs}.querySelectorAll('img').length===0&&${JSON.stringify(urls)}.every(url=>window.__revoked.includes(url))`));
+ // 目标一（2026-10-27）：真实 IPC 预算链——读败重试/错误隔离/重复入口/上限保留/textarea 保留。
+ const wsDialog=`[...document.querySelectorAll('[role="dialog"]')].find(n=>n.querySelector('h2')?.textContent==='文章配图工作台')`;
+ const promptSec=`(${wsDialog}).querySelector('section[aria-label="生图提示词"]')`;
+ const anyBtn=(root,text)=>`[...(${root}).querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})`;
+ const liveBtn=(root,text)=>`[...(${root}).querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)}&&!b.disabled)`;
+ const limitInput=`${promptSec}.querySelector('input[aria-label="本篇模型调用上限"]')`;
+ const setInput=async(value)=>{await e(`(()=>{const n=${limitInput};Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(n,${JSON.stringify(value)});n.dispatchEvent(new Event('input',{bubbles:true}));})()`);};
+ await until(`Boolean(${promptSec})`);
+ await until(`${promptSec}.textContent.includes('本篇预算读取失败')&&Boolean(${anyBtn(promptSec,'重新读取预算')})`);
+ check('native_budget_read_failure_visible_and_retryable',await e(`Boolean(${promptSec}.querySelector('[role="alert"]'))`));
+ await e(`(()=>{const n=${promptSec}.querySelector('textarea[aria-label="当前图位生图提示词"]');window.__budgetTextarea=n;window.__budgetEdited=n.value+${JSON.stringify('\n原生预算轮保留的提示词修改')};Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(n,window.__budgetEdited);n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ fs.writeFileSync(f.fault,originalFault);
+ const bRetry=count('budgets.get');await click(anyBtn(promptSec,'重新读取预算'));
+ await waitCount('budgets.get',bRetry);
+ await until(`!${promptSec}.querySelector('[role="alert"]')&&!${promptSec}.textContent.includes('预算未读取')`);
+ check('native_budget_retry_recovers_saved_usage',await e(`${promptSec}.textContent.includes('本篇调用：9/20')`));
+ check('native_budget_retry_keeps_edits_and_nodes',await e(`window.__budgetTextarea===${promptSec}.querySelector('textarea[aria-label="当前图位生图提示词"]')&&window.__budgetTextarea.value===window.__budgetEdited&&window.__tabs===document.querySelector('.ice-asset-tabs')`));
+ // 表单：打开即禁用重复入口；输入 37 不被缓存 20 覆盖；0 触发表单内校验错误且 textarea 不受影响。
+ await click(liveBtn(promptSec,'调整本篇预算'));
+ await until(`Boolean(${limitInput})`);
+ check('native_budget_entry_disabled_while_editing',await e(`${anyBtn(promptSec,'调整本篇预算')}.disabled===true`));
+ await setInput('37');await until(`${limitInput}.value==='37'`);
+ check('native_budget_typed_limit_not_reset_by_cache',await e(`${limitInput}.value==='37'`));
+ await setInput('0');await click(liveBtn(promptSec,'保存本篇预算'));
+ await until(`${promptSec}.textContent.includes('本篇上限需为')`);
+ check('native_budget_validation_error_inside_form',await e(`[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('本篇上限需为'))&&window.__budgetTextarea.value===window.__budgetEdited`));
+ await click(anyBtn(promptSec,'取消预算调整'));
+ await until(`!${limitInput}`);
+ check('native_budget_cancel_clears_form_error',await e(`!${promptSec}.querySelector('[role="alert"]')`));
+ await click(liveBtn(promptSec,'调整本篇预算'));
+ await until(`Boolean(${limitInput})`);
+ check('native_budget_reopen_clean_with_saved_limit',await e(`${limitInput}.value==='20'&&!${promptSec}.querySelector('[role="alert"]')`));
+ // 请求级错误隔离：budgets.save 失败留在表单；取消清理；AI 重拟错误独立保留。
+ fault({fail:['budgets.save','prompts.generate']});
+ await setInput('25');await click(liveBtn(promptSec,'保存本篇预算'));
+ await until(`[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('预算调整未完成'))`);
+ check('native_budget_save_failure_isolated',await e(`[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('预算调整未完成'))&&window.__budgetTextarea.value===window.__budgetEdited`));
+ await click(liveBtn(promptSec,'按文章与品牌 AI 重拟'));
+ await until(`[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('你已输入的内容保留'))`);
+ await click(anyBtn(promptSec,'取消预算调整'));
+ await until(`!${limitInput}`);
+ check('native_budget_cancel_keeps_independent_generate_error',await e(`[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('你已输入的内容保留'))&&![...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('预算调整未完成'))`));
+ fs.writeFileSync(f.fault,originalFault);
+ // 真实保存成功：合法值经真实 budgets.save 持久化，表单关闭、用量行更新、入口恢复。
+ await click(liveBtn(promptSec,'调整本篇预算'));
+ await until(`Boolean(${limitInput})`);
+ await setInput('30');await click(liveBtn(promptSec,'保存本篇预算'));
+ await until(`!${limitInput}`);
+ await until(`${promptSec}.textContent.includes('本篇调用：9/30')`);
+ await until(`${anyBtn(promptSec,'调整本篇预算')}.disabled===false`,3000);
+ check('native_budget_real_save_closes_and_updates',await e(`${promptSec}.textContent.includes('本篇调用：9/30')&&![...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('预算'))&&${anyBtn(promptSec,'调整本篇预算')}.disabled===false`));
+ // 版本冲突：表单持有旧 limits_hash 期间经真实 RPC 把预算改为 25，保存被拒且错误留在表单。
+ const freshBudget=await rpc('budgets.get',{job_id:f.jobs.completed});
+ await click(liveBtn(promptSec,'调整本篇预算'));
+ await until(`Boolean(${limitInput})`);
+ await setInput('40');
+ await rpc('budgets.save',{job_id:f.jobs.completed,scope:'job',limit:25,limits_hash:freshBudget.job.limits_hash});
+ await click(liveBtn(promptSec,'保存本篇预算'));
+ await until(`${promptSec}.textContent.includes('预算调整未完成')`);
+ // 服务以旧 limits_hash 真实拒绝（trace 记 rejected）；UI 错误分类渲染为版本冲突提示而非原始文案。
+ check('native_budget_version_conflict_kept_in_form',await e(`Boolean(${limitInput})&&[...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('内容已被更新')&&a.textContent.includes('预算调整未完成'))&&window.__budgetTextarea.value===window.__budgetEdited`));
+ await click(anyBtn(promptSec,'取消预算调整'));
+ await until(`!${limitInput}`);
+ check('native_budget_conflict_cancel_clears',await e(`![...${promptSec}.querySelectorAll('[role="alert"]')].some(a=>a.textContent.includes('预算'))`));
+ const afterConflict=await rpc('budgets.get',{job_id:f.jobs.completed});
+ check('native_budget_external_write_persisted',afterConflict.job.limit===25&&afterConflict.job.limits_hash!==freshBudget.job.limits_hash);
+ await click(liveBtn(promptSec,'放弃修改'));
+ await until(`window.__budgetTextarea.value!==window.__budgetEdited`);
+ // 目标一（2026-10-27）：真实 IPC 下新建任务 running→jobs.stop→paused、慢旧详情交付与 renderer 轮询。
+ const identityOf=d=>({job:d.job.job_id,article:d.article.article_id,account:d.article.spec.account_id,body_hash:d.body_hash,slots:d.slots.map(s=>({slot:s.slot_id,hash:s.content_hash,valid:Boolean(s.valid)}))});
+ const beforeStop=identityOf(await rpc('jobs.get',{job_id:f.jobs.completed}));
+ fault({responseDelayMs:{'jobs.get':4000}});
+ const slowMark=Date.now();
+ await click(liveBtn(wsDialog,'刷新配图'));
+ let slowId=null;
+ {const end=Date.now()+8000;while(Date.now()<end&&!slowId){const rows=trace();for(const sRow of rows.filter(x=>x.method==='jobs.get'&&x.phase==='started'&&x.at>=slowMark)){if(rows.some(x=>x.id===sRow.id&&x.phase==='handler_returned')&&!rows.some(x=>x.id===sRow.id&&x.phase==='resolved')){slowId=sRow.id;break;}}await wait(100);}}
+ fs.writeFileSync(f.fault,originalFault);
+ check('native_slow_detail_held_before_reply',Boolean(slowId));
+ const created=await rpc('jobs.create',{demo:true});
+ let runningSeen=false,stateBeforeStop=null;
+ {const end=Date.now()+6000;while(Date.now()<end){const d=await rpc('jobs.get',{job_id:created.job_id});stateBeforeStop=d.job.state;if(d.job.state==='running'){runningSeen=true;break;}if(['awaiting_approval','paused','completed'].includes(d.job.state))break;await wait(80);}}
+ (report.nativeStop ??= {}).capture={created,slowId,runningSeen,stateBeforeStop};
+ const stopped=await rpc('jobs.stop',{job_id:created.job_id});
+ const stillHeld=!trace().some(x=>x.id===slowId&&x.phase==='resolved');
+ check('native_stop_committed_inside_slow_window',created.started===true&&stopped.state==='paused'&&stillHeld);
+ await until(`document.querySelector('[data-job-id="${created.job_id}"] .ice-badge')?.textContent==='已暂停'`,25000);
+ check('native_renderer_poll_shows_paused',await e(`document.querySelector('[data-job-id="${created.job_id}"] .ice-badge')?.textContent==='已暂停'`));
+ {const end=Date.now()+6000;while(Date.now()<end&&!trace().some(x=>x.id===slowId&&x.phase==='resolved'))await wait(100);}
+ check('native_slow_detail_delivered_after_stop',trace().some(x=>x.id===slowId&&x.phase==='resolved'));
+ await wait(300);
+ check('native_stopped_job_not_revived',(await rpc('jobs.get',{job_id:created.job_id})).job.state==='paused');
+ const afterStop=identityOf(await rpc('jobs.get',{job_id:f.jobs.completed}));
+ check('native_open_article_identity_retained',JSON.stringify(beforeStop)===JSON.stringify(afterStop));
+ check('native_workspace_nodes_retained',await e(`window.__tabs===document.querySelector('.ice-asset-tabs')&&Boolean(${wsDialog})`));
+ // 目标二（2026-10-27）：completed jobs.resume 真实拒绝与身份保持（Windows 真实 IPC 阻塞证据）。
+ let resumeError=null;
+ try{await rpc('jobs.resume',{job_id:f.jobs.completed});}catch(error){resumeError=String(error);}
+ check('native_completed_resume_really_rejected',Boolean(resumeError&&resumeError.includes('不能继续')));
+ const afterResume=identityOf(await rpc('jobs.get',{job_id:f.jobs.completed}));
+ check('native_resume_rejection_keeps_identity',JSON.stringify(beforeStop)===JSON.stringify(afterResume));
+ check('native_resume_rejection_keeps_workspace',await e(`window.__tabs===document.querySelector('.ice-asset-tabs')&&Boolean(${wsDialog})`));
+ (report.nativeStop ??= {}).resume={resumeError};
  for(const width of [500,800,1280]){
    await call('Emulation.setDeviceMetricsOverride',{width,height:800,deviceScaleFactor:1,mobile:false});await wait(200);
    check('assets_no_horizontal_overflow_'+width,await e(`document.documentElement.scrollWidth<=innerWidth+2&&[...document.querySelectorAll('[role="dialog"]')].every(n=>n.scrollWidth<=n.clientWidth+2)`));
