@@ -19,11 +19,15 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
   const [busy, setBusy] = React.useState(false), busyRef = React.useRef(false), edits = React.useRef(0);
   const [error, setError] = React.useState<unknown>(null), [viewer, setViewer] = React.useState<ImageTarget | null>(null);
   const [referencesOpen, setReferencesOpen] = React.useState(false); // 批D：参考区默认收起，折叠时卸载缩略图（租约走既有释放链）
-  const [editingBudget, setEditingBudget] = React.useState<Budget | null>(null), [limit, setLimit] = React.useState(''), [budgetBusy, setBudgetBusy] = React.useState(false);
+  const [editingBudget, setEditingBudget] = React.useState<Budget | null>(null), [limit, setLimit] = React.useState('');
+  const [budgetOperation, setBudgetOperation] = React.useState<'save' | 'read' | null>(null), budgetBusy = budgetOperation !== null;
   const [budgetError, setBudgetError] = React.useState<unknown>(null);
+  const [budgetReadError, setBudgetReadError] = React.useState<unknown>(null), [budgetReload, setBudgetReload] = React.useState<Budget | null>(null);
+  const [budgetLoadedNotice, setBudgetLoadedNotice] = React.useState<string | null>(null);
   const [budgetSaved, setBudgetSaved] = React.useState(false);
   const panelRef = React.useRef<HTMLElement>(null), budgetFormRef = React.useRef<HTMLDivElement>(null);
   const limitRef = React.useRef<HTMLInputElement>(null), returnBudgetFocus = React.useRef(false);
+  const budgetReloadRef = React.useRef<HTMLElement>(null), returnReadFocus = React.useRef(false);
   const reduced = useActivityReducedMotion();
   const mounted = React.useRef(true);
   const references = useAccountQuery<{ references: Reference[] }>('prompts.references', params, { enabled: !disabled, staleTime: 0, gcTime: 10000 });
@@ -37,11 +41,24 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     const active = document.activeElement, dialog = panelRef.current?.closest('[role="dialog"]');
     if (active === document.body || active === dialog) panelRef.current?.querySelector<HTMLButtonElement>('[data-budget-entry]')?.focus({ preventScroll: true });
   }, [editingBudget, budgetBusy]);
+  React.useLayoutEffect(() => {
+    if (budgetBusy || !returnReadFocus.current) return;
+    returnReadFocus.current = false;
+    const active = document.activeElement, dialog = panelRef.current?.closest('[role="dialog"]');
+    const readButton = panelRef.current?.querySelector<HTMLButtonElement>('[data-budget-read]');
+    if (active !== document.body && active !== dialog && active !== readButton) return;
+    if (budgetReload) budgetReloadRef.current?.focus();
+    else readButton?.focus();
+  }, [budgetBusy, budgetReload]);
+  const clearBudgetRead = () => {
+    returnReadFocus.current = false; setBudgetReadError(null); setBudgetReload(null); setBudgetLoadedNotice(null);
+  };
   const closeBudget = () => {
     const active = document.activeElement, dialog = panelRef.current?.closest('[role="dialog"]');
     returnBudgetFocus.current = active === document.body || Boolean(budgetFormRef.current?.contains(active))
       || (returnBudgetFocus.current && active === dialog);
     setEditingBudget(null);
+    clearBudgetRead();
   };
   React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; onDirty(false); }; }, [onDirty]);
   const edit = (value: string) => { edits.current++; setText(value); onDirty(value !== original); };
@@ -57,13 +74,13 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     finally { busyRef.current = false; if (mounted.current) { setBusy(false); void budget.refetch(); } }
   };
   const saveBudget = async () => {
-    if (!editingBudget || busyRef.current || disabled) return;
+    if (!editingBudget || budgetReload || busyRef.current || disabled) return;
     const maximum = Number(limit);
     if (!/^\d+$/.test(limit) || !Number.isInteger(maximum) || maximum < Math.max(1, editingBudget.used) || maximum > 100) {
       setBudgetError(`本篇上限需为 ${Math.max(1, editingBudget.used)}–100 的整数，不能低于已用次数`); return;
     }
     returnBudgetFocus.current = Boolean(budgetFormRef.current?.contains(document.activeElement));
-    busyRef.current = true; setBudgetBusy(true); setBudgetError(null);
+    busyRef.current = true; setBudgetOperation('save'); setBudgetError(null);
     try {
       const saved = await rpc<{ job: Budget }>('budgets.save', { account_id: account, job_id: data.job.job_id, scope: 'job', limit: maximum, limits_hash: editingBudget.limits_hash });
       if (mounted.current) {
@@ -74,7 +91,28 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
         await budget.refetch();
       }
     } catch (problem) { if (mounted.current) setBudgetError(problem); }
-    finally { busyRef.current = false; if (mounted.current) setBudgetBusy(false); }
+    finally { busyRef.current = false; if (mounted.current) setBudgetOperation(null); }
+  };
+  const readLatestBudget = async () => {
+    if (!editingBudget || busyRef.current || disabled) return;
+    busyRef.current = true; returnReadFocus.current = Boolean(budgetFormRef.current?.contains(document.activeElement));
+    setBudgetOperation('read'); setBudgetReadError(null); setBudgetReload(null); setBudgetLoadedNotice(null);
+    try {
+      const latest = await rpc<{ job: Budget }>('budgets.get', { account_id: account, job_id: data.job.job_id });
+      if (!mounted.current) return;
+      queryClient.setQueryData(['ice', account, 'budgets.get', { job_id: data.job.job_id }], latest);
+      // Reading does not change the draft or its editing hash. The user must
+      // review this snapshot before explicitly choosing how to continue.
+      setBudgetReload(latest.job);
+    } catch (problem) { if (mounted.current) setBudgetReadError(problem); }
+    finally { busyRef.current = false; if (mounted.current) setBudgetOperation(null); }
+  };
+  const applyLatestBudget = (keepInput: boolean) => {
+    if (!budgetReload || busyRef.current || disabled) return;
+    setEditingBudget(budgetReload);
+    if (!keepInput) setLimit(String(budgetReload.limit));
+    setBudgetReload(null); setBudgetReadError(null); setBudgetError(null);
+    setBudgetLoadedNotice(keepInput ? '已载入最新版本，当前输入保留；尚未保存。' : '已采用最新上限，可继续修改；尚未保存。');
   };
   return <section ref={panelRef} className="ice-asset-card" aria-label="生图提示词">
     <h4>提示词与品牌参考</h4><p className="ice-asset-muted">参考图需要在 TapNow 按顺序手动上传，复制文字不会附带图片；生成后的图片请回到「下载待归档」绑定到对应图位。AI 重拟会读取本文和当前公众号视觉规范，可能计费。</p>
@@ -119,7 +157,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       <Button disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>{busy ? <><Spinner size={14} />正在重拟…</> : '按文章与品牌 AI 重拟'}</Button>
       <Button onClick={() => openWebsite('tapnow')}>打开内嵌 TapNow</Button></div>
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
-      <Button size="sm" data-budget-entry disabled={!budget.data || disabled || busy || budgetBusy || editingBudget !== null} onClick={() => { returnBudgetFocus.current = false; setBudgetSaved(false); setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
+      <Button size="sm" data-budget-entry disabled={!budget.data || disabled || busy || budgetBusy || editingBudget !== null} onClick={() => { returnBudgetFocus.current = false; clearBudgetRead(); setBudgetSaved(false); setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
       <Button size="sm" variant="ghost" onClick={() => settingsStore.set(true)}>模型与 Key 设置</Button></div>
     {budget.error && <ErrorNote error={budget.error} onRetry={() => void budget.refetch()} retryLabel="重新读取预算"
       note={budget.data ? '已保留最近确认的预算；当前刷新失败，请核对后重试。' : '本篇预算读取失败；已输入的提示词保留，可重新读取。'} />}
@@ -130,8 +168,20 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     {editingBudget && <div ref={budgetFormRef} className="ice-asset-card"><label className="ice-asset-row">本篇模型调用上限
       <Input ref={limitRef} aria-label="本篇模型调用上限" type="number" min={Math.max(1, editingBudget.used)} max={100} value={limit} disabled={budgetBusy} onChange={event => setLimit(event.target.value)} /></label>
       <p className="ice-asset-muted">1–100 次，不能低于已用次数。仅修改本篇，不重置已用次数；保存后生效。</p>
-      <div className="ice-asset-row"><Button loading={budgetBusy} disabled={disabled} onClick={() => void saveBudget()}>保存本篇预算</Button><Button disabled={budgetBusy} variant="ghost" onClick={() => { closeBudget(); setBudgetError(null); }}>取消预算调整</Button></div>
-      {budgetError != null && <ErrorNote error={budgetError} note="预算调整未完成，请核对后重试或取消。" />}</div>}
+      <div className="ice-asset-row"><Button loading={budgetOperation === 'save'} disabled={disabled || budgetBusy || Boolean(budgetReload)} onClick={() => void saveBudget()}>保存本篇预算</Button>
+        <Button data-budget-read loading={budgetOperation === 'read'} disabled={disabled || budgetBusy} onClick={() => void readLatestBudget()}>读取最新预算</Button>
+        <Button disabled={budgetBusy} variant="ghost" onClick={() => { closeBudget(); setBudgetError(null); }}>取消预算调整</Button></div>
+      {budgetError != null && <ErrorNote error={budgetError} note="预算调整未完成，请核对后重试或取消。" />}
+      {budgetReadError != null && <ErrorNote error={budgetReadError} onRetry={budgetBusy ? undefined : () => void readLatestBudget()} retryLabel="重试读取最新预算"
+        note="最新预算读取失败，当前输入与原版本保留，可重试读取。" />}
+      {budgetReload && <motion.section ref={budgetReloadRef} tabIndex={-1} aria-label="最新预算核对" className="ice-asset-card"
+        initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.16 }}>
+        <strong>核对最新预算</strong><p className="ice-asset-muted">当前上限 {budgetReload.limit}，已用 {budgetReload.used} 次；你的输入仍为 {limit}。选择如何继续，之后仍需点击保存才会提交调整。</p>
+        <div className="ice-asset-row"><Button disabled={disabled || budgetBusy} onClick={() => applyLatestBudget(true)}>保留输入并载入版本</Button>
+          <Button disabled={disabled || budgetBusy} onClick={() => applyLatestBudget(false)}>采用最新上限</Button></div>
+      </motion.section>}
+      {budgetLoadedNotice && <p className="ice-asset-muted" role="status">{budgetLoadedNotice}</p>}
+    </div>}
     {busy && <p role="status" className="ice-asset-muted">可以继续编辑；返回的候选不会覆盖生成期间新增的修改。</p>}
     {error != null && <ErrorNote error={error} note="你已输入的内容保留。" />}
     {candidate && <div className="ice-asset-grid"><p className="ice-asset-muted">你已继续编辑，AI 候选保留在下方，未覆盖当前内容。</p>
