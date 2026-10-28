@@ -2,6 +2,7 @@ import json
 import threading
 import time
 import unittest
+from contextlib import closing
 from unittest.mock import patch
 
 from ice_agent.desktop_service import DesktopService
@@ -655,7 +656,7 @@ class CreativeChatTests(unittest.TestCase):
         store.close(); self.service.close()
         self.service = DesktopService(REPO, self.root)
         self.assertTrue(backup.exists())
-        with sqlite3.connect(str(backup)) as db:
+        with closing(sqlite3.connect(str(backup))) as db:
             self.assertEqual(db.execute('SELECT title FROM creative_conversations WHERE id=?', (cid,)).fetchone()[0], '升级前的会话')
             self.assertIsNone(db.execute("SELECT 1 FROM sqlite_master WHERE name='creative_candidate_saves'").fetchone())
         self.assertEqual(self.call('get', conversation_id=cid)['conversation']['title'], '升级前的会话')
@@ -807,7 +808,7 @@ class CreativeChatTests(unittest.TestCase):
         store.close(); self.service.close()
         self.service = DesktopService(REPO, self.root)
         self.assertTrue(backup.exists())
-        with sqlite3.connect(str(backup)) as db:
+        with closing(sqlite3.connect(str(backup))) as db:
             self.assertEqual(db.execute('SELECT title FROM creative_conversations WHERE id=?', (cid,)).fetchone()[0], '升级前保留')
             self.assertIsNone(db.execute("SELECT 1 FROM sqlite_master WHERE name='creative_conversation_deletions'").fetchone())
         self.assertFalse(self.call('get', conversation_id=cid)['conversation']['deleted'])

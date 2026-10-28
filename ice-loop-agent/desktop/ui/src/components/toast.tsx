@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { createPortal } from 'react-dom';
 import { toastHost } from './toastHost';
 import { redactText } from './errorText';
+import { useActivityReducedMotion, useDocumentVisible } from './ActivityRail';
 
 type Tone = "info" | "success" | "warning" | "danger";
 type ToastAction = { label: string; run: () => unknown };
@@ -62,21 +63,24 @@ export function Toaster() {
 const ICON: Record<Tone, string> = { info: "i", success: "✓", warning: "!", danger: "×" };
 
 function ToastCard({ item }: { item: ToastItem }) {
-  const [paused, setPaused] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
+  const [focused, setFocused] = React.useState(false);
   const [running, setRunning] = React.useState(false);
+  const visible = useDocumentVisible(), reduced = useActivityReducedMotion();
+  const paused = hovered || focused || running || !visible;
   const runningRef = React.useRef(false); // Block same-tick action replay before React commits disabled.
   const remaining = React.useRef(item.duration);
   const startedAt = React.useRef(0);
 
   React.useEffect(() => {
-    if (paused || running) return;
-    startedAt.current = Date.now();
+    if (paused) return;
+    startedAt.current = performance.now();
     const timer = window.setTimeout(() => toast.dismiss(item.id), remaining.current);
     return () => {
       window.clearTimeout(timer);
-      remaining.current = Math.max(0, remaining.current - (Date.now() - startedAt.current));
+      remaining.current = Math.max(0, remaining.current - (performance.now() - startedAt.current));
     };
-  }, [paused, running, item.id]);
+  }, [paused, item.id]);
 
   const runAction = async () => {
     if (!item.action || runningRef.current) return;
@@ -91,15 +95,15 @@ function ToastCard({ item }: { item: ToastItem }) {
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 16, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 32, transition: { duration: 0.16 } }}
-      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+      initial={reduced || !visible ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: reduced || !visible ? 0 : 0.16 }}
       className={`ice-toast ice-toast--${item.tone}`}
       role={item.tone === "danger" ? "alert" : "status"}
-      onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
     >
       <span className="ice-toast__icon" aria-hidden>{ICON[item.tone]}</span>
       <div className="ice-toast__body">
@@ -107,13 +111,14 @@ function ToastCard({ item }: { item: ToastItem }) {
         {item.detail && <div className="ice-toast__detail">{item.detail}</div>}
       </div>
       {item.action && (
-        <button type="button" className="ice-toast__action" onClick={runAction} disabled={running}>
+        <button type="button" className="ice-toast__action" onClick={runAction} disabled={running} aria-busy={running || undefined}>
           {running ? "处理中…" : item.action.label}
         </button>
       )}
       <button type="button" className="ice-toast__close" aria-label="关闭通知" onClick={() => toast.dismiss(item.id)}>×</button>
       <span className="ice-toast__progress" aria-hidden
-            style={{ animationDuration: item.duration + "ms", animationPlayState: paused ? "paused" : "running" }} />
+            style={{ animationDuration: item.duration + "ms", animationPlayState: paused ? "paused" : "running",
+              ...(reduced ? { animationName: 'none' } : {}) }} />
     </motion.div>
   );
 }
