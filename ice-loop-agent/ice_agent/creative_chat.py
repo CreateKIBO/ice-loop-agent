@@ -10,6 +10,7 @@ import json
 import re
 import threading
 import time
+from contextlib import closing
 from typing import Any
 
 from .accounts import profile_from_account
@@ -61,7 +62,7 @@ def initialize_chat(store: Any) -> None:
         import sqlite3
         backup = store.db_path.with_name('app-before-v1.4.1.db' if saved else 'app-before-v1.4.db' if exists else 'app-before-v1.3.db')
         if not backup.exists():
-            with sqlite3.connect(str(backup)) as destination:
+            with closing(sqlite3.connect(str(backup))) as destination:
                 store.conn.backup(destination)
     store.conn.executescript(SCHEMA)
     # Interrupted replies are visible and retryable; partial replies never become drafts.
