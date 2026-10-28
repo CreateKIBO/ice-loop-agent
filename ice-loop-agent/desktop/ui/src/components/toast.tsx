@@ -7,11 +7,12 @@ import { createPortal } from 'react-dom';
 import { toastHost } from './toastHost';
 import { errorDisplay, redactText } from './errorText';
 import { useActivityReducedMotion, useDocumentVisible } from './ActivityRail';
+import { ToastLifetime } from './toastLifetime';
 
 type Tone = "info" | "success" | "warning" | "danger";
 type ToastAction = { label: string; run: () => unknown };
 type ToastInput = { title: string; detail?: string; action?: ToastAction; duration?: number };
-type ToastItem = ToastInput & { id: number; tone: Tone; duration: number; running?: boolean };
+type ToastItem = ToastInput & { id: number; tone: Tone; duration: number; running?: boolean; lifetime: ToastLifetime };
 
 const MAX_VISIBLE = 4;
 const DEFAULT_DURATION: Record<Tone, number> = { info: 3_500, success: 3_500, warning: 6_000, danger: 7_000 };
@@ -27,7 +28,7 @@ function show(tone: Tone, input: ToastInput | string): number {
   const id = ++sequence;
   // 带动作的提示多给几秒，避免"撤销"还没点到就消失。
   const duration = value.duration ?? DEFAULT_DURATION[tone] + (value.action ? 2_500 : 0);
-  items = [...items, { ...value, id, tone, duration }].slice(-MAX_VISIBLE);
+  items = [...items, { ...value, id, tone, duration, lifetime: new ToastLifetime(duration) }].slice(-MAX_VISIBLE);
   emit();
   return id;
 }
@@ -77,24 +78,39 @@ export function Toaster() {
 
 const ICON: Record<Tone, string> = { info: "i", success: "✓", warning: "!", danger: "×" };
 
+function ToastDetail({ text }: { text: string }) {
+  const ref = React.useRef<HTMLDivElement>(null), [scrollable, setScrollable] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setScrollable(node.scrollHeight > node.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(node);
+    return () => observer.disconnect();
+  }, [text]);
+  return <div ref={ref} className="ice-toast__detail" tabIndex={scrollable ? 0 : undefined}
+    role={scrollable ? 'region' : undefined} aria-label={scrollable ? '通知详情' : undefined}>{text}</div>;
+}
+
 function ToastCard({ item }: { item: ToastItem }) {
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
   const running = Boolean(item.running);
   const visible = useDocumentVisible(), reduced = useActivityReducedMotion();
   const paused = hovered || focused || running || !visible;
-  const remaining = React.useRef(item.duration);
-  const startedAt = React.useRef(0);
+  const lifetime = item.lifetime;
+  // Keep the CSS phase across ordinary renders; align it on a portal remount
+  // or when motion resumes after a preference change.
+  const progressDelay = React.useMemo(() => -(item.duration - lifetime.remaining()), [lifetime, item.duration, reduced]);
 
   React.useEffect(() => {
     if (paused) return;
-    startedAt.current = performance.now();
-    const timer = window.setTimeout(() => toast.dismiss(item.id), remaining.current);
+    const timer = window.setTimeout(() => toast.dismiss(item.id), lifetime.resume());
     return () => {
       window.clearTimeout(timer);
-      remaining.current = Math.max(0, remaining.current - (performance.now() - startedAt.current));
+      lifetime.pause();
     };
-  }, [paused, item.id]);
+  }, [paused, item.id, lifetime]);
 
   return (
     <motion.div
@@ -111,7 +127,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       <span className="ice-toast__icon" aria-hidden>{ICON[item.tone]}</span>
       <div className="ice-toast__body">
         <div className="ice-toast__title">{item.title}</div>
-        {item.detail && <div className="ice-toast__detail">{item.detail}</div>}
+        {item.detail && <ToastDetail text={item.detail} />}
       </div>
       {item.action && (
         <button type="button" className="ice-toast__action" onClick={() => void runAction(item.id)} disabled={running} aria-busy={running || undefined}>
@@ -120,7 +136,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       )}
       <button type="button" className="ice-toast__close" aria-label="关闭通知" onClick={() => toast.dismiss(item.id)}>×</button>
       <span className="ice-toast__progress" aria-hidden
-            style={{ animationDuration: item.duration + "ms", animationPlayState: paused ? "paused" : "running",
+            style={{ animationDuration: item.duration + "ms", animationDelay: progressDelay + 'ms', animationPlayState: paused ? "paused" : "running",
               ...(reduced ? { animationName: 'none' } : {}) }} />
     </motion.div>
   );

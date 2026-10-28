@@ -10,7 +10,7 @@ const parent = path.join(repo, '.test-tmp/toast-feedback');
 fs.mkdirSync(parent, { recursive: true });
 const evidence = fs.mkdtempSync(path.join(parent, 'run-'));
 const report = { scope: 'Chrome; real React StrictMode/Motion; synthetic document visibility; no IPC', checks: {} };
-const sourcePaths = ['components/toast.tsx', 'components/toastHost.ts', 'components/ActivityRail.tsx', 'components/ui.tsx', 'components/errorText.ts', 'styles/feedback.css'];
+const sourcePaths = ['components/toast.tsx', 'components/toastLifetime.ts', 'components/toastHost.ts', 'components/ActivityRail.tsx', 'components/ui.tsx', 'components/errorText.ts', 'styles/feedback.css'];
 const fingerprint = () => Object.fromEntries(sourcePaths.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(ui, 'src', file))).digest('hex')]));
 report.sources = fingerprint();
 let browser, server;
@@ -134,6 +134,57 @@ async function run() {
     await failure.locator('.ice-toast__close').evaluateAll(nodes => nodes.forEach(n => n.click()));
     await clear(errorId);
   }
+
+  // A plain toast must keep its consumed reading time and progress phase when
+  // the production portal moves into/out of a real Radix dialog.
+  await page.mouse.move(5, 5); await page.locator('#outside').focus();
+  id = await page.evaluate(() => window.toast.info({ title: '跨宿主阅读时间', duration: 4000 }));
+  await card('跨宿主阅读时间').waitFor();
+  await card('跨宿主阅读时间').locator('.ice-toast__progress').evaluate(n => getComputedStyle(n).transform);
+  await page.waitForTimeout(1700);
+  check('plain_clock_is_unpaused_before_portal', await card('跨宿主阅读时间').evaluate(n => !n.matches(':hover') && !n.contains(document.activeElement) && document.visibilityState === 'visible'));
+  const progressBefore = await card('跨宿主阅读时间').locator('.ice-toast__progress').evaluate(n => new DOMMatrixReadOnly(getComputedStyle(n).transform).m11);
+  await page.locator('#open-dialog').click(); await page.locator('[role="dialog"] .ice-toaster').waitFor();
+  await page.waitForTimeout(220);
+  const progressAfter = await card('跨宿主阅读时间').locator('.ice-toast__progress').evaluate(n => new DOMMatrixReadOnly(getComputedStyle(n).transform).m11);
+  report.portalProgress = { before: progressBefore, after: progressAfter };
+  check('portal_progress_does_not_restart', progressAfter <= progressBefore + 0.1);
+  await page.locator('#close-dialog').click(); await page.locator('[role="dialog"]').waitFor({ state: 'detached' });
+  await page.waitForTimeout(2600);
+  check('portal_move_preserves_reading_deadline', await card('跨宿主阅读时间').count() === 0);
+  await clear(id);
+
+  id = await page.evaluate(() => { window.__progressStart = performance.now(); return window.toast.info({ title: '恢复动态后的进度', duration: 5000 }); });
+  await page.waitForTimeout(1200); await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForTimeout(1000); await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForTimeout(100);
+  report.resumedProgress = await card('恢复动态后的进度').locator('.ice-toast__progress').evaluate(n => ({
+    actual: new DOMMatrixReadOnly(getComputedStyle(n).transform).m11, expected: Math.max(0, 1 - (performance.now() - window.__progressStart) / 5000),
+  }));
+  check('motion_resume_progress_matches_remaining_time', Math.abs(report.resumedProgress.actual - report.resumedProgress.expected) < 0.12);
+  await clear(id);
+
+  await page.locator('#open-dialog').click(); await page.locator('[role="dialog"]').waitFor();
+  id = await page.evaluate(() => window.toast.warning({ title: '长详情阅读', duration: 5000,
+    detail: Array.from({ length: 80 }, (_, i) => '第' + i + '行：读取状态与下一步说明，保留原换行。').join('\n'), action: { label: '核对状态', run: () => {} } }));
+  await card('长详情阅读').waitFor(); await page.waitForTimeout(250);
+  await page.locator('.ice-dialog-notifications').evaluate(n => n.scrollTop = 0);
+  const detail = card('长详情阅读').locator('.ice-toast__detail');
+  check('long_detail_has_keyboard_scroll_target', await detail.evaluate(n => n.tabIndex === 0 && n.getAttribute('role') === 'region' && n.scrollHeight > n.clientHeight));
+  check('long_detail_preserves_line_breaks', await detail.evaluate(n => getComputedStyle(n).whiteSpace === 'pre-wrap'));
+  await detail.evaluate(n => n.focus()); await page.keyboard.press('PageDown'); await page.waitForTimeout(250);
+  check('long_detail_keyboard_scrolls_own_region', await detail.evaluate(n => document.activeElement === n && n.scrollTop > 0));
+  check('modal_long_detail_keeps_action_and_close_reachable', await card('长详情阅读').evaluate(n => ['.ice-toast__action', '.ice-toast__close'].every(selector => {
+    const button = n.querySelector(selector), r = button.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest(selector) === button;
+  })));
+  check('long_detail_has_no_horizontal_overflow', await detail.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+  await page.screenshot({ path: path.join(evidence, 'modal-long-detail.png') });
+  await card('长详情阅读').locator('.ice-toast__close').click(); await clear(id);
+  id = await page.evaluate(() => window.toast.info({ title: '短详情', detail: '简短说明', duration: 5000 }));
+  await card('短详情').waitFor();
+  check('short_detail_does_not_add_a_tab_stop', await card('短详情').locator('.ice-toast__detail').evaluate(n => !n.hasAttribute('tabindex') && !n.hasAttribute('role')));
+  await clear(id);
+  await page.locator('#close-dialog').click(); await page.locator('[role="dialog"]').waitFor({ state: 'detached' });
 
   // Preference changes affect an already mounted host, then new cards too.
   for (const policy of ['system', 'manual', 'parent']) {
