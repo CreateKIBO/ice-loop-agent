@@ -66,8 +66,18 @@ const snapshot = () => items;
 export function Toaster() {
   const list = useSyncExternalStore(subscribe, snapshot);
   const host = useSyncExternalStore(toastHost.subscribe, toastHost.get);
+  const ref = React.useRef<HTMLDivElement>(null), [scrollable, setScrollable] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setScrollable(node.scrollHeight > node.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(node);
+    return () => observer.disconnect();
+  }, [list, host]);
   const content = (
-    <div className={'ice-toaster' + (host ? ' ice-toaster--modal' : '')} role="region" aria-label="通知">
+    <div ref={ref} className={'ice-toaster' + (host ? ' ice-toaster--modal' : '')} role="region" aria-label="通知"
+      tabIndex={scrollable ? 0 : undefined} data-scrollable={scrollable}>
       <AnimatePresence initial={false}>
         {list.map(item => <ToastCard key={item.id} item={item} />)}
       </AnimatePresence>
@@ -93,15 +103,27 @@ function ToastDetail({ text }: { text: string }) {
 }
 
 function ToastCard({ item }: { item: ToastItem }) {
+  const ref = React.useRef<HTMLDivElement>(null), [inView, setInView] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
   const running = Boolean(item.running);
   const visible = useDocumentVisible(), reduced = useActivityReducedMotion();
-  const paused = hovered || focused || running || !visible;
+  // Count reading time only while at least half of the card is geometrically
+  // visible. IntersectionObserver also accounts for scroll-container clipping.
+  React.useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setInView(entry.isIntersecting && entry.intersectionRatio >= 0.5);
+    }, { threshold: 0.5 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const paused = hovered || focused || running || !visible || !inView;
   const lifetime = item.lifetime;
   // Keep the CSS phase across ordinary renders; align it on a portal remount
-  // or when motion resumes after a preference change.
-  const progressDelay = React.useMemo(() => -(item.duration - lifetime.remaining()), [lifetime, item.duration, reduced]);
+  // or when motion resumes after a preference/visibility change.
+  const progressDelay = React.useMemo(() => -(item.duration - lifetime.remaining()), [lifetime, item.duration, reduced, inView]);
 
   React.useEffect(() => {
     if (paused) return;
@@ -114,6 +136,7 @@ function ToastCard({ item }: { item: ToastItem }) {
 
   return (
     <motion.div
+      ref={ref}
       initial={reduced || !visible ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -137,7 +160,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       <button type="button" className="ice-toast__close" aria-label="关闭通知" onClick={() => toast.dismiss(item.id)}>×</button>
       <span className="ice-toast__progress" aria-hidden
             style={{ animationDuration: item.duration + "ms", animationDelay: progressDelay + 'ms', animationPlayState: paused ? "paused" : "running",
-              ...(reduced ? { animationName: 'none' } : {}) }} />
+              ...(reduced || !inView ? { animationName: 'none' } : {}) }} />
     </motion.div>
   );
 }

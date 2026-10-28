@@ -224,6 +224,63 @@ async function run() {
     const r = n.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('.ice-toast__close') === n;
   }));
   await page.screenshot({ path: path.join(evidence, 'narrow.png') });
+  await clear(id);
+
+  // Short viewports need a bounded notification stack, with a keyboard entry
+  // only when the stack itself overflows. These are actual DOM scrolls.
+  await page.setViewportSize({ width: 320, height: 420 });
+  await page.mouse.move(5, 5); await page.locator('#outside').focus();
+  const stackIds = await page.evaluate(() => Array.from({ length: 4 }, (_, i) => window.toast.warning({
+    title: '短视口通知' + i, detail: '当前操作结果与下一步说明。'.repeat(12), duration: 10000, action: { label: '核对', run: () => {} },
+  })));
+  await page.locator('.ice-toast').last().waitFor(); await page.waitForTimeout(250);
+  const stack = page.locator('.ice-toaster');
+  check('short_viewport_stack_stays_within_viewport', await stack.evaluate(n => { const r = n.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+  check('overflowing_stack_has_keyboard_entry', await stack.evaluate(n => n.tabIndex === 0 && n.scrollHeight > n.clientHeight));
+  await page.locator('#open-dialog').focus(); await page.keyboard.press('Tab');
+  check('tab_enters_overflowing_notification_region', await stack.evaluate(n => n === document.activeElement));
+  await page.keyboard.press('PageDown'); await page.waitForTimeout(250);
+  check('keyboard_scrolls_notification_stack', await stack.evaluate(n => n.scrollTop > 0));
+  check('short_viewport_stack_has_no_horizontal_overflow', await stack.evaluate(n => n.scrollWidth <= n.clientWidth + 1));
+  await page.screenshot({ path: path.join(evidence, 'short-viewport-stack.png') });
+  for (const stackId of stackIds) await clear(stackId);
+
+  // A toast clipped below the modal notification viewport has not yet had its
+  // reading opportunity. It must not expire before the user scrolls to it.
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page.locator('#open-dialog').click(); await page.locator('[role="dialog"]').waitFor();
+  await page.mouse.move(5, 5);
+  const clippedIds = await page.evaluate(() => [
+    ...[0, 1].map(i => window.toast.info({ title: '在前通知' + i, detail: '先核对这条说明。\n'.repeat(12), duration: 10000 })),
+    window.toast.info({ title: '等待读取的通知', duration: 1800, action: { label: '查看', run: () => {} } }),
+  ]);
+  await card('等待读取的通知').waitFor(); await page.waitForTimeout(200);
+  check('clipped_toast_is_below_modal_viewport', await card('等待读取的通知').evaluate(n => n.getBoundingClientRect().top >= document.querySelector('.ice-dialog-notifications').getBoundingClientRect().bottom));
+  check('clipped_toast_progress_is_paused', await card('等待读取的通知').locator('.ice-toast__progress').evaluate(n => n.style.animationPlayState === 'paused'));
+  await page.waitForTimeout(2100);
+  const survived = await card('等待读取的通知').count() === 1;
+  check('clipped_toast_keeps_reading_time', survived);
+  if (survived) {
+    await stack.focus(); await page.keyboard.press('End'); await page.waitForTimeout(400);
+    check('scroll_reveals_clipped_toast_and_resumes_progress', await card('等待读取的通知').evaluate(n => {
+      const r = n.getBoundingClientRect(), v = document.querySelector('.ice-dialog-notifications').getBoundingClientRect();
+      return r.top >= v.top && r.bottom <= v.bottom && n.querySelector('.ice-toast__progress').style.animationPlayState === 'running';
+    }));
+    const beforeClip = await card('等待读取的通知').locator('.ice-toast__progress').evaluate(n => new DOMMatrix(getComputedStyle(n).transform).m11);
+    await page.keyboard.press('Home'); await page.waitForTimeout(200);
+    check('scrolling_away_pauses_reading_again', await card('等待读取的通知').locator('.ice-toast__progress').evaluate(n => n.style.animationPlayState === 'paused'));
+    await page.waitForTimeout(2100);
+    check('second_clip_preserves_remaining_reading_time', await card('等待读取的通知').count() === 1);
+    await page.keyboard.press('End'); await page.waitForTimeout(200);
+    const afterClip = await card('等待读取的通知').locator('.ice-toast__progress').evaluate(n => new DOMMatrix(getComputedStyle(n).transform).m11);
+    report.clippedProgress = { before: beforeClip, after: afterClip };
+    check('scroll_resume_progress_preserves_elapsed_reading', beforeClip < 0.95 && Math.abs(afterClip - (beforeClip - 200 / 1800)) < 0.1);
+    await page.screenshot({ path: path.join(evidence, 'modal-stack-resumed.png') });
+    await page.waitForTimeout(2100);
+    check('revealed_toast_expires_after_visible_reading_time', await card('等待读取的通知').count() === 0);
+  } else report.clippedBlocker = 'Toast expired while fully clipped; scroll/resume checks could not run';
+  for (const clippedId of clippedIds) await clear(clippedId);
+  await page.locator('#close-dialog').click(); await page.locator('[role="dialog"]').waitFor({ state: 'detached' });
   await page.evaluate(() => window.unmount());
   check('unmount_clears_animations', await page.evaluate(() => document.getAnimations().length === 0));
   check('no_renderer_errors', errors.length === 0); report.errors = errors;
