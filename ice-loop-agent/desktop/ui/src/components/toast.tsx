@@ -5,13 +5,13 @@ import { useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { createPortal } from 'react-dom';
 import { toastHost } from './toastHost';
-import { redactText } from './errorText';
+import { errorDisplay, redactText } from './errorText';
 import { useActivityReducedMotion, useDocumentVisible } from './ActivityRail';
 
 type Tone = "info" | "success" | "warning" | "danger";
 type ToastAction = { label: string; run: () => unknown };
 type ToastInput = { title: string; detail?: string; action?: ToastAction; duration?: number };
-type ToastItem = ToastInput & { id: number; tone: Tone; duration: number };
+type ToastItem = ToastInput & { id: number; tone: Tone; duration: number; running?: boolean };
 
 const MAX_VISIBLE = 4;
 const DEFAULT_DURATION: Record<Tone, number> = { info: 3_500, success: 3_500, warning: 6_000, danger: 7_000 };
@@ -44,6 +44,21 @@ export const toast = {
   },
 };
 
+// The action belongs to the notification, not a card instance: moving the
+// portal into/out of a modal remounts cards and must not reset an in-flight lock.
+async function runAction(id: number) {
+  const item = items.find(current => current.id === id);
+  if (!item?.action || item.running) return;
+  items = items.map(current => current.id === id ? { ...current, running: true } : current);
+  emit(); // Synchronous store lock also blocks same-tick replays before render.
+  try { await item.action.run(); toast.dismiss(id); }
+  catch (error) {
+    toast.dismiss(id);
+    const feedback = errorDisplay(error);
+    toast.error({ title: item.action.label + "失败", detail: [feedback.title, feedback.detail].filter(Boolean).join('：') });
+  }
+}
+
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const snapshot = () => items;
 
@@ -65,10 +80,9 @@ const ICON: Record<Tone, string> = { info: "i", success: "✓", warning: "!", da
 function ToastCard({ item }: { item: ToastItem }) {
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
-  const [running, setRunning] = React.useState(false);
+  const running = Boolean(item.running);
   const visible = useDocumentVisible(), reduced = useActivityReducedMotion();
   const paused = hovered || focused || running || !visible;
-  const runningRef = React.useRef(false); // Block same-tick action replay before React commits disabled.
   const remaining = React.useRef(item.duration);
   const startedAt = React.useRef(0);
 
@@ -81,17 +95,6 @@ function ToastCard({ item }: { item: ToastItem }) {
       remaining.current = Math.max(0, remaining.current - (performance.now() - startedAt.current));
     };
   }, [paused, item.id]);
-
-  const runAction = async () => {
-    if (!item.action || runningRef.current) return;
-    runningRef.current = true;
-    setRunning(true);
-    try { await item.action.run(); toast.dismiss(item.id); }
-    catch (error) {
-      toast.dismiss(item.id);
-      toast.error({ title: item.action.label + "失败", detail: (error as Error).message });
-    }
-  };
 
   return (
     <motion.div
@@ -111,7 +114,7 @@ function ToastCard({ item }: { item: ToastItem }) {
         {item.detail && <div className="ice-toast__detail">{item.detail}</div>}
       </div>
       {item.action && (
-        <button type="button" className="ice-toast__action" onClick={runAction} disabled={running} aria-busy={running || undefined}>
+        <button type="button" className="ice-toast__action" onClick={() => void runAction(item.id)} disabled={running} aria-busy={running || undefined}>
           {running ? "处理中…" : item.action.label}
         </button>
       )}
