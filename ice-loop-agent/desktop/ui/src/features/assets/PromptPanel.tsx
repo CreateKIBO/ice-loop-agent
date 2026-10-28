@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Button, Input, Spinner } from '../../components/ui';
+import { Button, Input } from '../../components/ui';
 import { useActivityReducedMotion } from '../../components/ActivityRail';
 import { ErrorNote } from '../../components/ErrorNote';
 import { CopyButton } from '../../components/CopyButton';
@@ -154,7 +154,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       <Button disabled={disabled || busy || budgetBusy} onClick={() => void onSave(text)}>保存提示词</Button>
       <Button variant="ghost" disabled={disabled || busy || budgetBusy || text === original} title="放弃当前修改，恢复到已保存版本"
               onClick={() => { edits.current++; setText(original); onDirty(false); }}>放弃修改</Button>
-      <Button disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>{busy ? <><Spinner size={14} />正在重拟…</> : '按文章与品牌 AI 重拟'}</Button>
+      <Button loading={busy} disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>按文章与品牌 AI 重拟</Button>
       <Button onClick={() => openWebsite('tapnow')}>打开内嵌 TapNow</Button></div>
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
       <Button size="sm" data-budget-entry disabled={!budget.data || disabled || busy || budgetBusy || editingBudget !== null} onClick={() => { returnBudgetFocus.current = false; clearBudgetRead(); setBudgetSaved(false); setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
@@ -168,21 +168,21 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     {editingBudget && <div ref={budgetFormRef} className="ice-asset-card"><label className="ice-asset-row">本篇模型调用上限
       <Input ref={limitRef} aria-label="本篇模型调用上限" type="number" min={Math.max(1, editingBudget.used)} max={100} value={limit} disabled={budgetBusy} onChange={event => setLimit(event.target.value)} /></label>
       <p className="ice-asset-muted">1–100 次，不能低于已用次数。仅修改本篇，不重置已用次数；保存后生效。</p>
-      <div className="ice-asset-row"><Button loading={budgetOperation === 'save'} disabled={disabled || budgetBusy || Boolean(budgetReload)} onClick={() => void saveBudget()}>保存本篇预算</Button>
-        <Button data-budget-read loading={budgetOperation === 'read'} disabled={disabled || budgetBusy} onClick={() => void readLatestBudget()}>读取最新预算</Button>
+      <div className="ice-asset-row"><Button loading={budgetOperation === 'save'} disabled={disabled || busy || budgetBusy || Boolean(budgetReload)} onClick={() => void saveBudget()}>保存本篇预算</Button>
+        <Button data-budget-read loading={budgetOperation === 'read'} disabled={disabled || busy || budgetBusy} onClick={() => void readLatestBudget()}>读取最新预算</Button>
         <Button disabled={budgetBusy} variant="ghost" onClick={() => { closeBudget(); setBudgetError(null); }}>取消预算调整</Button></div>
       {budgetError != null && <ErrorNote error={budgetError} note="预算调整未完成，请核对后重试或取消。" />}
-      {budgetReadError != null && <ErrorNote error={budgetReadError} onRetry={budgetBusy ? undefined : () => void readLatestBudget()} retryLabel="重试读取最新预算"
+      {budgetReadError != null && <ErrorNote error={budgetReadError} onRetry={busy || budgetBusy ? undefined : () => void readLatestBudget()} retryLabel="重试读取最新预算"
         note="最新预算读取失败，当前输入与原版本保留，可重试读取。" />}
       {budgetReload && <motion.section ref={budgetReloadRef} tabIndex={-1} aria-label="最新预算核对" className="ice-asset-card"
         initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : 0.16 }}>
         <strong>核对最新预算</strong><p className="ice-asset-muted">当前上限 {budgetReload.limit}，已用 {budgetReload.used} 次；你的输入仍为 {limit}。选择如何继续，之后仍需点击保存才会提交调整。</p>
-        <div className="ice-asset-row"><Button disabled={disabled || budgetBusy} onClick={() => applyLatestBudget(true)}>保留输入并载入版本</Button>
-          <Button disabled={disabled || budgetBusy} onClick={() => applyLatestBudget(false)}>采用最新上限</Button></div>
+        <div className="ice-asset-row"><Button disabled={disabled || busy || budgetBusy} onClick={() => applyLatestBudget(true)}>保留输入并载入版本</Button>
+          <Button disabled={disabled || busy || budgetBusy} onClick={() => applyLatestBudget(false)}>采用最新上限</Button></div>
       </motion.section>}
       {budgetLoadedNotice && <p className="ice-asset-muted" role="status">{budgetLoadedNotice}</p>}
     </div>}
-    {busy && <p role="status" className="ice-asset-muted">可以继续编辑；返回的候选不会覆盖生成期间新增的修改。</p>}
+    {busy && <p role="status" className="ice-asset-muted">可以继续编辑；返回的候选不会覆盖生成期间新增的修改。预算操作将在重拟结束后恢复。</p>}
     {error != null && <ErrorNote error={error} note="你已输入的内容保留。" />}
     {candidate && <div className="ice-asset-grid"><p className="ice-asset-muted">你已继续编辑，AI 候选保留在下方，未覆盖当前内容。</p>
       <textarea aria-label="未覆盖编辑的AI提示词候选" readOnly rows={5} value={candidate} /><CopyButton label="复制AI提示词候选" text={candidate} />
