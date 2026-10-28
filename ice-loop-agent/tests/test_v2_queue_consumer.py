@@ -224,14 +224,16 @@ class TestConsumerLifecycle(unittest.TestCase):
             if final["state"] in ("waiting_user", "succeeded", "failed", "paused"):
                 break
             time.sleep(0.5)
-        self.assertIn(final["state"], ("waiting_user", "succeeded", "paused", "failed", "queued"),
-                      "消费者应将任务推进到已知状态")
-        self.assertGreaterEqual(final["attempt"], 1, "消费者应至少认领一次")
-        if final["state"] == "waiting_user":
-            result = json.loads(final["result"]) if isinstance(final["result"], str) else final["result"]
-            self.assertIn("job_id", result, "waiting_user 必须持久化 job_id")
-            bound = queue.bound_job(task["task_id"])
-            self.assertEqual(bound, result["job_id"])
+        self.assertEqual(final["state"], "waiting_user", "首个真实审批门必须暂停等待人工处理")
+        self.assertEqual(final["attempt"], 1, "不得以失败/重排/重复认领代替成功推进")
+        self.assertIsNone(final['lease_token'])
+        result = json.loads(final["result"]) if isinstance(final["result"], str) else final["result"]
+        bound = queue.bound_job(task["task_id"])
+        self.assertEqual(bound, result["job_id"])
+        self.assertEqual(self.store.get_job(bound)['state'], 'awaiting_approval')
+        self.assertEqual(self.store.pending_approval(bound)['scope'], 'topic')
+        self.assertEqual(self.store.get_article(self.store.get_job(bound)['article_id'])['spec']['account_id'], 'ice-loop')
+        self.assertTrue(self.service._consumer_thread.is_alive())
 
 
 def json_dumps(value) -> str:

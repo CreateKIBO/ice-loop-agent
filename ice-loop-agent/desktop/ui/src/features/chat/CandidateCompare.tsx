@@ -34,6 +34,13 @@ export function compareStatusNote(picks: ComparePick[]): string {
   return "已选 2 份，可打开对照";
 }
 
+// DOM text preserves lone CR, but Chromium does not lay it out as a line
+// break. Add a visual break only there; keep CRLF/LF and copied source intact.
+function sourceText(text: string): React.ReactNode {
+  return text.split(/(\r(?!\n))/).map((part, index) => part === "\r"
+    ? <React.Fragment key={index}>{part}<br /></React.Fragment> : part);
+}
+
 /** 面板内单份候选的只读阅读区（阅读/原文 + 局部目录 + 回到开头 + 独立复制）。 */
 function ComparePane({ candidate, narrow }: { candidate: { id: string; title: string; body: string; status: string }; narrow: boolean }) {
   const [reading, setReading] = React.useState(true);
@@ -41,12 +48,12 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
   const [scrolled, setScrolled] = React.useState(false);
   const headings = React.useMemo(() => markdownHeadings(candidate.body), [candidate.body]);
   // Anchor only real top-level headings, preserving every source character.
-  // The AST supplies source lines, including setext headings and CRLF input.
+  // Match the AST's line endings without normalizing any source characters.
   const sourceSections = React.useMemo(() => {
-    let offset = 0;
-    const lines = candidate.body.split('\n').map(line => {
-      const start = offset; offset += line.length + 1; return start;
-    });
+    const lines = [0];
+    for (const ending of candidate.body.matchAll(/\r\n|\r|\n/g)) {
+      lines.push(ending.index + ending[0].length);
+    }
     const starts = headings.map(heading => lines[heading.line - 1]);
     return {
       prefix: candidate.body.slice(0, starts[0] ?? candidate.body.length),
@@ -111,8 +118,8 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
                            padding: 10, borderRadius: 8, fontSize: "var(--ice-font-size-sm)", minWidth: 0 }}>
         {reading
           ? <MarkdownContent text={candidate.body} />
-          : <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "var(--ice-font-mono)", overflowWrap: "anywhere" }}>{sourceSections.prefix}{sourceSections.sections.map(section =>
-              <span key={section.index} data-compare-heading={section.index}>{section.text}</span>)}</pre>}
+          : <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "var(--ice-font-mono)", overflowWrap: "anywhere" }}>{sourceText(sourceSections.prefix)}{sourceSections.sections.map(section =>
+              <span key={section.index} data-compare-heading={section.index}>{sourceText(section.text)}</span>)}</pre>}
       </div>
     </div>
   );
@@ -131,11 +138,20 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-export function CandidateCompareDialog({ open, onOpenChange, pair, narrow }: {
+export function CandidateCompareDialog({ open, onOpenChange, pair }: {
   open: boolean; onOpenChange: (open: boolean) => void;
   pair: Array<{ id: string; title: string; body: string; status: string }>;
-  narrow: boolean;
 }) {
+  // Resizing must update this open dialog even when the chat query and virtual
+  // rows stay unchanged. Keep both readers mounted across the breakpoint.
+  const [narrow, setNarrow] = React.useState(() => window.matchMedia('(max-width: 999px)').matches);
+  React.useEffect(() => {
+    const media = window.matchMedia('(max-width: 999px)');
+    const update = () => setNarrow(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   if (pair.length !== 2) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange} width={narrow ? 720 : 1200}

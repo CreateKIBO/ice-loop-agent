@@ -67,6 +67,61 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  fs.writeFileSync(f.fault,originalFault);
  const recoveryPoll=count('chat.get');await waitCount('chat.get',recoveryPoll);await wait(200);
  check('latest_candidate_source_survives_recovery',await e(liveState));
+ // 目标一（2026-10-26 本轮）：对照弹窗在真实 Electron IPC 下复验 CR/CRLF。
+ // 组合当前页 recent-3（仅 CR）与 recent-5（CRLF）：原文逐字符、视觉换行语义、
+ // 实际目录滚动、打开期间宽→窄→宽重排、Escape 关闭焦点返回触发按钮。
+ const pairIds=[f.compare_cr_candidate,f.compare_candidates[1]];
+ for(const id of pairIds){
+  await click(`[...document.getElementById('candidate-expand-${id}').parentElement.querySelectorAll('button')].find(b=>b.textContent.trim()==='加入对照')`);
+ }
+ await e(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='打开对照')?.focus()`);
+ await click(btn('打开对照'));
+ const cdialog=`document.querySelector('[role="dialog"]')`;
+ await until(`Boolean(${cdialog})&&Boolean(${cdialog}.querySelector('.ice-dialog-body > div'))`);
+ const flexRoot=`${cdialog}.querySelector('.ice-dialog-body > div')`;
+ const paneCR=`${flexRoot}.children[0]`,paneCRLF=`${flexRoot}.children[1]`;
+ const pairBodies=await rpc('chat.get',{conversation_id:f.conversations[0]});
+ const bodyCR=pairBodies.candidates.find(c=>c.id===pairIds[0]).body;
+ const bodyCRLF=pairBodies.candidates.find(c=>c.id===pairIds[1]).body;
+ check('compare_cr_body_has_lone_cr',bodyCR.includes('\r')&&!bodyCR.includes('\r\n'));
+ check('compare_crlf_body_is_crlf',bodyCRLF.includes('\r\n'));
+ for(const [pane,body,name] of [[paneCR,bodyCR,'cr'],[paneCRLF,bodyCRLF,'crlf']]){
+  await click(`[...${pane}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Markdown 原文')`);
+  await until(`Boolean(${pane}.querySelector('pre'))`);
+  check('compare_'+name+'_source_exact_bytes',await e(`${pane}.querySelector('pre').textContent===${JSON.stringify(body)}`));
+  check('compare_'+name+'_visual_break_semantics',await e(`${pane}.querySelector('pre').querySelectorAll('br').length${name==='cr'?'>0':'===0'}`));
+  await click(`${pane}.querySelector('button[aria-label="复制此份原文"]')`);
+  await until(`${pane}.querySelector('button[aria-label="复制此份原文"]')?.textContent.includes('此份已复制')`);
+  check('compare_'+name+'_copy_exact',copy.rows().at(-1)?.ok&&copy.rows().at(-1)?.sha256===sha(body));
+ }
+ // CR 栏阅读视图目录实际滚动到 tail-section，另一栏保持不动（真实 IPC 取数）。
+ await click(`[...${paneCR}.querySelectorAll('button')].find(b=>b.textContent.trim()==='阅读预览')`);
+ await until(`Boolean(${paneCR}.querySelector('.ice-markdown'))`);
+ await click(`[...${paneCR}.querySelectorAll('button')].find(b=>b.textContent.startsWith('目录（'))`);
+ await until(`Boolean(${paneCR}.querySelector('nav'))`);
+ await e(`void(window.__crScroll=[...${paneCR}.querySelectorAll('div')].find(n=>n.style.maxHeight==='460px'));void(window.__crOther=[...${paneCRLF}.querySelectorAll('div')].find(n=>n.style.maxHeight==='460px'));window.__crScroll.scrollTop=0;`);
+ await click(`[...${paneCR}.querySelectorAll('nav button')].find(b=>b.textContent==='tail-section')`);
+ let crToc=null;
+ {const end=Date.now()+4000;while(Date.now()<end){crToc=await e(`(()=>{const n=window.__crScroll;const t=[...n.querySelector('.ice-markdown').children].filter(c=>/^H[1-6]$/.test(c.tagName)).find(c=>c.textContent.trim()==='tail-section');return t?{scroll:n.scrollTop,offset:t.getBoundingClientRect().top-n.getBoundingClientRect().top,other:window.__crOther.scrollTop}:null;})()`);if(crToc&&crToc.scroll>30&&crToc.offset>=0&&crToc.offset<40&&crToc.other===0)break;await wait(120);}}
+ check('compare_cr_reading_toc_scrolls_own_pane',Boolean(crToc&&crToc.scroll>30&&crToc.offset>=0&&crToc.offset<40&&crToc.other===0));
+ // 打开期间宽→窄→宽：断点订阅应独立于聊天重渲染及时重排（有界收敛，几何用两栏根节点）。
+ const paneBox=async pane=>e(`(()=>{const r=${pane}.getBoundingClientRect();return {top:r.top,left:r.left,right:r.right,bottom:r.bottom};})()`);
+ const w0=await paneBox(paneCR),w1=await paneBox(paneCRLF);
+ check('compare_native_wide_side_by_side',w1.left>=w0.right-1&&Math.abs(w0.top-w1.top)<2);
+ await call('Emulation.setDeviceMetricsOverride',{width:800,height:900,deviceScaleFactor:1,mobile:false});
+ {const end=Date.now()+4000;while(Date.now()<end){const a=await paneBox(paneCR),b=await paneBox(paneCRLF);if(b.top>=a.bottom-1&&Math.abs(a.left-b.left)<2)break;await wait(100);}}
+ const n0=await paneBox(paneCR),n1=await paneBox(paneCRLF);
+ check('compare_native_narrow_stacks',n1.top>=n0.bottom-1&&Math.abs(n0.left-n1.left)<2);
+ await call('Emulation.setDeviceMetricsOverride',{width:1280,height:1000,deviceScaleFactor:1,mobile:false});
+ {const end=Date.now()+4000;while(Date.now()<end){const a=await paneBox(paneCR),b=await paneBox(paneCRLF);if(b.left>=a.right-1&&Math.abs(a.top-b.top)<2)break;await wait(100);}}
+ const r0=await paneBox(paneCR),r1=await paneBox(paneCRLF);
+ check('compare_native_restore_side_by_side',r1.left>=r0.right-1&&Math.abs(r0.top-r1.top)<2);
+ await call('Emulation.clearDeviceMetricsOverride');
+ report.compareEnv=await e(`({visibility:document.visibilityState,focused:document.hasFocus(),innerWidth:innerWidth})`);
+ await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',windowsVirtualKeyCode:27});
+ await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',windowsVirtualKeyCode:27});
+ await until(`!${cdialog}`);
+ check('compare_native_close_focus_returns',await e(`document.activeElement===[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='打开对照')`));
  // Historical candidate via real paging; each wait fails rather than silently returning false.
  // 2026-10-25 候选对照轮：seed 增加了更多历史候选（同题对照稿），分页深度变化——
  // 逐页向前翻直到目标候选出现（有界：最多 8 页），不再假设一次到位。
@@ -123,7 +178,9 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  check('references_initially_folded_with_count',await e(`${refs}.querySelector('[aria-expanded]').getAttribute('aria-expanded')==='false'&&${refs}.textContent.includes('按上传顺序')&&${refs}.querySelectorAll('img').length===0`));
  await e(`window.__revoked=[];const originalRevoke=URL.revokeObjectURL.bind(URL);URL.revokeObjectURL=url=>{window.__revoked.push(url);originalRevoke(url);};`);
  await click(`${refs}.querySelector('[aria-expanded]')`);
- await until(`${refs}.querySelectorAll('img').length>=2&&[...${refs}.querySelectorAll('img')].every(n=>n.complete)`);
+ // Electron 弹窗内缩略图带 loading="lazy"：先滚动进入视口（等价用户滚动查看）再等待完成。
+ await e(`[...${refs}.querySelectorAll('li')].forEach(n=>n.scrollIntoView({block:'center'}))`);
+ await until(`${refs}.querySelectorAll('img').length>=2&&[...${refs}.querySelectorAll('img')].every(n=>n.complete&&n.naturalWidth>0)`);
  const names=await e(`[...${refs}.querySelectorAll('li')].map(n=>({heading:n.querySelector('strong').textContent,name:n.querySelector('p').textContent}))`);
  check('reference_order_and_roles',names.length===2&&names[0].heading.includes('图片 1')&&names[0].heading.includes('编辑底图')&&names[1].heading.includes('品牌身份参考'));
  await click(`${refs}.querySelector('button[aria-label^="复制文件名（图片"]')`);await until(`${refs}.querySelector('button[aria-label^="复制文件名（图片"]')?.textContent.includes('文件名已复制')`);

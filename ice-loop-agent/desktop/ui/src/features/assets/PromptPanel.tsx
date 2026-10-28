@@ -18,6 +18,7 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
   const [error, setError] = React.useState<unknown>(null), [viewer, setViewer] = React.useState<ImageTarget | null>(null);
   const [referencesOpen, setReferencesOpen] = React.useState(false); // 批D：参考区默认收起，折叠时卸载缩略图（租约走既有释放链）
   const [editingBudget, setEditingBudget] = React.useState<Budget | null>(null), [limit, setLimit] = React.useState(''), [budgetBusy, setBudgetBusy] = React.useState(false);
+  const [budgetError, setBudgetError] = React.useState<unknown>(null);
   const mounted = React.useRef(true);
   const references = useAccountQuery<{ references: Reference[] }>('prompts.references', params, { enabled: !disabled, staleTime: 0, gcTime: 10000 });
   const budget = useAccountQuery<{ job: Budget }>('budgets.get', { job_id: data.job.job_id });
@@ -38,13 +39,13 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
     if (!editingBudget || busyRef.current || disabled) return;
     const maximum = Number(limit);
     if (!/^\d+$/.test(limit) || !Number.isInteger(maximum) || maximum < Math.max(1, editingBudget.used) || maximum > 100) {
-      setError(`本篇上限需为 ${Math.max(1, editingBudget.used)}–100 的整数，不能低于已用次数`); return;
+      setBudgetError(`本篇上限需为 ${Math.max(1, editingBudget.used)}–100 的整数，不能低于已用次数`); return;
     }
-    busyRef.current = true; setBudgetBusy(true); setError(null);
+    busyRef.current = true; setBudgetBusy(true); setBudgetError(null);
     try {
       await rpc('budgets.save', { account_id: account, job_id: data.job.job_id, scope: 'job', limit: maximum, limits_hash: editingBudget.limits_hash });
       if (mounted.current) { setEditingBudget(null); await budget.refetch(); }
-    } catch (problem) { if (mounted.current) setError(problem); }
+    } catch (problem) { if (mounted.current) setBudgetError(problem); }
     finally { busyRef.current = false; if (mounted.current) setBudgetBusy(false); }
   };
   return <section className="ice-asset-card" aria-label="生图提示词">
@@ -90,12 +91,15 @@ export function PromptPanel({ data, slot, disabled, onDirty, onSave }: { data: A
       <Button disabled={disabled || busy || budgetBusy || budget.data?.job.remaining === 0} onClick={() => void generate()}>{busy ? <><Spinner size={14} />正在重拟…</> : '按文章与品牌 AI 重拟'}</Button>
       <Button onClick={() => openWebsite('tapnow')}>打开内嵌 TapNow</Button></div>
     <div className="ice-asset-row"><span className="ice-asset-muted">{budget.data ? `本篇调用：${budget.data.job.used}/${budget.data.job.limit}，剩余 ${budget.data.job.remaining}` : '预算未读取'}</span>
-      <Button size="sm" disabled={!budget.data || disabled || busy || budgetBusy} onClick={() => { setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
+      <Button size="sm" disabled={!budget.data || disabled || busy || budgetBusy || editingBudget !== null} onClick={() => { setBudgetError(null); setEditingBudget(budget.data!.job); setLimit(String(budget.data!.job.limit)); }}>调整本篇预算</Button>
       <Button size="sm" variant="ghost" onClick={() => settingsStore.set(true)}>模型与 Key 设置</Button></div>
+    {budget.error && <ErrorNote error={budget.error} onRetry={() => void budget.refetch()} retryLabel="重新读取预算"
+      note={budget.data ? '已保留上次读取的预算；当前刷新失败，请核对后重试。' : '本篇预算读取失败；已输入的提示词保留，可重新读取。'} />}
     {editingBudget && <div className="ice-asset-card"><label className="ice-asset-row">本篇模型调用上限
       <Input aria-label="本篇模型调用上限" type="number" min={Math.max(1, editingBudget.used)} max={100} value={limit} disabled={budgetBusy} onChange={event => setLimit(event.target.value)} /></label>
       <p className="ice-asset-muted">1–100 次，不能低于已用次数。仅修改本篇，不重置已用次数；保存后生效。</p>
-      <div className="ice-asset-row"><Button disabled={budgetBusy || disabled} onClick={() => void saveBudget()}>保存本篇预算</Button><Button disabled={budgetBusy} variant="ghost" onClick={() => setEditingBudget(null)}>取消预算调整</Button></div></div>}
+      <div className="ice-asset-row"><Button disabled={budgetBusy || disabled} onClick={() => void saveBudget()}>保存本篇预算</Button><Button disabled={budgetBusy} variant="ghost" onClick={() => { setEditingBudget(null); setBudgetError(null); }}>取消预算调整</Button></div>
+      {budgetError != null && <ErrorNote error={budgetError} note="预算调整未完成，请核对后重试或取消。" />}</div>}
     {busy && <p role="status" className="ice-asset-muted">可以继续编辑；返回的候选不会覆盖生成期间新增的修改。</p>}
     {error != null && <ErrorNote error={error} note="你已输入的内容保留。" />}
     {candidate && <div className="ice-asset-grid"><p className="ice-asset-muted">你已继续编辑，AI 候选保留在下方，未覆盖当前内容。</p>
