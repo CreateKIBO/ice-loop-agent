@@ -3,6 +3,7 @@ import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button, ErrorPanel, SkeletonRows } from "../../components/ui";
+import { useActivityReducedMotion } from "../../components/ActivityRail";
 import { queryClient, useAccountQuery, useCurrentAccount, useEventStream, type RpcError } from "../../data/client";
 import { toolSignal } from "../../data/eventStream";
 import { AgentActionCards } from "./AgentActionCards";
@@ -31,6 +32,7 @@ export function ChatPane({ conversationId }: { conversationId: string | null }) 
   return <ConversationPane key={account+':'+(conversationId??'')} account={account} conversationId={conversationId} />;
 }
 function ConversationPane({conversationId,account}:{conversationId:string|null;account:string}) {
+  const reduced = useActivityReducedMotion();
   const delivery=useChatDelivery(account,conversationId),sending=delivery.busy;
   const [position, setPosition] = React.useState<HistoryPosition | null>(null);
   const [readingSnapshot, setReadingSnapshot] = React.useState<ChatResult | null>(null);
@@ -115,7 +117,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
     scrollIntentUntil.current = 0;
     following.current = true; seen.current = new Map(rows.map(row => [row.id, row.content])); setAway(false);
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      behavior: reduced ? "instant" : "smooth" });
   };
   const browse = (direction: 'older' | 'newer') => {
     const next = messagePosition(messages.data?.message_page, direction);
@@ -240,7 +242,8 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
         </div>
       </div>
       <AnimatePresence>
-        {away && <motion.div className="ice-jump-latest" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+        {away && <motion.div className="ice-jump-latest" initial={reduced ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+          transition={reduced ? { duration: 0 } : undefined}>
           <Button size="sm" onClick={jumpToLatest}>↓ {unread ? `${unread} 条回复有更新 · 回到最新` : "回到最新"}</Button>
         </motion.div>}
       </AnimatePresence>

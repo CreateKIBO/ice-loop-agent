@@ -12,6 +12,7 @@
 import * as React from "react";
 import { Button, Dialog } from "../../components/ui";
 import { CopyButton } from "../../components/CopyButton";
+import { useActivityReducedMotion } from "../../components/ActivityRail";
 import { MarkdownContent } from "../../components/MarkdownContent";
 import { markdownHeadings, type MarkdownHeading } from "../editor/markdownBridge";
 
@@ -62,7 +63,7 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
     };
   }, [candidate.body, headings]);
   const [tocOpen, setTocOpen] = React.useState(false);
-  const reduced = usePrefersReducedMotion();
+  const reduced = useActivityReducedMotion();
   const onScroll = () => {
     const node = scrollRef.current;
     setScrolled(Boolean(node && node.scrollTop > 8));
@@ -83,7 +84,12 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
     const element = reading
       ? Array.from(root?.children ?? []).filter(child => /^H[1-6]$/.test(child.tagName))[heading.index]
       : node.querySelector(`[data-compare-heading="${heading.index}"]`);
-    if (element) scrollToPoint(node.scrollTop + element.getBoundingClientRect().top - node.getBoundingClientRect().top - 10);
+    if (element) {
+      const rect = node.getBoundingClientRect();
+      // Dialog entrance scales viewport coordinates; scrollTop uses layout pixels.
+      const scale = node.offsetHeight ? rect.height / node.offsetHeight : 1;
+      scrollToPoint(node.scrollTop + (element.getBoundingClientRect().top - rect.top) / (scale || 1) - 10);
+    }
   };
   return (
     <div style={{ display: "grid", gap: 6, minWidth: 0, flex: narrow ? "1 1 auto" : "1 1 0" }}>
@@ -123,19 +129,6 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
       </div>
     </div>
   );
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = React.useState(() =>
-    typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false);
-  React.useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const listener = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }, []);
-  return reduced;
 }
 
 export function CandidateCompareDialog({ open, onOpenChange, pair }: {
