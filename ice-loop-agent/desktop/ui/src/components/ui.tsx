@@ -145,6 +145,25 @@ export function SkeletonRows({ rows = 4, height = 14, gap = 12 }: { rows?: numbe
   );
 }
 
+function DialogHeader({ title, description }: { title: string; description?: string }) {
+  const ref = React.useRef<HTMLDivElement>(null), [scrollable, setScrollable] = React.useState(false);
+  React.useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = () => setScrollable(node.scrollHeight > node.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(node);
+    return () => observer.disconnect();
+  }, [title, description]);
+  return <div ref={ref} className="ice-dialog-header" tabIndex={scrollable ? 0 : undefined}
+    role={scrollable ? 'region' : undefined} aria-label={scrollable ? '弹窗说明' : undefined}>
+    <DialogPrimitive.Title style={{ margin: 0, fontSize: "var(--ice-font-size-lg)",
+      marginBottom: description ? 4 : "var(--ice-space-3)" }}>{title}</DialogPrimitive.Title>
+    {description && <DialogPrimitive.Description style={{ margin: "0 0 var(--ice-space-3)", color: "var(--ice-text-secondary)",
+      fontSize: "var(--ice-font-size-sm)", lineHeight: 1.6 }}>{description}</DialogPrimitive.Description>}
+  </div>;
+}
+
 export function Dialog({ open, onOpenChange, title, description, children, footer, width = 560, initialFocus, className }: {
   open: boolean; onOpenChange: (open: boolean) => void;
   title: string; description?: string; children: React.ReactNode; footer?: React.ReactNode;
@@ -188,14 +207,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial} onCloseAutoFocus={restoreFocus}
                                  className={'ice-dialog' + (className ? ' ' + className : '')} style={{ width: `min(${width}px, calc(100vw - 48px))` }}
                                  {...(description ? {} : { "aria-describedby": undefined })}>
-          <DialogPrimitive.Title style={{ margin: 0, fontSize: "var(--ice-font-size-lg)",
-                                          marginBottom: description ? 4 : "var(--ice-space-3)" }}>{title}</DialogPrimitive.Title>
-          {description
-            ? <DialogPrimitive.Description style={{ margin: "0 0 var(--ice-space-3)", color: "var(--ice-text-secondary)",
-                                                    fontSize: "var(--ice-font-size-sm)", lineHeight: 1.6 }}>
-                {description}
-              </DialogPrimitive.Description>
-            : null}
+          <DialogHeader title={title} description={description} />
           <div ref={notificationRef} className="ice-dialog-notifications" />
           <div className="ice-dialog-body" style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
           {footer && (

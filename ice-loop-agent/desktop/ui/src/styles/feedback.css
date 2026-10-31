@@ -34,6 +34,10 @@
 }
 .ice-dialog[data-state="open"] { animation: ice-dialog-in var(--ice-motion-panel) var(--ice-motion-ease); }
 .ice-dialog[data-state="closed"] { animation: ice-dialog-out var(--ice-motion-fast) ease-in forwards; }
+.ice-dialog-header { flex-shrink: 0; min-height: 0; max-height: min(200px, 22vh); overflow-y: auto; overflow-wrap: anywhere; }
+@media (max-height: 560px) {
+  .ice-dialog { max-height: calc(100vh - 32px); padding: var(--ice-space-3); }
+}
 
 /* ---------------------------------------------------------------- 轻提示 */
 .ice-toaster {
