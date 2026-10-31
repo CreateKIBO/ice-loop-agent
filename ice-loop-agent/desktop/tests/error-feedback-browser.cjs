@@ -7,7 +7,7 @@ const repo = path.resolve(__dirname, '../..'), ui = path.join(repo, 'desktop/ui'
 const parent = path.join(repo, '.test-tmp/error-feedback'); fs.mkdirSync(parent, { recursive: true });
 const evidence = fs.mkdtempSync(path.join(parent, 'run-'));
 const report = { scope: 'Chrome real React StrictMode; ErrorPanel/CopyButton/write-refresh receipts/Toaster; memory adapters; no IPC or OS clipboard', checks: {}, errors: [] };
-const sourcePaths = ['components/ui.tsx', 'components/CopyButton.tsx', 'data/clipboard.ts', 'data/receipts.ts', 'components/errorText.ts', 'components/toast.tsx', 'components/toastLifetime.ts', 'styles/feedback.css'];
+const sourcePaths = ['components/ui.tsx', 'components/CopyButton.tsx', 'components/MarkdownView.tsx', 'data/clipboard.ts', 'data/receipts.ts', 'components/errorText.ts', 'components/toast.tsx', 'components/toastLifetime.ts', 'styles/feedback.css', 'styles/conversation.css'];
 const fingerprint = () => Object.fromEntries(sourcePaths.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(ui, 'src', file))).digest('hex')]));
 report.sources = fingerprint();
 let browser, server;
@@ -17,6 +17,7 @@ async function run() {
     import {CopyButton} from './components/CopyButton'; import {ErrorPanel} from './components/ui';
     import {Toaster} from './components/toast';
     import {refreshAfterWrite} from './data/receipts';
+    import {MarkdownView} from './components/MarkdownView';
     window.copyCalls=[]; window.copyPlan=[]; window.panelRetries=0; window.panelDismissals=0;
     window.writeCount=0; window.refreshCount=0; window.refreshPlan=[];
     const refresh=async()=>{
@@ -32,7 +33,9 @@ async function run() {
     }};
     function App(){
       const [text,setText]=React.useState('第一段完整内容'),[mounted,setMounted]=React.useState(true),[panel,setPanel]=React.useState(null),[receipt,setReceipt]=React.useState('');
+      const [markdown,setMarkdown]=React.useState('[**核对链接**](https://example.invalid/first)'),[markdownMounted,setMarkdownMounted]=React.useState(true);
       window.setCopyText=setText; window.setCopyMounted=setMounted; window.setErrorPanel=setPanel;
+      window.setMarkdownText=setMarkdown;window.setMarkdownMounted=setMarkdownMounted;
       return <><main style={{padding:16}}>
         <input id="text-source" value={text} onChange={e=>setText(e.target.value)} aria-label="待复制文本"/>
         <div id="copy-host">{mounted&&<CopyButton text={text} label="复制内容"/>}</div>
@@ -42,6 +45,7 @@ async function run() {
           try { await refreshAfterWrite('提示词保存',refresh); setReceipt('写入已确认'); }
           catch { setReceipt('保存失败'); }
         }}>模拟已确认写入后刷新</button><p id="write-status" role="status">{receipt}</p>
+        <div id="markdown-host">{markdownMounted&&<MarkdownView text={markdown}/>}</div>
       </main><Toaster/></>;
     }
     createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>);
@@ -153,6 +157,57 @@ async function run() {
   await page.waitForTimeout(750);
   check('copy_unmounted_failure_is_quiet', await page.locator('.ice-toast').count() === 0);
   check('copy_unmount_removes_control', await copy.count() === 0);
+
+  const link = page.locator('#markdown-host .ice-md-link');
+  const markdown = href => `[**核对链接**](${href})`, firstHref = 'https://example.invalid/first', nextHref = 'https://example.invalid/next';
+  for (const [kind, value, expected] of [
+    ['null', null, '操作未完成'],
+    ['string', '链接桥接拒绝 api_key=fixture-link-value', '链接桥接拒绝'],
+    ['object', { message: '[NETWORK] 链接受控读败', headers: { authorization: 'Basic dXNlcjpwYXNz' } }, '网络连接失败'],
+  ]) {
+    await page.evaluate(value => { window.copyPlan = [{ reject: true, value }]; }, value);
+    await link.click(); await page.waitForTimeout(100);
+    const text = (await page.locator('.ice-toast--danger').allTextContents()).join('\n');
+    check('markdown_link_' + kind + '_failure_is_useful', text.includes('复制失败') && text.includes(expected));
+    check('markdown_link_' + kind + '_failure_is_redacted', !/fixture-link-value|dXNlcjpwYXNz/.test(text));
+    check('markdown_link_' + kind + '_is_ready_and_retains_focus', await link.evaluate(n => n.getAttribute('aria-busy') !== 'true' && n === document.activeElement));
+    await clearToasts();
+  }
+  const linkBefore = await page.evaluate(() => window.copyCalls.length), linkWidth = await link.evaluate(n => n.getBoundingClientRect().width);
+  await page.evaluate(() => { window.copyPlan = [{ delay: 600, result: { ok: true } }]; });
+  await page.locator('#write-refresh').focus(); await page.keyboard.press('Tab');
+  check('markdown_link_is_reachable_by_keyboard', await link.evaluate(n => n === document.activeElement && n.textContent.includes('复制链接地址')));
+  await link.evaluate(n => { n.click(); n.click(); n.click(); }); await page.waitForTimeout(80);
+  check('markdown_link_same_tick_copies_once', await page.evaluate(before => window.copyCalls.length === before + 1, linkBefore));
+  check('markdown_link_pending_is_busy_without_losing_focus', await link.evaluate(n => n.getAttribute('aria-busy') === 'true' && n.getAttribute('aria-disabled') === 'true' && !n.disabled && n === document.activeElement));
+  check('markdown_link_retains_inline_label_and_width', await link.evaluate((n, width) => !!n.querySelector('strong') && Math.abs(n.getBoundingClientRect().width-width)<1, linkWidth));
+  await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+  check('markdown_link_keyboard_repeat_does_not_replay_pending_copy', await page.evaluate(before => window.copyCalls.length === before + 1, linkBefore));
+  await page.screenshot({ path: path.join(evidence, 'markdown-link-pending-narrow.png') });
+  await page.waitForTimeout(700);
+  check('markdown_link_pending_finishes_with_one_success_receipt', await page.locator('.ice-toast').count() === 1 && (await page.locator('.ice-toast').innerText()).includes('链接已复制'));
+  await clearToasts();
+
+  await page.evaluate(() => { window.copyPlan = [{ delay: 600, result: { ok: true } }]; });
+  await link.click(); await page.waitForTimeout(80); await page.evaluate(text => window.setMarkdownText(text), markdown(nextHref)); await page.waitForTimeout(750);
+  check('markdown_link_changed_href_ignores_old_success', await page.locator('.ice-toast').count() === 0);
+  await clearToasts(); await link.click(); await page.waitForTimeout(100);
+  check('markdown_link_can_copy_new_href_after_old_operation', await page.evaluate(href => window.copyCalls.at(-1) === href, nextHref) && (await page.locator('.ice-toast').innerText()).includes('链接已复制'));
+  await clearToasts();
+
+  await page.evaluate(() => { window.copyPlan = [{ delay: 600, result: { ok: true } }]; });
+  await link.click(); await page.waitForTimeout(80); await page.evaluate(text => window.setMarkdownText(text), markdown(firstHref)); await page.waitForTimeout(60);
+  await page.evaluate(text => window.setMarkdownText(text), markdown(nextHref)); await page.waitForTimeout(750);
+  check('markdown_link_href_roundtrip_invalidates_old_receipt', await page.locator('.ice-toast').count() === 0);
+  await clearToasts();
+  await page.evaluate(() => { window.copyPlan = [{ delay: 600, reject: true, value: { message: '过期链接失败' } }]; });
+  await link.click(); await page.waitForTimeout(80); await page.evaluate(text => window.setMarkdownText(text), markdown(firstHref)); await page.waitForTimeout(750);
+  check('markdown_link_changed_href_ignores_old_failure', await page.locator('.ice-toast').count() === 0);
+  await clearToasts();
+  await page.evaluate(() => { window.copyPlan = [{ delay: 600, reject: true, value: { message: '卸载后的旧链接失败' } }]; });
+  await link.click(); await page.waitForTimeout(80); await page.evaluate(() => window.setMarkdownMounted(false)); await page.waitForTimeout(750);
+  check('markdown_link_unmounted_failure_is_quiet', await page.locator('.ice-toast').count() === 0 && await link.count() === 0);
+  await clearToasts();
   check('no_renderer_errors', report.errors.length === 0);
   check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
   assert(Object.values(report.checks).every(Boolean), 'Failed: ' + Object.keys(report.checks).filter(key => !report.checks[key]).join(', '));

@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { CopyButton } from "./CopyButton";
 import { toast } from "./toast";
 import { copyPlainText } from "../data/clipboard";
+import { errorDisplay } from "./errorText";
 import { safeMessageUrl } from "../features/chat/readingState";
 import "../styles/conversation.css";
 
@@ -20,6 +21,30 @@ function CodeBlock({ node }: { node: Node }) {
   </div>;
 }
 
+function MarkdownLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const [busy, setBusy] = React.useState(false), locked = React.useRef(false);
+  const mounted = React.useRef(false), epoch = React.useRef(0);
+  React.useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; epoch.current++; };
+  }, []);
+  React.useLayoutEffect(() => { epoch.current++; }, [href]);
+  return <button type="button" className="ice-md-link" title={"复制链接地址：" + href}
+    aria-busy={busy || undefined} aria-disabled={busy || undefined}
+    onClick={async () => {
+      if (locked.current) return;
+      locked.current = true; setBusy(true);
+      const operation = ++epoch.current, current = () => mounted.current && epoch.current === operation;
+      try { await copyPlainText(href); if (current()) toast.info("链接已复制"); }
+      catch (error) {
+        if (current()) {
+          const feedback = errorDisplay(error);
+          toast.error({ title: "复制失败", detail: [feedback.title, feedback.detail].filter(Boolean).join('：') });
+        }
+      } finally { locked.current = false; if (mounted.current) setBusy(false); }
+    }}>{children}<span className="ice-sr-only">（复制链接地址）</span></button>;
+}
+
 /** remark parses Markdown; React renders an explicit element allowlist. Never execute model HTML. */
 export const MarkdownView = React.memo(function MarkdownView({ text }: { text: string }) {
   const tree = React.useMemo(() => parser.parse(text) as unknown as Node, [text]);
@@ -29,10 +54,7 @@ export const MarkdownView = React.memo(function MarkdownView({ text }: { text: s
   const link = (node: Node, target: Node = node) => {
     const href = safeMessageUrl(target.url);
     if (!href) return <span title="链接地址不可用">{children(node)}</span>;
-    return <button type="button" className="ice-md-link" title={"复制链接地址：" + href}
-      onClick={() => { void copyPlainText(href).then(() => toast.info("链接已复制"), error => toast.error({ title:"复制失败", detail:error.message })); }}>
-      {children(node)}<span className="ice-sr-only">（复制链接地址）</span>
-    </button>;
+    return <MarkdownLink href={href}>{children(node)}</MarkdownLink>;
   };
   function render(node: Node): React.ReactNode {
     switch (node.type) {

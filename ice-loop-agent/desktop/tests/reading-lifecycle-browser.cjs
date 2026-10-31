@@ -15,7 +15,7 @@ assert.equal(path.dirname(fixture.root), path.join(repo, '.test-tmp/release-inte
 assert(fs.existsSync(path.join(fixture.root, '.test-owner.json')));
 const evidence = fs.mkdtempSync(path.join(fixture.root, 'browser-lifecycle-'));
 const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', consumerEnabled: ['codex1', 'codex2'].includes(scope), runtime: fixture.runtime, checks: {}, errors: [] };
-const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx'];
+const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx', 'components/MarkdownView.tsx', 'styles/conversation.css'];
 const fingerprint = () => Object.fromEntries(productFiles.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(repo, 'desktop/ui/src', file))).digest('hex')]));
 report.sources = fingerprint();
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));

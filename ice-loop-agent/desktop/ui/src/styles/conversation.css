@@ -35,6 +35,7 @@
 .ice-md-table th,.ice-md-table td { border:1px solid var(--ice-border); padding:7px 10px; min-width:90px; vertical-align:top; }
 .ice-md-table th { background:var(--ice-surface-sunken); font-weight:600; }
 .ice-md-link { border:0; background:none; padding:0; color:var(--ice-signal-blue); text-decoration:underline; text-underline-offset:3px; cursor:pointer; text-align:left; }
+.ice-md-link[aria-disabled="true"] { cursor:wait; opacity:0.65; }
 .ice-md-raw { white-space:pre-wrap; color:var(--ice-text-secondary); }.ice-md-image-note { color:var(--ice-text-secondary); font-size:12px; }
 .ice-markdown hr { border:0; border-top:1px solid var(--ice-border); margin:18px 0; }
 .ice-composer { border-top:1px solid var(--ice-border); padding:12px; display:grid; gap:8px; background:var(--ice-surface); flex-shrink:0; }
