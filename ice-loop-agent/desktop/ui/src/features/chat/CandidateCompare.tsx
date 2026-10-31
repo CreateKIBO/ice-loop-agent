@@ -46,6 +46,13 @@ function sourceText(text: string): React.ReactNode {
 function ComparePane({ candidate, narrow }: { candidate: { id: string; title: string; body: string; status: string }; narrow: boolean }) {
   const [reading, setReading] = React.useState(true);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pendingScroll = React.useRef<number | null>(null);
+  const completionFrame = React.useRef<number | null>(null);
+  const cancelCompletion = () => {
+    if (completionFrame.current !== null) window.cancelAnimationFrame(completionFrame.current);
+    completionFrame.current = null;
+  };
+  React.useLayoutEffect(() => () => cancelCompletion(), []);
   const [scrolled, setScrolled] = React.useState(false);
   const headings = React.useMemo(() => markdownHeadings(candidate.body), [candidate.body]);
   // Anchor only real top-level headings, preserving every source character.
@@ -64,14 +71,40 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
   }, [candidate.body, headings]);
   const [tocOpen, setTocOpen] = React.useState(false);
   const reduced = useActivityReducedMotion();
+  React.useLayoutEffect(() => {
+    if (!reduced || pendingScroll.current === null) return;
+    const top = pendingScroll.current; pendingScroll.current = null;
+    const node = scrollRef.current;
+    if (!node) return;
+    cancelCompletion();
+    node.scrollTo({ top, behavior: 'instant' });
+    // The compositor can deliver one pending smooth-scroll delta after cancel.
+    // Reconcile once on its next frame; new reader intent cancels this callback.
+    completionFrame.current = window.requestAnimationFrame(() => {
+      completionFrame.current = null;
+      if (node.isConnected) node.scrollTo({ top, behavior: 'instant' });
+    });
+  }, [reduced]);
+  const cancelScroll = () => {
+    const pending = pendingScroll.current, completing = completionFrame.current !== null, node = scrollRef.current;
+    cancelCompletion();
+    pendingScroll.current = null;
+    if ((pending !== null || completing) && node) node.scrollTo({ top: node.scrollTop, behavior: 'instant' });
+  };
   const onScroll = () => {
     const node = scrollRef.current;
+    if (node && pendingScroll.current !== null) {
+      const target = Math.min(pendingScroll.current, Math.max(0, node.scrollHeight - node.clientHeight));
+      if (Math.abs(node.scrollTop - target) <= 1) pendingScroll.current = null;
+    }
     setScrolled(Boolean(node && node.scrollTop > 8));
   };
   const scrollToPoint = (target: number | "top") => {
     const node = scrollRef.current;
     if (!node) return;
-    const top = target === "top" ? 0 : target;
+    cancelCompletion();
+    const top = Math.max(0, Math.min(target === "top" ? 0 : target, node.scrollHeight - node.clientHeight));
+    pendingScroll.current = !reduced && Math.abs(node.scrollTop - top) > 1 ? top : null;
     if (reduced) node.scrollTo({ top, behavior: "auto" });
     else node.scrollTo({ top, behavior: "smooth" });
   };
@@ -100,8 +133,8 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
         <span className="ice-composer-note" style={{ flexShrink: 0 }}>{candidate.body.length.toLocaleString()} 字符</span>
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }} role="group" aria-label={`对照查看方式（${candidate.title.slice(0, 12)}）`}>
-        <Button size="sm" variant={reading ? "primary" : "secondary"} aria-pressed={reading} onClick={() => setReading(true)}>阅读预览</Button>
-        <Button size="sm" variant={!reading ? "primary" : "secondary"} aria-pressed={!reading} onClick={() => setReading(false)}>Markdown 原文</Button>
+        <Button size="sm" variant={reading ? "primary" : "secondary"} aria-pressed={reading} onClick={() => { cancelScroll(); setReading(true); }}>阅读预览</Button>
+        <Button size="sm" variant={!reading ? "primary" : "secondary"} aria-pressed={!reading} onClick={() => { cancelScroll(); setReading(false); }}>Markdown 原文</Button>
         <CopyButton text={candidate.body} label="复制此份原文" successLabel="此份已复制" />
         <button type="button" className="ice-link-btn" aria-expanded={tocOpen} aria-controls={`compare-toc-${candidate.id}`}
                 onClick={() => setTocOpen(value => !value)}>
@@ -120,7 +153,9 @@ function ComparePane({ candidate, narrow }: { candidate: { id: string; title: st
           ))}
         </nav>
       )}
-      <div ref={scrollRef} onScroll={onScroll} style={{ minHeight: 200, maxHeight: 460, overflowY: "auto", background: "var(--ice-surface-muted)",
+      <div ref={scrollRef} onScroll={onScroll} onWheel={cancelScroll} onPointerDown={cancelScroll} onTouchStart={cancelScroll}
+           onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) cancelScroll(); }}
+           style={{ minHeight: 200, maxHeight: 460, overflowY: "auto", background: "var(--ice-surface-muted)",
                            padding: 10, borderRadius: 8, fontSize: "var(--ice-font-size-sm)", minWidth: 0 }}>
         {reading
           ? <MarkdownContent text={candidate.body} />

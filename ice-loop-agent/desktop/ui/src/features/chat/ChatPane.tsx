@@ -63,7 +63,14 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   const following = React.useRef(true);
   const seen = React.useRef(new Map<string, string>());
   const scrollIntentUntil = React.useRef(0);
+  const pendingLatest = React.useRef(false);
   const [away, setAway] = React.useState(false);
+  React.useLayoutEffect(() => {
+    if (!reduced || !pendingLatest.current) return;
+    pendingLatest.current = false;
+    const node = logRef.current;
+    node?.scrollTo({ top: node.scrollHeight, behavior: 'instant' });
+  }, [reduced]);
   const virtual = useVirtualizer({
     count: rows.length, getScrollElement: () => logRef.current,
     estimateSize: index => estimateMessage(rows[index].content),
@@ -72,6 +79,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   const onScroll = () => {
     const node = logRef.current;
     if (!node) return;
+    if (node.scrollHeight - node.clientHeight - node.scrollTop <= 1) pendingLatest.current = false;
     const atBottom = isNearBottom(node.scrollHeight, node.scrollTop, node.clientHeight);
     const intended = Date.now() < scrollIntentUntil.current;
     scrollIntentUntil.current = 0;
@@ -90,6 +98,8 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   };
   const scrollIntent = () => {
     const node = logRef.current;
+    const pending = pendingLatest.current; pendingLatest.current = false;
+    if (pending && node) node.scrollTo({ top: node.scrollTop, behavior: 'instant' });
     if (rows.length && node && node.scrollHeight > node.clientHeight) scrollIntentUntil.current = Date.now() + 1500;
   };
   React.useLayoutEffect(() => { following.current = true; seen.current.clear(); setAway(false); }, [conversationId]);
@@ -112,6 +122,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
     return () => observer.disconnect();
   }, [conversationId, messages.isError]);
   const jumpToLatest = () => {
+    pendingLatest.current = !reduced;
     setPosition(null);
     setReadingSnapshot(null);
     scrollIntentUntil.current = 0;
@@ -122,6 +133,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   const browse = (direction: 'older' | 'newer') => {
     const next = messagePosition(messages.data?.message_page, direction);
     if (!next) return;
+    pendingLatest.current = false;
     following.current = false; setAway(true);
     setReadingSnapshot(null);
     setPosition(next);
@@ -134,6 +146,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   const locateFindHit = (id: string) => {
     const index = rows.findIndex(row => row.id === id);
     if (index < 0) return;
+    pendingLatest.current = false;
     // Searching is an explicit reading action. Pin the current page before
     // measurement or new replies can drag the viewport back to the live tail.
     following.current = false;
