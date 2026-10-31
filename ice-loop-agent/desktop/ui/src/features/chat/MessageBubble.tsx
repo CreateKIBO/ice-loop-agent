@@ -1,4 +1,6 @@
-import { motion } from "motion/react";
+import * as React from "react";
+import { motion, useMotionValue } from "motion/react";
+import { useActivityReducedMotion } from "../../components/ActivityRail";
 import { ErrorNote } from "../../components/ErrorNote";
 import {diagnosticText} from "../../components/errorText";
 import { Button } from "../../components/ui";
@@ -18,14 +20,25 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
   row: ChatMessage; animateIn: boolean; highlighted?: boolean; onReuse: () => void;onRetry?:()=>void;retryDisabled?:boolean;
 }) {
   const isUser = row.role === "user";
+  const reduced = useActivityReducedMotion();
+  const entering = animateIn && !reduced;
+  const x = useMotionValue(entering ? (isUser ? 12 : -12) : 0);
+  const y = useMotionValue(entering ? 10 : 0), opacity = useMotionValue(entering ? 0 : 1);
+  const emptyStreaming = !row.content && row.status === "streaming";
+  React.useLayoutEffect(() => {
+    if (!emptyStreaming && reduced) {
+      x.stop(); y.stop(); opacity.stop();
+      x.set(0); y.set(0); opacity.set(1);
+    }
+  }, [x, y, opacity, reduced, emptyStreaming]);
   const failure=!isUser&&row.status==='failed'?{code:row.metadata?.error_code,message:row.metadata?.error_message??row.metadata?.error??row.content}:null;
   const preflight = !isUser ? tokenReceipt(row.metadata?.input_preflight) : null;
-  if (!row.content && row.status === "streaming") return null; // 空的生成中消息由打字指示代替
+  if (emptyStreaming) return null; // 空的生成中消息由打字指示代替
   return (
-    <motion.div initial={animateIn ? { opacity: 0, y: 10, x: isUser ? 12 : -12 } : false}
+    <motion.div initial={entering ? { opacity: 0, y: 10, x: isUser ? 12 : -12 } : false}
                 animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 className={"ice-message" + (isUser ? " ice-message--user" : "") + (highlighted ? " ice-message--find-hit" : "")}
-                style={{ display: "grid", gap: 4, justifyItems: isUser ? "end" : "start", minWidth: 0 }}>
+                style={{ x, y, opacity, display: "grid", gap: 4, justifyItems: isUser ? "end" : "start", minWidth: 0 }}>
       <span className="ice-message__speaker">{isUser ? "你" : "创作助手"}</span>
       <div style={{
         maxWidth: isUser ? "min(640px, 92%)" : "100%", minWidth: 0, boxSizing: "border-box",
