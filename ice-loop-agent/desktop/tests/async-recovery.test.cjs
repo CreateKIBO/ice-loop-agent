@@ -169,6 +169,48 @@ test('refreshAfterWrite resolves when refresh fails and offers a retry-refresh r
   }
 });
 
+test('successful create survives null refresh rejection and keeps the confirmed conversation', async () => {
+  app.client.accountStore.set('acc-a');
+  app.client.conversationStore.set(null);
+  let writes = 0;
+  useBridge(async method => { if (method === 'chat.create') { writes++; return CHAT_RESULT('conv-null-refresh'); } return {}; });
+  const warnings = [], originalWarning = app.toastMod.toast.warning;
+  const originalInvalidate = app.client.queryClient.invalidateQueries;
+  app.toastMod.toast.warning = input => warnings.push(input);
+  app.client.queryClient.invalidateQueries = async () => { throw null; };
+  try {
+    assert.equal(await app.actions.createConversation('req-null-refresh'), 'conv-null-refresh');
+    assert.equal(app.client.conversationStore.get(), 'conv-null-refresh');
+    assert.equal(writes, 1);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].title, /会话创建已完成，列表刷新失败/);
+    assert.match(warnings[0].detail, /操作未完成/);
+  } finally {
+    app.client.queryClient.invalidateQueries = originalInvalidate;
+    app.toastMod.toast.warning = originalWarning;
+  }
+});
+
+test('refresh warnings preserve safe string/object reasons and retry only the refresh', async () => {
+  const warnings = [], originalWarning = app.toastMod.toast.warning;
+  app.toastMod.toast.warning = input => warnings.push(input);
+  try {
+    for (const [value, expected] of [
+      ['刷新拒绝 api_key=fixture-receipt-value', '刷新拒绝'],
+      [{ message: '[NETWORK] 受控读取失败', headers: { authorization: 'Basic dXNlcjpwYXNz' } }, '网络连接失败'],
+    ]) {
+      let attempts = 0;
+      await app.receipts.refreshAfterWrite('提示词保存', async () => { if (++attempts === 1) throw value; });
+      const receipt = warnings.at(-1);
+      assert.match(receipt.title, /提示词保存已完成，列表刷新失败/);
+      assert.ok(receipt.detail?.includes(expected));
+      assert.ok(!/fixture-receipt-value|dXNlcjpwYXNz/.test(receipt.detail));
+      await receipt.action.run();
+      assert.equal(attempts, 2);
+    }
+  } finally { app.toastMod.toast.warning = originalWarning; }
+});
+
 test('ErrorNote renders mapped copy with next step, and keeps local messages verbatim', () => {
   const mapped = renderToStaticMarkup(React.createElement(ErrorNote, {
     error: Object.assign(new Error('模型调用已达上限：本篇 20/20'), {

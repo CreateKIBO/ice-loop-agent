@@ -6,8 +6,8 @@ const assert = require('node:assert/strict'), { chromium } = require('playwright
 const repo = path.resolve(__dirname, '../..'), ui = path.join(repo, 'desktop/ui');
 const parent = path.join(repo, '.test-tmp/error-feedback'); fs.mkdirSync(parent, { recursive: true });
 const evidence = fs.mkdtempSync(path.join(parent, 'run-'));
-const report = { scope: 'Chrome real React StrictMode; ErrorPanel/CopyButton/Toaster; memory bridge; no IPC or OS clipboard', checks: {}, errors: [] };
-const sourcePaths = ['components/ui.tsx', 'components/CopyButton.tsx', 'data/clipboard.ts', 'components/errorText.ts', 'components/toast.tsx', 'components/toastLifetime.ts', 'styles/feedback.css'];
+const report = { scope: 'Chrome real React StrictMode; ErrorPanel/CopyButton/write-refresh receipts/Toaster; memory adapters; no IPC or OS clipboard', checks: {}, errors: [] };
+const sourcePaths = ['components/ui.tsx', 'components/CopyButton.tsx', 'data/clipboard.ts', 'data/receipts.ts', 'components/errorText.ts', 'components/toast.tsx', 'components/toastLifetime.ts', 'styles/feedback.css'];
 const fingerprint = () => Object.fromEntries(sourcePaths.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(ui, 'src', file))).digest('hex')]));
 report.sources = fingerprint();
 let browser, server;
@@ -16,7 +16,14 @@ async function run() {
     import React from 'react'; import {createRoot} from 'react-dom/client';
     import {CopyButton} from './components/CopyButton'; import {ErrorPanel} from './components/ui';
     import {Toaster} from './components/toast';
+    import {refreshAfterWrite} from './data/receipts';
     window.copyCalls=[]; window.copyPlan=[]; window.panelRetries=0; window.panelDismissals=0;
+    window.writeCount=0; window.refreshCount=0; window.refreshPlan=[];
+    const refresh=async()=>{
+      window.refreshCount++; const step=window.refreshPlan.shift()||{};
+      if(step.delay) await new Promise(resolve=>setTimeout(resolve,step.delay));
+      if(step.reject) throw step.value;
+    };
     window.ice={copyText:async text=>{
       window.copyCalls.push(text); const step=window.copyPlan.shift()||{};
       if(step.delay) await new Promise(resolve=>setTimeout(resolve,step.delay));
@@ -24,12 +31,17 @@ async function run() {
       return step.result||{ok:true};
     }};
     function App(){
-      const [text,setText]=React.useState('第一段完整内容'),[mounted,setMounted]=React.useState(true),[panel,setPanel]=React.useState(null);
+      const [text,setText]=React.useState('第一段完整内容'),[mounted,setMounted]=React.useState(true),[panel,setPanel]=React.useState(null),[receipt,setReceipt]=React.useState('');
       window.setCopyText=setText; window.setCopyMounted=setMounted; window.setErrorPanel=setPanel;
       return <><main style={{padding:16}}>
         <input id="text-source" value={text} onChange={e=>setText(e.target.value)} aria-label="待复制文本"/>
         <div id="copy-host">{mounted&&<CopyButton text={text} label="复制内容"/>}</div>
         <div id="error-panel">{panel&&<ErrorPanel {...panel} onRetry={()=>window.panelRetries++} onDismiss={()=>window.panelDismissals++}/>}</div>
+        <button id="write-refresh" onClick={async()=>{
+          window.writeCount++; setReceipt('写入已确认');
+          try { await refreshAfterWrite('提示词保存',refresh); setReceipt('写入已确认'); }
+          catch { setReceipt('保存失败'); }
+        }}>模拟已确认写入后刷新</button><p id="write-status" role="status">{receipt}</p>
       </main><Toaster/></>;
     }
     createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>);
@@ -67,6 +79,32 @@ async function run() {
   check('panel_actions_preserve_callbacks', await page.evaluate(() => window.panelRetries === 1 && window.panelDismissals === 1));
   await page.screenshot({ path: path.join(evidence, 'error-panel-narrow.png'), fullPage: true });
   await page.evaluate(() => window.setErrorPanel(null));
+
+  for (const [kind, value, expected] of [
+    ['null', null, '操作未完成'],
+    ['string', '列表刷新拒绝 api_key=fixture-receipt-value', '列表刷新拒绝'],
+    ['object', { message: '[NETWORK] 受控读取失败', headers: { authorization: 'Basic dXNlcjpwYXNz' } }, '网络连接失败'],
+  ]) {
+    await page.evaluate(value => { window.refreshPlan = [{ reject: true, value }]; }, value);
+    await page.locator('#write-refresh').click(); await page.waitForTimeout(100);
+    const warnings = page.locator('.ice-toast--warning'), text = (await warnings.allTextContents()).join('\n');
+    check('receipt_' + kind + '_keeps_write_success', await page.locator('#write-status').innerText() === '写入已确认');
+    check('receipt_' + kind + '_explains_refresh_failure', text.includes('提示词保存已完成，列表刷新失败') && text.includes(expected));
+    check('receipt_' + kind + '_is_redacted', !/fixture-receipt-value|dXNlcjpwYXNz/.test(text));
+    await clearToasts();
+  }
+  await page.evaluate(() => { window.refreshPlan = [{ reject: true, value: Error('列表暂不可读') }, { delay: 600, reject: true, value: Error('再次读取失败') }, {}]; });
+  await page.locator('#write-refresh').click(); await page.waitForTimeout(100);
+  const retry = page.locator('.ice-toast--warning .ice-toast__action');
+  const counts = await page.evaluate(() => ({ writes: window.writeCount, reads: window.refreshCount }));
+  await retry.evaluate(n => { n.click(); n.click(); }); await page.waitForTimeout(80);
+  check('receipt_retry_has_busy_feedback', await retry.evaluate(n => n.disabled && n.getAttribute('aria-busy') === 'true'));
+  check('receipt_same_tick_retry_reads_once', await page.evaluate(counts => window.refreshCount === counts.reads + 1, counts));
+  await page.waitForTimeout(700);
+  check('receipt_failed_retry_keeps_a_new_warning', await page.locator('.ice-toast--warning').count() === 1 && (await page.locator('.ice-toast--warning').innerText()).includes('再次读取失败'));
+  await retry.click(); await page.waitForTimeout(100);
+  check('receipt_successful_retry_dismisses_warning', await page.locator('.ice-toast--warning').count() === 0);
+  check('receipt_retries_never_replay_the_write', await page.evaluate(counts => window.writeCount === counts.writes && window.refreshCount === counts.reads + 2, counts));
 
   for (const [kind, value, expected] of [
     ['null', null, '操作未完成'],
