@@ -2,7 +2,8 @@ import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { formatElapsed, turnSteps, type StreamEvent } from "../../data/eventStream";
 
-import { ActivityRail,useDocumentVisible } from '../../components/ActivityRail';
+import { ActivityRail,useDocumentVisible,useActivityReducedMotion } from '../../components/ActivityRail';
+import { redactText } from '../../components/errorText';
 import { progressFeedback } from './progressFeedback';
 
 function useNow(active: boolean, intervalMs = 1000): {now:number;visible:boolean} {
@@ -19,6 +20,7 @@ function useNow(active: boolean, intervalMs = 1000): {now:number;visible:boolean
 
 /** C1：生成中显示引擎事件里的真实步骤与已用时间；没有事件时退回消息元数据的阶段。 */
 export function TurnProgress({ events, turnId, metadata }: { events: StreamEvent[]; turnId: string; metadata: unknown }) {
+  const reduced = useActivityReducedMotion();
   const progress = React.useMemo(() => turnSteps(events, turnId), [events, turnId]);
   const feedback=progressFeedback(progress,metadata);
   const startedAt=feedback.startedAt;
@@ -33,8 +35,8 @@ export function TurnProgress({ events, turnId, metadata }: { events: StreamEvent
           :<span className="ice-turn-progress__signal" aria-hidden="true" />}
         <span role="status" aria-live="polite" aria-atomic="true">
         <AnimatePresence mode="wait" initial={false}>
-          <motion.span key={label} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                       exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}
+          <motion.span key={label} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+                       exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.16 }}
                        className="ice-turn-progress__label">
             {label}{detail ? <span className="ice-turn-progress__detail"> · {detail}</span> : null}
           </motion.span>
@@ -51,11 +53,11 @@ export function TurnProgress({ events, turnId, metadata }: { events: StreamEvent
         <ol className="ice-turn-steps" aria-label="本轮步骤">
           <AnimatePresence initial={false}>
             {feedback.steps.map(step => (
-              <motion.li key={step.key} layout initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
-                         transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              <motion.li key={step.key} initial={reduced ? false : { opacity: 0 }} animate={{ opacity: 1 }}
+                         transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
                          aria-current={step.status==="active"?"step":undefined}
                          className={"ice-turn-step ice-turn-step--" + step.status}
-                         title={step.detail}>
+                         title={step.detail ? redactText(step.detail) : undefined}>
                 <span className="ice-turn-step__dot" aria-hidden />
                 {step.label}
               </motion.li>
