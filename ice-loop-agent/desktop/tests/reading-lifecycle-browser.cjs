@@ -7,7 +7,7 @@ const { spawn } = require('node:child_process');
 const readline = require('node:readline'), assert = require('node:assert/strict');
 const { startTrace, expectRemoval, finishAction, stopTrace, auditRemovals } = require('./lifecycle-trace.cjs');
 const scope = process.env.ICE_LIFECYCLE_SCOPE || 'full';
-assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3', 'codex4', 'codex5', 'codex6', 'codex7', 'reading-motion', 'reading-links'].includes(scope), 'Unknown lifecycle scope');
+assert(['full', 'round2', 'round3', 'codex1', 'codex2', 'codex3', 'codex4', 'codex5', 'codex6', 'codex7', 'reading-motion', 'reading-links', 'reading-wait'].includes(scope), 'Unknown lifecycle scope');
 const WebSocketImpl = globalThis.WebSocket || require('ws');
 const repo = path.resolve(__dirname, '../..');
 const fixture = JSON.parse(fs.readFileSync(path.join(repo, 'docs/上线准备/reading-upgrade-fixture.json')));
@@ -15,7 +15,7 @@ assert.equal(path.dirname(fixture.root), path.join(repo, '.test-tmp/release-inte
 assert(fs.existsSync(path.join(fixture.root, '.test-owner.json')));
 const evidence = fs.mkdtempSync(path.join(fixture.root, 'browser-lifecycle-'));
 const report = { scope: 'Chrome production renderer; real offline service over test-only loopback bridge; memory clipboard; no Electron IPC', consumerEnabled: ['codex1', 'codex2'].includes(scope), runtime: fixture.runtime, checks: {}, errors: [] };
-const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/MessageBubble.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx', 'components/MarkdownView.tsx', 'styles/conversation.css'];
+const productFiles = ['features/chat/ChatPane.tsx', 'features/chat/MessageBubble.tsx', 'features/chat/TurnProgress.tsx', 'features/chat/CandidateHistory.tsx', 'features/chat/CandidateCompare.tsx', 'features/tasks/RightPane.tsx', 'features/tasks/jobViewPrefs.ts', 'features/assets/AssetWorkspace.tsx', 'features/assets/PromptPanel.tsx', 'features/editor/ArticleEditor.tsx', 'components/MarkdownView.tsx', 'styles/conversation.css'];
 const fingerprint = () => Object.fromEntries(productFiles.map(file => [file, require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(repo, 'desktop/ui/src', file))).digest('hex')]));
 report.sources = fingerprint();
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -146,12 +146,13 @@ async function run() {
   const same = (id, ref) => `window.${ref}===document.getElementById(${JSON.stringify(id)})&&window.${ref}?.isConnected&&window.${ref}.getAttribute('aria-expanded')==='true'`;
   await call('Runtime.enable'); await call('Network.enable');
   await call('Network.setBlockedURLs', { urls: ['https://*'] });
-  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: scope === 'reading-motion' ? 'no-preference' : 'reduce' }] });
+  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: ['reading-motion', 'reading-wait'].includes(scope) ? 'no-preference' : 'reduce' }] });
   await call('Page.bringToFront');
   await call('Page.navigate', { url });
-  if (['reading-motion', 'reading-links'].includes(scope)) {
-    report.scope += scope === 'reading-motion' ? '; live reading motion preferences, read-only' : '; keyboard Markdown link reading, read-only';
-    await require(scope === 'reading-motion' ? './reading-lifecycle-motion.cjs' : './reading-lifecycle-links.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, requests, fixture, report, faults });
+  if (['reading-motion', 'reading-links', 'reading-wait'].includes(scope)) {
+    report.scope += '; read-only ' + scope;
+    const journey = {'reading-motion':'motion','reading-links':'links','reading-wait':'wait'}[scope];
+    await require('./reading-lifecycle-' + journey + '.cjs')({ e, call, ui, btn, click, check, until, wait, rpc, requests, fixture, report, faults });
     await until(() => requests.every(row => row.finished) && pending.size === 0, 'all reading motion RPCs settled');
     check('all_rpc_finished', requests.every(row => row.finished) && pending.size === 0);
     check('no_renderer_errors', report.errors.length === 0);
