@@ -61,6 +61,21 @@ async function run() {
     document.dispatchEvent(new Event('visibilitychange'));
   }, state);
 
+  // Dynamic action labels must use the same redaction as titles/details,
+  // including the failure title derived from that label. All values are fake.
+  let labelId = await page.evaluate(() => {
+    window.labelRuns = 0;
+    return window.toast.info({ title: '动作标签脱敏', duration: 5000, action: {
+      label: '核对 api_key=fixture-label-value', run: () => { window.labelRuns++; throw Error('Authorization: Basic dXNlcjpwYXNz'); },
+    } });
+  });
+  await card('动作标签脱敏').waitFor();
+  check('action_label_redacts_credentials', !(await card('动作标签脱敏').locator('.ice-toast__action').innerText()).includes('fixture-label-value'));
+  await card('动作标签脱敏').locator('.ice-toast__action').click(); await page.waitForTimeout(300);
+  check('redacted_action_keeps_original_callback', await page.evaluate(() => window.labelRuns === 1));
+  check('action_failure_redacts_label_and_basic_credentials', !(await page.locator('.ice-toast--danger').innerText()).match(/fixture-label-value|dXNlcjpwYXNz/));
+  await clear(labelId); await page.evaluate(() => document.querySelector('.ice-toast--danger .ice-toast__close')?.click()); await page.waitForTimeout(300);
+
   let id = await show('焦点与悬停独立');
   await card('焦点与悬停独立').hover();
   await card('焦点与悬停独立').locator('.ice-toast__action').focus();

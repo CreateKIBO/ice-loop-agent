@@ -137,3 +137,17 @@ test('unknown inline titles and backend actions redact credentials before clippi
   }
   assert.equal(errorText.errorDisplay(Error('请输入标题')).title, '请输入标题');
 });
+
+test('Basic authorization credentials stay hidden in diagnostics and inline feedback', () => {
+  for (const message of [
+    'Authorization: Basic dXNlcjpwYXNz',
+    'Proxy-Authorization: Basic cHJveHk6cGFzcw==',
+    '{"Authorization":"Basic dXNlcjpwYXNz"}',
+  ]) {
+    const shown = errorText.errorDisplay({ message, action: message });
+    for (const field of [shown.title, shown.action, shown.diagnostic]) {
+      assert.ok(!field.includes('dXNlcjpwYXNz') && !field.includes('cHJveHk6cGFzcw=='), field);
+    }
+  }
+  assert.equal(errorText.redactText('已保存 3 个资源；下一步核对文章'), '已保存 3 个资源；下一步核对文章');
+});

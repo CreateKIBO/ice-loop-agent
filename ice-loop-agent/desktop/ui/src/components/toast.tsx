@@ -24,7 +24,8 @@ const emit = () => listeners.forEach(listener => listener());
 
 function show(tone: Tone, input: ToastInput | string): number {
   const raw = typeof input === "string" ? { title: input } : input;
-  const value = { ...raw, title: redactText(raw.title), detail: raw.detail ? redactText(raw.detail) : undefined };
+  const value = { ...raw, title: redactText(raw.title), detail: raw.detail ? redactText(raw.detail) : undefined,
+    action: raw.action ? { ...raw.action, label: redactText(raw.action.label) } : undefined };
   const id = ++sequence;
   // 带动作的提示多给几秒，避免"撤销"还没点到就消失。
   const duration = value.duration ?? DEFAULT_DURATION[tone] + (value.action ? 2_500 : 0);

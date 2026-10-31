@@ -30,6 +30,7 @@ export function redactText(text: string): string {
   return text
     .replace(/sk-[A-Za-z0-9_-]{8,}/gi, "sk-***")
     .replace(/Bearer\s+[^\s"',;]+/gi, "Bearer ***")
+    .replace(/(["']?(?:proxy-)?authorization["']?\s*[:=]\s*["']?Basic[ \t]+)[A-Za-z0-9+/_-]+={0,2}/gi, '$1***')
     .replace(/(["']?[\w-]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|authorization)[\w-]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi, '$1"[已隐藏]"')
     .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[已隐藏]@");
 }
