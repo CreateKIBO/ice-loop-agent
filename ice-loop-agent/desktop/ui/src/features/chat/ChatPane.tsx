@@ -216,7 +216,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
       <div ref={logRef} onScroll={onScroll} onWheel={scrollIntent}
            onPointerDown={event => { if (event.target === event.currentTarget) scrollIntent(); }}
            onPointerMove={event => { if (event.buttons === 1) scrollIntent(); }}
-           onTouchStart={scrollIntent} onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) scrollIntent(); }}
+           onTouchStart={scrollIntent} onKeyDown={event => { if (['Tab', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) scrollIntent(); }}
            className="ice-chat-log" role="log" tabIndex={0}
            aria-label="对话记录" aria-relevant="additions"
            style={{ padding: "var(--ice-space-4)" }}>
