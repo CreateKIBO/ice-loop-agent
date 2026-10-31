@@ -7,6 +7,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { registerToastHost } from './toastHost';
 import { ActivityRail } from './ActivityRail';
+import { redactText } from './errorText';
 
 import "../styles/tokens.css";
 import "../styles/base.css";
@@ -99,10 +100,10 @@ export function ErrorPanel({ title, detail, onRetry, onDismiss, retryLabel }: {
     <div role="alert" style={{
       border: "1px solid var(--ice-danger)", borderRadius: "var(--ice-radius-lg)",
       padding: "var(--ice-space-4)", background: "var(--ice-surface)",
-      display: "grid", gap: "var(--ice-space-3)",
+      display: "grid", gap: "var(--ice-space-3)", minWidth: 0, overflowWrap: "anywhere",
     }}>
-      <strong>{title}</strong>
-      {detail && <div style={{ color: "var(--ice-text-secondary)", whiteSpace: "pre-wrap" }}>{detail}</div>}
+      <strong>{redactText(title)}</strong>
+      {detail && <div style={{ color: "var(--ice-text-secondary)", whiteSpace: "pre-wrap" }}>{redactText(detail)}</div>}
       <div style={{ display: "flex", gap: "var(--ice-space-2)" }}>
         {onRetry && <Button variant="primary" onClick={onRetry}>{retryLabel ?? "重试"}</Button>}
         {onDismiss && <Button variant="ghost" onClick={onDismiss}>知道了</Button>}

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Button } from "./ui";
 import { toast } from "./toast";
+import { errorDisplay } from "./errorText";
 import { copyPlainText } from "../data/clipboard";
 
 /** Each receipt belongs to one copy operation and one committed text revision. */
@@ -35,7 +36,10 @@ export function CopyButton({ text, label = "复制", successLabel = "已复制" 
         await copyPlainText(text);
         if (current()) setSuccess(operation);
       } catch (error) {
-        if (current()) toast.error({ title: "复制失败", detail: (error as Error).message });
+        if (current()) {
+          const feedback = errorDisplay(error);
+          toast.error({ title: "复制失败", detail: [feedback.title, feedback.detail].filter(Boolean).join('：') });
+        }
       } finally {
         busyRef.current = false;
         if (mounted.current) setBusy(false);
