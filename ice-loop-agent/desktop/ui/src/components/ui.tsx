@@ -6,7 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { registerToastHost } from './toastHost';
-import { ActivityRail } from './ActivityRail';
+import { ActivityRail, useActivityReducedMotion } from './ActivityRail';
 import { redactText } from './errorText';
 
 import "../styles/tokens.css";
@@ -173,6 +173,12 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
   className?: string;
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const reduced = useActivityReducedMotion(), [entered, setEntered] = React.useState(false);
+  React.useLayoutEffect(() => {
+    // A preference change must not replay an already-open dialog's entrance.
+    // A real close starts a fresh entrance lifecycle for the next open.
+    if (!open || reduced) setEntered(open && reduced);
+  }, [open, reduced]);
   const returnFocus = React.useRef<HTMLElement | null>(null);
   const notificationCleanup = React.useRef<(() => void) | undefined>(undefined);
   const notificationRef = React.useCallback((node: HTMLDivElement | null) => {
@@ -203,8 +209,12 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="ice-dialog-overlay" />
+        <DialogPrimitive.Overlay className="ice-dialog-overlay" data-entered={entered || undefined} data-reduced-motion={reduced || undefined} />
         <DialogPrimitive.Content ref={contentRef} onOpenAutoFocus={focusInitial} onCloseAutoFocus={restoreFocus}
+                                 data-entered={entered || undefined} data-reduced-motion={reduced || undefined}
+                                 onAnimationEnd={event => {
+                                   if (event.target === event.currentTarget && event.animationName === 'ice-dialog-in') setEntered(true);
+                                 }}
                                  className={'ice-dialog' + (className ? ' ' + className : '')} style={{ width: `min(${width}px, calc(100vw - 48px))` }}
                                  {...(description ? {} : { "aria-describedby": undefined })}>
           <DialogHeader title={title} description={description} />

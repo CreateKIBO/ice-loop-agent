@@ -14,6 +14,7 @@ async function run() {
   const png = 'data:image/png;base64,' + fs.readFileSync(path.join(repo, '.demo-assets/f1.png')).toString('base64');
   esbuild.buildSync({ stdin: { contents: `
     import React from 'react'; import {createRoot} from 'react-dom/client';
+    import {MotionConfig} from 'motion/react';
     import {Dialog} from './components/ui'; import {ImageViewer} from './features/assets/ImageViewer';
     import {accountStore} from './data/client'; import {toast,Toaster} from './components/toast';
     accountStore.set('fixture-account'); window.reads=[]; window.urls=new Set();
@@ -24,8 +25,9 @@ async function run() {
     window.toast=toast;
     function App(){
       const [kind,setKind]=React.useState(null),[nested,setNested]=React.useState(false),[options,setOptions]=React.useState({title:'核对内容',description:'简短说明',caption:'示例图片'});
+      const [policy,setPolicy]=React.useState('user');window.setDialogMotionPolicy=setPolicy;
       window.setDialogOptions=setOptions;
-      return <><button id="open-generic" onClick={()=>setKind('generic')}>打开核对</button><button id="open-image" onClick={()=>setKind('image')}>查看图片</button>
+      return <MotionConfig reducedMotion={policy}><button id="open-generic" onClick={()=>setKind('generic')}>打开核对</button><button id="open-image" onClick={()=>setKind('image')}>查看图片</button>
         <Dialog open={kind==='generic'} onOpenChange={open=>{if(!open)setKind(null)}} title={options.title} description={options.description} initialFocus="#dialog-field"
           footer={<><button id="open-nested" onClick={()=>setNested(true)}>打开子层</button><button id="close-generic" onClick={()=>setKind(null)}>确认并关闭</button></>}>
           <input id="dialog-field" aria-label="核对输入"/><p>需要核对的正文内容。</p>
@@ -33,7 +35,7 @@ async function run() {
         <Dialog open={nested} onOpenChange={setNested} title="嵌套核对" description="子层说明" footer={<button id="close-nested" onClick={()=>setNested(false)}>返回父层</button>}>子层内容</Dialog>
         {kind==='image'&&<ImageViewer target={{kind:'resource',resourceId:'fixture-resource',accountId:'fixture-account',caption:options.caption}} onClose={()=>setKind(null)}/>}
         <Toaster/>
-      </>;
+      </MotionConfig>;
     }
     createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>);
   `, resolveDir: path.join(ui, 'src'), loader: 'tsx' }, bundle: true, outfile: path.join(evidence, 'app.js'), jsx: 'automatic', logLevel: 'silent' });
@@ -117,6 +119,70 @@ async function run() {
   await page.screenshot({ path: path.join(evidence, 'long-caption-image-short.png') });
   await close('open-image');
   check('closing_image_releases_blob_lease', await page.evaluate(() => window.urls.size === 0));
+
+  // Preference changes on an already open dialog must not play its entrance
+  // again. Inspect the real CSS animation and preserve the exact input node.
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page.evaluate(() => { delete document.documentElement.dataset.reduceMotion; window.setDialogOptions({title:'动效生命周期',description:'当前输入需要保留',caption:'示例图片'}); });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const motionSample = () => dialog.evaluate(n => ({
+    scale: new DOMMatrix(getComputedStyle(n).transform).m22,
+    running: n.getAnimations().filter(a => a.playState === 'running').map(a => a.animationName),
+    overlayRunning: document.querySelector('.ice-dialog-overlay').getAnimations().filter(a => a.playState === 'running').map(a => a.animationName),
+  }));
+  const twoFrames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.locator('#open-generic').click(); await dialog.waitFor();
+  report.motion = { normalEntry: await motionSample() };
+  check('normal_open_keeps_real_entrance', report.motion.normalEntry.running.includes('ice-dialog-in'));
+  await page.waitForTimeout(300);
+  await page.locator('#dialog-field').fill('重播入场不能重置这份输入');
+  await page.evaluate(() => { window.__motionField=document.getElementById('dialog-field'); window.__motionDialog=window.__motionField.closest('[role="dialog"]'); });
+  for (const policy of ['manual', 'system', 'parent']) {
+    if (policy === 'manual') await page.evaluate(() => document.documentElement.dataset.reduceMotion = 'true');
+    if (policy === 'system') await page.emulateMedia({ reducedMotion: 'reduce' });
+    if (policy === 'parent') await page.evaluate(() => window.setDialogMotionPolicy('always'));
+    await twoFrames();
+    const reduced = await motionSample();
+    check(policy + '_live_dialog_is_static', reduced.running.length === 0 && reduced.overlayRunning.length === 0 && Math.abs(reduced.scale - 1) < 0.001);
+    if (policy === 'manual') await page.evaluate(() => delete document.documentElement.dataset.reduceMotion);
+    if (policy === 'system') await page.emulateMedia({ reducedMotion: 'no-preference' });
+    if (policy === 'parent') await page.evaluate(() => window.setDialogMotionPolicy('user'));
+    await twoFrames();
+    const restored = await motionSample(); (report.motion.preferences ??= []).push({ policy, reduced, restored });
+    check(policy + '_restore_does_not_replay_open_entrance', restored.running.length === 0 && restored.overlayRunning.length === 0 && Math.abs(restored.scale - 1) < 0.001);
+    check(policy + '_preference_keeps_nodes_input_and_focus', await page.evaluate(() =>
+      window.__motionDialog===document.querySelector('[role="dialog"]') && window.__motionField===document.getElementById('dialog-field')
+      && window.__motionField.value==='重播入场不能重置这份输入' && document.activeElement===window.__motionField));
+    await page.waitForTimeout(300);
+  }
+  await close('open-generic', 'motion_normal');
+  await page.evaluate(() => window.setDialogMotionPolicy('always'));
+  await page.locator('#open-generic').click(); await dialog.waitFor(); await twoFrames();
+  report.motion.parentOpen = await motionSample();
+  check('parent_reduced_open_disables_css_dialog_and_overlay_motion', report.motion.parentOpen.running.length === 0 && report.motion.parentOpen.overlayRunning.length === 0 && Math.abs(report.motion.parentOpen.scale - 1) < 0.001);
+  await close('open-generic', 'motion_parent');
+  await page.evaluate(() => window.setDialogMotionPolicy('user'));
+  await page.locator('#open-generic').click(); await dialog.waitFor();
+  report.motion.reopened = await motionSample();
+  check('explicit_reopen_restores_normal_entrance', report.motion.reopened.running.includes('ice-dialog-in'));
+  await page.waitForTimeout(300); await close('open-generic', 'motion_reopened');
+  for (const policy of ['manual', 'system', 'parent']) {
+    await page.locator('#open-generic').click(); await dialog.waitFor();
+    const before = await motionSample();
+    check(policy + '_interrupt_probe_starts_during_real_entrance', before.running.includes('ice-dialog-in'));
+    if (policy === 'manual') await page.evaluate(() => document.documentElement.dataset.reduceMotion = 'true');
+    if (policy === 'system') await page.emulateMedia({ reducedMotion: 'reduce' });
+    if (policy === 'parent') await page.evaluate(() => window.setDialogMotionPolicy('always'));
+    await twoFrames(); const stopped = await motionSample();
+    check(policy + '_interrupt_stops_dialog_and_overlay', stopped.running.length === 0 && stopped.overlayRunning.length === 0 && Math.abs(stopped.scale - 1) < 0.001);
+    if (policy === 'manual') await page.evaluate(() => delete document.documentElement.dataset.reduceMotion);
+    if (policy === 'system') await page.emulateMedia({ reducedMotion: 'no-preference' });
+    if (policy === 'parent') await page.evaluate(() => window.setDialogMotionPolicy('user'));
+    await twoFrames(); const restored = await motionSample();
+    check(policy + '_interrupted_entrance_does_not_restart', restored.running.length === 0 && restored.overlayRunning.length === 0 && Math.abs(restored.scale - 1) < 0.001);
+    (report.motion.interruptions ??= []).push({ policy, before, stopped, restored });
+    await close('open-generic', 'interrupt_' + policy);
+  }
   check('no_renderer_errors', report.errors.length === 0);
   check('source_unchanged_during_run', JSON.stringify(fingerprint()) === JSON.stringify(report.sources));
   assert(Object.values(report.checks).every(Boolean), 'Failed: ' + Object.keys(report.checks).filter(key => !report.checks[key]).join(', '));
