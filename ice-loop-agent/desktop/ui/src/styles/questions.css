@@ -1,0 +1,75 @@
+/* v3.1 助手提问框：停靠在行动岛（输入框）上方，逐题作答。 */
+.ice-qbox { display: grid; gap: 10px; padding: 12px 14px; max-height: min(56vh, 520px); overflow: auto; overscroll-behavior: contain; }
+.ice-qbox--collapsed { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: var(--ice-font-size-md);
+  color: var(--ice-text-secondary); max-height: none; }
+.ice-qbox__badge { min-width: 34px; height: 20px; padding: 0 6px; border-radius: 10px; display: inline-grid; place-items: center;
+  background: var(--ice-info-bg); color: var(--ice-signal-blue); font-size: 12px; font-weight: 600; }
+
+.ice-qbox__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ice-qbox__head > strong { font-size: var(--ice-font-size-md); }
+.ice-qbox__tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.ice-qbox__tab { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--ice-border-subtle); background: var(--ice-surface); color: var(--ice-text-secondary);
+  font: inherit; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background var(--ice-motion-fast) var(--ice-motion-ease), border-color var(--ice-motion-fast) var(--ice-motion-ease); }
+.ice-qbox__tab:hover { border-color: var(--ice-border); color: var(--ice-text); }
+.ice-qbox__tab[aria-current="step"] { border-color: var(--ice-signal-blue); color: var(--ice-signal-blue); background: var(--ice-info-bg); font-weight: 600; }
+.ice-qbox__tab:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+.ice-qbox__tick { width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 10px;
+  background: var(--ice-surface-sunken); color: var(--ice-text-secondary); flex: 0 0 16px; }
+.ice-qbox__tab[data-done="true"] .ice-qbox__tick { background: var(--ice-success-bg); color: var(--ice-success); }
+
+.ice-qbox__body { display: grid; gap: 10px; min-width: 0; }
+.ice-qbox__question { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; min-width: 0; }
+.ice-qbox__question legend { padding: 0; font-size: var(--ice-font-size-lg); font-weight: 600; line-height: 1.5; color: var(--ice-text); }
+.ice-qbox__hint { font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); font-weight: 400; }
+.ice-qbox__options { display: grid; gap: 6px; }
+.ice-qbox__option { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 12px; border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-md); background: var(--ice-surface);
+  text-align: left; font: inherit; color: var(--ice-text); cursor: pointer;
+  transition: border-color var(--ice-motion-fast) var(--ice-motion-ease), background var(--ice-motion-fast) var(--ice-motion-ease), transform var(--ice-motion-fast) var(--ice-motion-ease); }
+.ice-qbox__option:hover:not(:disabled) { border-color: var(--ice-border-strong); background: var(--ice-surface-muted); }
+.ice-qbox__option:active:not(:disabled) { transform: scale(0.995); }
+.ice-qbox__option:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+.ice-qbox__option[aria-checked="true"] { border-color: var(--ice-signal-blue); background: var(--ice-info-bg); }
+.ice-qbox__option:disabled { opacity: .6; cursor: default; }
+.ice-qbox__mark { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--ice-border-strong); display: grid; place-items: center;
+  font-size: 9px; color: var(--ice-signal-blue); }
+.ice-qbox__mark.is-check { border-radius: 4px; font-size: 11px; }
+.ice-qbox__option[aria-checked="true"] .ice-qbox__mark { border-color: var(--ice-signal-blue); }
+.ice-qbox__label { display: grid; gap: 2px; min-width: 0; }
+.ice-qbox__label > span:first-child { font-weight: 500; overflow-wrap: anywhere; }
+.ice-qbox__desc { font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.ice-qbox__option kbd { font: inherit; font-size: 11px; color: var(--ice-text-secondary); border: 1px solid var(--ice-border-subtle);
+  border-radius: 4px; padding: 0 5px; background: var(--ice-surface-muted); }
+
+.ice-qbox__other { display: grid; gap: 4px; padding: 8px 12px; border: 1px dashed var(--ice-border); border-radius: var(--ice-radius-md); }
+.ice-qbox__other.is-filled { border-style: solid; border-color: var(--ice-signal-blue); background: var(--ice-info-bg); }
+.ice-qbox__other label { font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+.ice-qbox__other textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 40px; border: 0; padding: 2px 0;
+  background: transparent; font: inherit; line-height: 1.5; color: var(--ice-text); outline: none; }
+
+.ice-qbox__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ice-qbox__foot .ice-link-btn.is-on { color: var(--ice-success); font-weight: 600; }
+
+.ice-qbox__review ol { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.ice-qbox__review-row { display: grid; gap: 2px; width: 100%; text-align: left; padding: 8px 12px; border: 1px solid var(--ice-border-subtle);
+  border-radius: var(--ice-radius-md); background: var(--ice-surface); font: inherit; cursor: pointer; color: var(--ice-text); }
+.ice-qbox__review-row:hover { border-color: var(--ice-border-strong); }
+.ice-qbox__review-row:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+.ice-qbox__review-q { font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+.ice-qbox__review-a { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ice-qbox__review li[data-missing="true"] .ice-qbox__review-row { border-color: var(--ice-warning); }
+.ice-qbox__review li[data-missing="true"] .ice-qbox__review-a { color: var(--ice-warning); }
+.ice-qbox__more { margin-bottom: 10px; font-size: var(--ice-font-size-sm); }
+.ice-qbox__more summary { cursor: pointer; color: var(--ice-text-secondary); }
+.ice-qbox__more select { margin-top: 6px; width: 100%; font: inherit; color: var(--ice-text); background: var(--ice-bg);
+  border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); padding: 6px 8px; }
+
+/* 对话流中的问题记录（摘要） */
+.ice-clarification__list { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ice-qbox__option, .ice-qbox__tab { transition: none; }
+  .ice-qbox__option:active:not(:disabled) { transform: none; }
+}

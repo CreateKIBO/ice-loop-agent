@@ -475,3 +475,30 @@ class TestMigration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestClarificationQuestions(unittest.TestCase):
+    """v3.1：助手提问框——选项说明、短标签、多选；纯文本旧格式保持原样。"""
+    def test_rich_options_are_normalized(self):
+        from ice_agent.creative_chat import CreativeChat
+        result = CreativeChat._questions({'questions': [
+            {'id': 'reader', 'question': '面向什么读者？', 'header': '读者对象超长标签会被截断',
+             'options': [{'label': '零基础（推荐）', 'description': '多用类比'}, '已有基础']},
+            {'id': 'parts', 'question': '包含哪些部分？', 'multiple': True, 'options': ['案例', '清单', '常见误区']},
+            {'id': 'tone', 'question': '语气？', 'options': ['轻松', '冷静']},
+            {'id': 'extra', 'question': '还有补充吗？'}]})
+        self.assertEqual(result[0]['options'], ['零基础（推荐）', '已有基础'])
+        self.assertEqual(result[0]['details'], ['多用类比', ''])
+        self.assertEqual(result[0]['header'], '读者对象超长标签会被截断'[:12])
+        self.assertTrue(result[1]['multiple'])
+        self.assertEqual(result[2], {'id': 'tone', 'question': '语气？', 'options': ['轻松', '冷静']})
+        self.assertEqual(result[3]['options'], [])
+
+    def test_invalid_questions_rejected(self):
+        from ice_agent.creative_chat import CreativeChat
+        with self.assertRaises(ValueError):
+            CreativeChat._questions({'questions': [{'id': f'q{i}', 'question': '?'} for i in range(5)]})
+        with self.assertRaises(ValueError):
+            CreativeChat._questions({'questions': [{'id': 'a', 'question': '?', 'options': [{'label': ''}]}]})
+        with self.assertRaises(ValueError):
+            CreativeChat._questions({'questions': [{'id': 'a', 'question': '?', 'options': ['同', {'label': '同'}]}]})

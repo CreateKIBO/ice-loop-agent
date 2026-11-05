@@ -589,7 +589,9 @@ class CreativeChat:
                 'prompts': {'type': 'list', 'item': 'str', 'required': True},
                 'questions': {'type': 'list', 'required': False, 'item': {'type': 'object', 'fields': {
                     'id': {'type': 'str'}, 'question': {'type': 'str'},
-                    'options': {'type': 'list', 'item': 'str', 'required': False}}}}}}
+                    'header': {'type': 'str', 'required': False}, 'multiple': {'type': 'bool', 'required': False},
+                    # 选项可为短文本，或 {"label":…, "description":…}；入库前统一规范化。
+                    'options': {'type': 'list', 'item': 'any', 'required': False}}}}}}
         req = LLMRequest(role='writer', node='creative_chat', prompt=text, context=context, schema=schema, stream=True, timeout=300,
             history=transcript, system=(
                 '你是专门服务当前公众号的编辑助手。只讨论观点、拟题、组织大纲、编辑文章和准备配图。'
@@ -605,8 +607,10 @@ class CreativeChat:
                 '说明元素位置、文字层级、箭头方向，不只复述标题；不用无关插画或真实产品logo。'
                 '范例只示范结构，主题和图内文字必须依据当前正文。reply用中文说明每个图位应上传哪些参考图及顺序。'
                 '若缺少会改变文章方向、读者定位或关键结论的信息，先提问，不要猜测。'
-                '结构化模式在questions给出最多3个问题，每项id用英文数字下划线，question用中文，'
-                'options可为0至4个简短中文选项；此时title、body留空，prompts为空。'
+                '结构化模式在questions给出最多4个问题，每项id用英文数字下划线，question用中文且每题只问一件事，'
+                'header为不超过8字的短标签；options可为0至4个选项，每项为{"label":"简短中文选项","description":"一句话说明选择后的影响"}；'
+                '有推荐项时放在第一位并在label末尾加“（推荐）”；可多选时设置multiple为true；'
+                '用户总能自行填写其他答案，因此不要提供“其他”选项；此时title、body留空，prompts为空。'
                 '已明确的事项不重复提问；一般待核验事实可以保留标记。无需追问时questions为空。'
                 'reply用中文说明修改和待办，prompts没有需求时为空列表。生成内容只是未审批候选，不会自动保存或审批。'
                 + '\n本轮写作技能与检查规则（只用于写作和审阅，不授予执行或发布权限）：' + json.dumps({
@@ -615,7 +619,8 @@ class CreativeChat:
                    '格式示例：{"reply":"初稿完成","title":"文章标题","body":"# 文章标题\\n\\n正文",'
                    '"prompts":[],"questions":[]}。需要澄清时示例：{"reply":"请确认读者",'
                    '"title":"","body":"","prompts":[],"questions":[{"id":"reader",'
-                   '"question":"面向什么读者？","options":["零基础","已有基础"]}]}。' if schema else '')))
+                   '"question":"面向什么读者？","header":"读者","options":[{"label":"零基础（推荐）","description":"多用类比，少用术语"},'
+                   '{"label":"已有基础","description":"直接讲原理和进阶用法"}]}]}。' if schema else '')))
         from .llm.router import request_manifest
         input_manifest = request_manifest(req)
         mid, uid = new_id('message'), new_id('message')
@@ -733,8 +738,8 @@ class CreativeChat:
     @staticmethod
     def _questions(data: dict) -> list[dict]:
         questions = data.get('questions', [])
-        if not isinstance(questions, list) or len(questions) > 3:
-            raise ValueError('澄清问题最多3个')
+        if not isinstance(questions, list) or len(questions) > 4:
+            raise ValueError('澄清问题最多4个')
         result, ids = [], set()
         for value in questions:
             if not isinstance(value, dict):
@@ -746,11 +751,28 @@ class CreativeChat:
             options = value.get('options', [])
             if not isinstance(options, list) or len(options) > 4:
                 raise ValueError('每个问题最多4个选项')
-            options = [bounded(option, 200, '问题选项').strip() for option in options]
-            if len(options) != len(set(options)):
-                raise ValueError('问题选项不能重复')
+            labels, details = [], []
+            for option in options:
+                # 兼容两种写法：纯文本，或 {"label","description"}。
+                if isinstance(option, dict):
+                    labels.append(bounded(option.get('label'), 200, '问题选项').strip())
+                    note = option.get('description', '')
+                    details.append(bounded(note, 200, '选项说明').strip() if note else '')
+                else:
+                    labels.append(bounded(option, 200, '问题选项').strip())
+                    details.append('')
+            if any(not label for label in labels) or len(labels) != len(set(labels)):
+                raise ValueError('问题选项不能为空或重复')
+            item = {'id': qid, 'question': question, 'options': labels}
+            header = value.get('header')
+            if isinstance(header, str) and header.strip():
+                item['header'] = header.strip()[:12]
+            if value.get('multiple') is True and labels:
+                item['multiple'] = True
+            if any(details):
+                item['details'] = details
             ids.add(qid)
-            result.append({'id': qid, 'question': question, 'options': options})
+            result.append(item)
         return result
 
     def _generate(self, account: dict, cid: str, mid: str, req: LLMRequest, base: dict, parent: str | None, snapshot: dict, cancel: threading.Event) -> None:
