@@ -503,6 +503,8 @@ async function createWindow() {
   chatLifecycle('window:creating');
   window = new BrowserWindow({ width: 1460, height: 940, minWidth: 1040, minHeight: 720,
     title: 'ICE Loop Studio', backgroundColor: '#F3F2ED', show: false,
+    // 第26轮：蓝白回环应用图标（Windows 用多尺寸 ICO，其它平台用 PNG）。
+    icon: path.join(__dirname, 'assets', 'icon', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true,
       backgroundThrottling: !process.argv.includes('--smoke')&&!process.argv.includes('--browser-smoke')&&!process.argv.includes('--chat-smoke')&&!process.argv.includes('--prompt-smoke') } });
   chatLifecycle('window:created');

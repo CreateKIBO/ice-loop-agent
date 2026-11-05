@@ -17,8 +17,8 @@ type GraphNode = {
 };
 
 const STATE_COLOR: Record<string, string> = {
-  succeeded: "#1F7A4D", running: "#2448DB", failed: "#C23B33",
-  paused: "#9A6700", queued: "#9AA0A8",
+  succeeded: "var(--ice-success)", running: "var(--ice-signal-blue)", failed: "var(--ice-danger)",
+  paused: "var(--ice-warning)", queued: "var(--ice-text-disabled)",
 };
 
 const NODE_LABEL: Record<string, string> = {
@@ -63,15 +63,15 @@ function WorkflowGraphInner({ jobId }: { jobId: string }) {
       label: (
         <div style={{ fontSize: 12 }}>
           <strong>{NODE_LABEL[node.id] ?? node.id}</strong>
-          <div style={{ color: STATE_COLOR[node.state] ?? "#5A6069" }}>
+          <div style={{ color: STATE_COLOR[node.state] ?? "var(--ice-text-secondary)" }}>
             {node.state}{node.attempt > 1 ? ` · 第${node.attempt}次` : ""}
           </div>
-          {node.error && <div style={{ color: "#C23B33", maxWidth: 160 }}>{node.error}</div>}
+          {node.error && <div style={{ color: "var(--ice-danger)", maxWidth: 160 }}>{node.error}</div>}
         </div>
       ),
     },
     style: {
-      background: "var(--ice-surface)", border: `2px solid ${STATE_COLOR[node.state] ?? "#B8B4A8"}`,
+      background: "var(--ice-surface)", border: `2px solid ${STATE_COLOR[node.state] ?? "var(--ice-border-strong)"}`,
       borderRadius: 8, width: 170,
     },
   }));

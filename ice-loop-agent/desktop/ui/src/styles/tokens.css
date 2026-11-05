@@ -80,6 +80,8 @@
   --ice-border-faint: #E6E3DA;
   --ice-border-focus: #B9C6F4;
   --ice-reading-max: 760px;        /* 助手回复的舒适行宽 */
+  /* 第27轮：文本选区与检索命中高亮（原为两处写死的 rgba） */
+  --ice-highlight: rgba(36, 72, 219, 0.18);
 
   /* 密度（紧凑模式由 [data-density=compact] 覆盖） */
   --ice-row-gap: var(--ice-space-2);

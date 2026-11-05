@@ -10,6 +10,7 @@ import { editorialStore,paletteStore, publicationSettingsStore, settingsStore,op
 import { useCurrentAccount } from '../../data/client';
 import { loadComposerDraft,saveComposerDraft,type ComposerMode } from '../../data/composerDraft';
 import { checklistStatus, loadStartChecklistDismissed, saveStartChecklistDismissed } from './startChecklist';
+import { BrandMark } from "../../components/BrandMark";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: [0.2, 0, 0, 1] as const } } };
@@ -65,7 +66,7 @@ function WelcomeForAccount({account}:{account:string}) {
     <div className="ice-welcome">
       <motion.div className="ice-welcome__inner" variants={container} initial="hidden" animate="show">
         <motion.div variants={item} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span className="ice-welcome__mark" aria-hidden>i</span>
+          <BrandMark className="ice-welcome__mark" />
           <div>
             <h1>{greeting()}{accountName ? `，${accountName}` : ""}</h1>
             <p>和 Agent 讨论选题、出初稿、改稿，满意后交给制作流水线。</p>

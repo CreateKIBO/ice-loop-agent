@@ -12,7 +12,7 @@ body {
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: none; box-shadow: var(--ice-focus-ring); border-radius: var(--ice-radius-sm); }
 code, pre { font-family: var(--ice-font-mono); }
-::selection { background: rgba(36, 72, 219, 0.18); }
+::selection { background: var(--ice-highlight); }
 
 /* 滚动条（桌面紧凑） */
 ::-webkit-scrollbar { width: 10px; height: 10px; }

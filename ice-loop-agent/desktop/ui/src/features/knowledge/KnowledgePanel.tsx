@@ -23,7 +23,7 @@ function MarkedText({ marked }: { marked: string }) {
   return (
     <div style={{ fontSize: "var(--ice-font-size-sm)", lineHeight: 1.6 }}>
       {parts.map((part, index) => part.startsWith("『")
-        ? <mark key={index} style={{ background: "rgba(36,72,219,0.18)" }}>{part.slice(1, -1)}</mark>
+        ? <mark key={index} style={{ background: "var(--ice-highlight)" }}>{part.slice(1, -1)}</mark>
         : <span key={index}>{part}</span>)}
     </div>
   );

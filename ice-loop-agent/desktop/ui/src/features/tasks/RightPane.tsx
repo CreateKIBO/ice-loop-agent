@@ -15,6 +15,8 @@ import { DownloadStaging } from "../assets/DownloadStaging";
 import { KnowledgePanel } from "../knowledge/KnowledgePanel";
 import { CopyButton } from "../../components/CopyButton";
 import { usePaneActive } from "../../app/PaneActivity";
+import { useActivityReducedMotion } from "../../components/ActivityRail";
+import { flashSurface } from "../../components/flash";
 import { JOB_STATUS_FILTERS, jobGuide, jobMatchesFilter, type JobStatusFilter } from "./jobGuide";
 import { loadJobViewPrefs, saveJobViewPrefs, resetJobViewPrefs } from "./jobViewPrefs";
 
@@ -187,6 +189,17 @@ function JobCard({ job, compact, onReview }: { job: JobRow; compact: boolean; on
   const openingRef = React.useRef<"review" | "editor" | null>(null);
   const [error, setError] = React.useState<unknown>(null);
   const cardRef = React.useRef<HTMLDivElement>(null);
+  // 第28轮：任务从运行中/排队进入结果状态时，整张卡片按结果色轻闪一次底色（不位移、不改结构）；
+  // 首次渲染、筛选重挂载和减弱动效时都不闪。
+  const reducedMotion = useActivityReducedMotion();
+  const previousState = React.useRef(job.state);
+  React.useEffect(() => {
+    const before = previousState.current;
+    previousState.current = job.state;
+    if (before === job.state || reducedMotion || !ACTIVE_STATES.has(before) || ACTIVE_STATES.has(job.state)) return;
+    flashSurface(cardRef.current?.closest(".ice-card"),
+      job.state === "failed" ? "--ice-danger-bg" : job.state === "completed" ? "--ice-success-bg" : "--ice-info-bg");
+  }, [job.state, reducedMotion]);
   // R12 批次二：生命周期操作。运行中先 jobs.stop（可靠停止，不假装立即终止）；
   // 归档/删除不级联删除文章/图片/证据（v1.5.3 task_lifecycle 语义）。
   const act = async (method: string, label: string) => {
@@ -237,7 +250,11 @@ function JobCard({ job, compact, onReview }: { job: JobRow; compact: boolean; on
       <div ref={cardRef} data-job-focus tabIndex={-1} style={{ display: "flex", alignItems: "center", gap: "var(--ice-space-2)", outline: "none" }}>
         <span className={"ice-badge" + (job.stopping ? " ice-badge--warning"
                                          : STATE_TONE[job.state] ? ` ice-badge--${STATE_TONE[job.state]}` : "")}>
-          {job.stopping ? "正在停止…" : stateLabel}
+          {/* 状态文字切换时淡入（按状态重挂载这一小段文字，不影响卡片节点） */}
+          <motion.span key={job.stopping ? "stopping" : job.state} initial={reducedMotion ? false : { opacity: 0 }}
+                       animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}>
+            {job.stopping ? "正在停止…" : stateLabel}
+          </motion.span>
         </span>
         <span style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)" }}>
           {job.series}-{String(job.episode).padStart(3, "0")}

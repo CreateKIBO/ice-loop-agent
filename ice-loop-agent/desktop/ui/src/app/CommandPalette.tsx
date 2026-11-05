@@ -132,11 +132,11 @@ export function CommandPalette({ open, onOpenChange }: {
   const loading = open && (conversations.isLoading || jobs.isLoading);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="命令面板（Ctrl+K）"
-            footer={<span style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)" }}>
-              ↑↓ 选择 · Enter 执行 · Esc 关闭</span>}>
+    // 第26轮：样式改由 .ice-palette 类控制（island.css），结构、role、aria 与键盘逻辑不变。
+    <Dialog open={open} onOpenChange={onOpenChange} title="命令面板（Ctrl+K）" className="ice-palette"
+            footer={<span className="ice-palette__keys"><kbd>↑↓</kbd> 选择 · <kbd>Enter</kbd> 执行 · <kbd>Esc</kbd> 关闭</span>}>
       <div style={{ display: "grid", gap: 8 }}>
-        <Input ref={inputRef} value={query} placeholder="搜索命令、会话或文章标题…" aria-label="搜索命令"
+        <Input ref={inputRef} className="ice-palette__input" value={query} placeholder="搜索命令、会话或文章标题…" aria-label="搜索命令"
                role="combobox" aria-expanded aria-controls="ice-palette-list"
                aria-activedescendant={active ? "ice-palette-" + clampedIndex : undefined}
                onChange={event => { setQuery(event.target.value); setActiveIndex(0); }}
@@ -149,35 +149,26 @@ export function CommandPalette({ open, onOpenChange }: {
                    void execute(active);
                  }
                }} />
-        <ul ref={listRef} id="ice-palette-list" role="listbox" aria-label="可用命令"
-            style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 2,
-                     gridTemplateColumns: "minmax(0, 1fr)", maxHeight: "min(420px, 55vh)", overflowY: "auto" }}>
+        <ul ref={listRef} id="ice-palette-list" role="listbox" aria-label="可用命令" className="ice-palette__list">
           {filtered.map((action, index) => (
             <React.Fragment key={action.id}>
               {(index === 0 || filtered[index - 1].group !== action.group) && (
-                <li role="presentation" style={{ fontSize: "var(--ice-font-size-sm)", color: "var(--ice-text-secondary)",
-                                                 padding: "6px 10px 2px", fontWeight: 600 }}>{action.group}</li>
+                <li role="presentation" className="ice-palette__group">{action.group}</li>
               )}
               <li id={"ice-palette-" + index} data-index={index} role="option" aria-selected={index === clampedIndex}
                   onMouseMove={() => { if (index !== clampedIndex) setActiveIndex(index); }}
                   onClick={() => { void execute(action); }}
-                  style={{
-                    display: "flex", alignItems: "baseline", gap: 8, padding: "6px 10px",
-                    cursor: running ? "progress" : "pointer", borderRadius: 6,
-                    background: index === clampedIndex ? "var(--ice-info-bg)" : "transparent",
-                  }}>
-                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {action.label}
-                </span>
-                {action.hint && <span style={{ color: "var(--ice-text-secondary)", fontSize: 12, flexShrink: 0 }}>{action.hint}</span>}
+                  className="ice-palette__option" data-running={running || undefined}>
+                <span className="ice-palette__label">{action.label}</span>
+                {action.hint && <span className="ice-palette__hint">{action.hint}</span>}
               </li>
             </React.Fragment>
           ))}
           {filtered.length === 0 && !loading && (
-            <li role="presentation" style={{ color: "var(--ice-text-secondary)", padding: 8 }}>没有匹配的命令、会话或文章</li>
+            <li role="presentation" className="ice-palette__empty">没有匹配的命令、会话或文章</li>
           )}
           {loading && (
-            <li role="presentation" style={{ color: "var(--ice-text-secondary)", padding: 8 }}>正在读取会话和任务…</li>
+            <li role="presentation" className="ice-palette__empty">正在读取会话和任务…</li>
           )}
         </ul>
         {actionError && <div role="alert" className="ice-error-text">{actionError}</div>}

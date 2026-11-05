@@ -1,7 +1,9 @@
 // Docked panes on large windows; one preserved surface at a time in compact windows.
 import * as React from "react";
+import { motion } from "motion/react";
 
 import { Button, EmptyState } from "../components/ui";
+import { BrandMark } from "../components/BrandMark";
 import { PaneActivity } from "./PaneActivity";
 import { paletteStore } from "./uiState";
 import {
@@ -148,7 +150,7 @@ export function WorkbenchShell({ left, center, right, navigationKey = "" }: {
       {/* 岛屿布局：顶栏直接画在画布上，品牌 + 快捷搜索 + 布局切换；不再是一条白色工具栏。 */}
       <header className="ice-shell-toolbar">
         <span className="ice-shell-toolbar__brand" aria-hidden="true">
-          <span className="ice-shell-toolbar__mark">i</span>
+          <BrandMark className="ice-shell-toolbar__mark" />
           <span className="ice-shell-toolbar__name">ICE Loop Studio</span>
         </span>
         <button type="button" className="ice-shell-toolbar__search" aria-keyshortcuts="Control+K"
@@ -159,17 +161,22 @@ export function WorkbenchShell({ left, center, right, navigationKey = "" }: {
         </button>
         <div className="ice-shell-toolbar__seg" role="group" aria-label="工作区布局"
              data-mode={compact ? "compact" : "docked"}>
+          {/* 第28轮：窄窗口下三项互斥，用滑动底块（与"创作模式""会话筛选"同一做法）；
+              宽窗口下左右两项是独立开关，仍用底色过渡。 */}
           <Button size="sm" variant="ghost" aria-controls="ice-navigation-pane" aria-expanded={layout.left}
                   aria-pressed={layout.left} onClick={() => toggle("left")}>
-            <PaneIcon side="left" />会话与草稿
+            {compact && layout.left && <SegPill />}
+            <span className="ice-shell-toolbar__label"><PaneIcon side="left" />会话与草稿</span>
           </Button>
           <Button size="sm" variant="ghost" aria-controls="ice-writing-pane"
                   aria-pressed={compact ? layout.center : !docked.left && !docked.right} onClick={focusWriting}>
-            <FocusIcon />{compact ? "写作区" : docked.left || docked.right ? "专注写作" : "恢复侧栏"}
+            {compact && layout.center && <SegPill />}
+            <span className="ice-shell-toolbar__label"><FocusIcon />{compact ? "写作区" : docked.left || docked.right ? "专注写作" : "恢复侧栏"}</span>
           </Button>
           <Button size="sm" variant="ghost" aria-controls="ice-task-pane" aria-expanded={layout.right}
                   aria-pressed={layout.right} onClick={() => toggle("right")}>
-            <PaneIcon side="right" />任务与资料
+            {compact && layout.right && <SegPill />}
+            <span className="ice-shell-toolbar__label"><PaneIcon side="right" />任务与资料</span>
           </Button>
         </div>
       </header>
@@ -209,6 +216,11 @@ function PaneIcon({ side }: { side: "left" | "right" }) {
     <rect x="2.5" y="3" width="15" height="14" rx="2" />
     <path d={side === "left" ? "M7.5 3v14" : "M12.5 3v14"} />
   </svg>;
+}
+
+function SegPill() {
+  return <motion.span layoutId="ice-shell-seg-pill" className="ice-shell-toolbar__pill" aria-hidden
+                      transition={{ type: "spring", stiffness: 500, damping: 38 }} />;
 }
 
 function FocusIcon() {

@@ -178,3 +178,117 @@ body { background: var(--ice-canvas); }
 .ice-nav-footer__tools > .ice-btn { justify-content: flex-start; padding: 0 8px; color: var(--ice-text-secondary); border-radius: 7px; }
 .ice-nav-footer__tools > .ice-btn:hover { color: var(--ice-text); background: var(--ice-surface); }
 .ice-nav-footer__version { font-size: 11px; color: var(--ice-text-disabled); padding: 0 8px; }
+
+/* ---------------------------------------------------------------- 第26轮：弹层与岛屿统一 */
+/* 遮罩：在画布色上压暗，不再是纯墨色 40% */
+.ice-dialog-overlay { background: rgba(21, 25, 31, 0.28); }
+.ice-dialog { border-color: var(--ice-island-border); box-shadow: 0 18px 48px rgba(21, 25, 31, 0.16); }
+
+/* 命令面板：大号搜索框 + 分组列表；选中项用 aria-selected 着色（原为内联背景） */
+.ice-palette.ice-dialog { padding: var(--ice-space-4); }
+.ice-palette .ice-palette__input {
+  width: 100%; height: 42px !important; padding: 0 12px 0 36px !important; font-size: 14px;
+  border-radius: 10px !important; background-color: var(--ice-surface-muted) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235A6069' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.3-4.3'/%3E%3C/svg%3E") !important;
+  /* Input 组件的内联 background 简写会清掉背景图，这里同样需要 !important */
+  background-repeat: no-repeat !important; background-position: 12px center !important;
+}
+.ice-palette .ice-palette__input:focus { border-color: var(--ice-signal-blue) !important; background-color: var(--ice-surface) !important; }
+.ice-palette .ice-palette__input:focus-visible { box-shadow: none; }
+.ice-palette__list {
+  list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px;
+  grid-template-columns: minmax(0, 1fr); max-height: min(420px, 55vh); overflow-y: auto;
+}
+.ice-palette__group { font-size: 11px; letter-spacing: .06em; color: var(--ice-text-secondary); padding: 10px 10px 4px; font-weight: 600; }
+.ice-palette__option {
+  position: relative; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 10px;
+  border-radius: 8px; cursor: pointer;
+}
+.ice-palette__option[data-running] { cursor: progress; }
+.ice-palette__option[aria-selected="true"] { background: var(--ice-info-bg); color: var(--ice-signal-blue); }
+.ice-palette__option[aria-selected="true"]::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--ice-signal-blue);
+}
+.ice-palette__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ice-palette__hint { flex-shrink: 0; font-size: 12px; color: var(--ice-text-secondary); }
+.ice-palette__empty { color: var(--ice-text-secondary); padding: 14px 10px; text-align: center; }
+.ice-palette__keys { color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
+.ice-palette__keys kbd {
+  font: 11px var(--ice-font-ui); padding: 1px 5px; border-radius: 5px;
+  background: var(--ice-surface-sunken); border: 1px solid var(--ice-border); color: var(--ice-text-secondary);
+}
+
+/* 轻提示：圆角与岛一致，阴影收小（v1.5：不用大阴影） */
+.ice-toast { border-radius: 12px; box-shadow: 0 8px 22px rgba(21, 25, 31, 0.18); }
+
+/* 窄窗口：顶栏分段按钮加大点击区域（单面板时它是唯一的面板切换入口） */
+.ice-shell[data-compact="true"] .ice-shell-toolbar { min-height: 54px; }
+.ice-shell[data-compact="true"] .ice-shell-toolbar__seg { padding: 4px; }
+.ice-shell[data-compact="true"] .ice-shell-toolbar__seg .ice-btn { height: 34px; min-width: 64px; padding: 0 14px; font-size: 13px; }
+@media (max-width: 620px) {
+  .ice-shell[data-compact="true"] .ice-shell-toolbar__seg .ice-btn { min-width: 0; padding: 0 10px; }
+}
+@media (pointer: coarse) {
+  .ice-shell-toolbar__seg .ice-btn { height: 40px; }
+  .ice-palette__option { min-height: 44px; }
+}
+
+/* 应用标识：蓝白回环图标替换原"i"字块（第26轮） */
+.ice-brand-mark { display: inline-grid; place-items: center; flex-shrink: 0; overflow: hidden; }
+.ice-brand-mark > img { width: 100%; height: 100%; display: block; object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.ice-shell-toolbar__mark.ice-brand-mark { width: 24px; height: 24px; background: none; border-radius: 0; }
+.ice-welcome__mark.ice-brand-mark { width: 48px; height: 48px; background: none; border-radius: 0; }
+
+/* ---------------------------------------------------------------- 第28轮：交互动效 */
+/* 1 侧栏展开：只给"岛"做 12px 滑入 + 淡入，pane 宽度仍由 WorkbenchShell 立即给定
+   （layout-native 在点击后立刻量宽，不能让宽度过渡）。收起保持瞬时：[hidden] 直接 display:none。
+   时长取 --ice-motion-panel，减弱动效时为 0，等同无动画。 */
+.ice-shell:not([data-compact]) .ice-pane--left > .ice-island,
+.ice-shell:not([data-compact]) .ice-pane--right > .ice-island-stack {
+  transition: opacity var(--ice-motion-panel) var(--ice-motion-ease), translate var(--ice-motion-panel) var(--ice-motion-ease);
+}
+@starting-style {
+  .ice-shell:not([data-compact]) .ice-pane--left > .ice-island { opacity: 0; translate: -12px 0; }
+  .ice-shell:not([data-compact]) .ice-pane--right > .ice-island-stack { opacity: 0; translate: 12px 0; }
+}
+/* 窄窗口切换面板：只淡入，不横移（整窗切换时位移会显得像翻页） */
+.ice-shell[data-compact="true"] .ice-pane > *,
+.ice-shell[data-compact="true"] .ice-pane--center > .ice-island {
+  transition: opacity var(--ice-motion-panel) var(--ice-motion-ease);
+}
+@starting-style {
+  .ice-shell[data-compact="true"] .ice-pane > *,
+  .ice-shell[data-compact="true"] .ice-pane--center > .ice-island { opacity: 0; }
+}
+
+/* 2 顶栏分段：宽窗口为独立开关（底色过渡）；窄窗口互斥，用滑动底块 */
+.ice-shell-toolbar__seg .ice-btn {
+  position: relative;
+  transition: background var(--ice-motion-fast) var(--ice-motion-ease), color var(--ice-motion-fast) var(--ice-motion-ease),
+              box-shadow var(--ice-motion-fast) var(--ice-motion-ease), transform var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-shell-toolbar__label { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 5px; }
+.ice-shell-toolbar__pill {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--ice-surface);
+  box-shadow: 0 1px 2px rgba(21, 25, 31, 0.08);
+}
+.ice-shell[data-compact="true"] .ice-shell-toolbar__seg button[aria-pressed="true"] { background: transparent; box-shadow: none; }
+
+/* 7 命令面板：选中底色过渡，左侧指示条淡入并纵向展开 */
+.ice-palette__option {
+  transition: background var(--ice-motion-fast) var(--ice-motion-ease), color var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-palette__option[aria-selected="true"]::before {
+  transition: opacity var(--ice-motion-fast) var(--ice-motion-ease), scale var(--ice-motion-fast) var(--ice-motion-ease);
+}
+@starting-style {
+  .ice-palette__option[aria-selected="true"]::before { opacity: 0; scale: 1 0.4; }
+}
+
+/* ---------------------------------------------------------------- 第29轮：复制成功对勾 */
+.ice-copy-btn[data-copied] { color: var(--ice-success) !important; }
+.ice-copy-btn__check { flex-shrink: 0; margin-right: 2px; }
+.ice-copy-btn__check path { stroke-dasharray: 24; stroke-dashoffset: 0; animation: ice-check-draw 280ms var(--ice-motion-ease) both; }
+@keyframes ice-check-draw { from { stroke-dashoffset: 24; } }
+@media (prefers-reduced-motion: reduce) { .ice-copy-btn__check path { animation: none; } }
+[data-reduce-motion="true"] .ice-copy-btn__check path { animation: none; }

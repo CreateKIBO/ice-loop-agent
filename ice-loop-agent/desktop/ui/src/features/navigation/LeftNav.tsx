@@ -15,7 +15,8 @@ import {
 } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
 import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
-import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,shortcutHelpStore } from "../../app/uiState";
+import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,shortcutHelpStore,draftFlashStore } from "../../app/uiState";
+import { flashSurface, motionReduced } from "../../components/flash";
 import { CopyButton } from "../../components/CopyButton";
 import { openWebsite } from '../../data/websites';
 import { MarkdownContent } from "../../components/MarkdownContent";
@@ -294,13 +295,25 @@ function RowAction({ label, title, onClick }: { label: string; title: string; on
 
 function DraftRowView({ draft }: { draft: DraftRow }) {
   const [open, setOpen] = React.useState(false);
+  // 第29轮：对话里"保存为草稿"成功后，本行定位到可见并轻闪一次。左栏收起时不定位，
+  // 过期（>6 秒，例如收起后很久才展开）的请求直接丢弃，避免无缘无故闪烁。
+  const rowRef = React.useRef<HTMLLIElement>(null);
+  const flash = draftFlashStore.use();
+  const paneActive = usePaneActive();
+  React.useEffect(() => {
+    if (!flash || flash.id !== draft.draft_id) return;
+    draftFlashStore.set(null);
+    if (!paneActive || Date.now() - flash.at > 6000) return;
+    rowRef.current?.scrollIntoView({ block: "nearest", behavior: motionReduced() ? "auto" : "smooth" });
+    flashSurface(rowRef.current, "--ice-success-bg");
+  }, [flash, draft.draft_id, paneActive]);
   const [source, setSource] = React.useState(false);
   const detail = useAccountQuery<DraftRow>("drafts.get", { draft_id: draft.draft_id },
     { enabled: open, staleTime: 0 });
   const statusLabel = draft.status === "accepted" ? "已采纳" :
     draft.status === "unapproved" ? "待审" : "手动";
   return (
-    <li className="ice-nav-row">
+    <li ref={rowRef} className="ice-nav-row" style={{ borderRadius: "var(--ice-radius-md)" }}>
       <button type="button" className="ice-nav-row__main" onClick={() => setOpen(true)}
               style={{ padding: "4px var(--ice-space-2)", fontSize: "var(--ice-font-size-sm)" }}
               title={draft.title}>

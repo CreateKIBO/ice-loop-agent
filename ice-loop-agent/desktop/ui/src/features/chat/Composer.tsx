@@ -1,6 +1,7 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { Button } from "../../components/ui";
+import { useActivityReducedMotion } from "../../components/ActivityRail";
 import { DeliveryNotice } from "./DeliveryNotice";
 import type {ChatDelivery} from "./useChatDelivery";
 import { toast } from "../../components/toast";
@@ -34,6 +35,7 @@ export function Composer({ conversationId, streaming, reuse, delivery }: { conve
   const [restored, setRestored] = React.useState(Boolean(initial.text));
   const draftEditId=React.useRef(initial.editId??crypto.randomUUID());
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const reducedMotion = useActivityReducedMotion();
   const updateText = (value: string) => { draftEditId.current=crypto.randomUUID(); setRestored(false); setText(value); };
   React.useEffect(() => {
     let ok = false;
@@ -62,6 +64,8 @@ export function Composer({ conversationId, streaming, reuse, delivery }: { conve
     const settled=delivery.settlement;
     if(settled?.result.accepted&&settled.record.source==='composer'&&settled.record.draftEditId===draftEditId.current){
       draftEditId.current=crypto.randomUUID();setText('');setRestored(false);
+      // 第28轮：发送被接受、输入框清空时给一次短暂淡入，确认"已发出"；减弱动效时跳过。
+      if(!reducedMotion)inputRef.current?.animate?.([{opacity:0.35},{opacity:1}],{duration:180,easing:'cubic-bezier(0.2,0,0,1)'});
     }
   },[delivery.settlement]);
   const submit = () => {

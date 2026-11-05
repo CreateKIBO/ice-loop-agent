@@ -15,6 +15,7 @@ import { engineStore, paletteStore } from "./app/uiState";
 import { ErrorBoundary, WorkbenchShell } from "./app/WorkbenchShell";
 import { toast, Toaster } from "./components/toast";
 import { Button, ErrorPanel, Spinner } from "./components/ui";
+import { BrandMark } from "./components/BrandMark";
 import { useAnyDirtyGuard, useCurrentConversation, useCurrentAccount, accountStore, queryClient, rpc, useEditorJob } from "./data/client";
 import { onEngineExit, relaunchApp, switchToClassic } from "./data/desktop";
 import { ChatPane } from "./features/chat/ChatPane";
@@ -81,7 +82,7 @@ function Splash({ children }: { children: ReactNode }) {
       <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
                   style={{ display: "grid", justifyItems: "center", gap: 14 }}>
-        <span className="ice-welcome__mark" aria-hidden>i</span>
+        <BrandMark className="ice-welcome__mark" />
         {children}
       </motion.div>
     </div>

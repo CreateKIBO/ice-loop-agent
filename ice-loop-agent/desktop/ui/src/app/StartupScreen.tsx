@@ -2,6 +2,7 @@ import * as React from 'react';
 import {MotionConfig,motion} from 'motion/react';
 import {ActivityRail,useActivityReducedMotion} from '../components/ActivityRail';
 import {Button} from '../components/ui';
+import {BrandMark} from '../components/BrandMark';
 import {backupSize} from '../features/backup/backupModel';
 import '../styles/startup.css';
 export type StartupState={revision:number;phase:string;cancelable:boolean;files_done?:number;bytes_done?:number;pages_done?:number;pages_total?:number};
@@ -19,7 +20,7 @@ export function StartupScreen(){
   const cancel=async()=>{if(busy.current)return;busy.current=true;setError('');try{const result=await window.ice?.cancelStartup?.();if(result?.cancelled)setCancelling(true);}catch{setError('取消请求未完成，请重试。');}finally{busy.current=false;}};
   const label=labels[state.phase]||'正在准备工作区';
   return <MotionConfig reducedMotion="user"><main className="ice-startup"><motion.section initial={reduced?false:{opacity:0}} animate={{opacity:1}} transition={{duration:0.16}}>
-    <span className="ice-startup__mark" aria-hidden>i</span><p className="ice-startup__eyebrow">ICE LOOP STUDIO</p>
+    <BrandMark className="ice-startup__mark" /><p className="ice-startup__eyebrow">ICE LOOP STUDIO</p>
     <h1>准备你的创作空间</h1><p role="status" aria-live="polite">{label}</p><ActivityRail active={state.phase!=='ready'} />
     {typeof state.bytes_done==='number'&&<p className="ice-startup__detail">已处理 {backupSize(state.bytes_done)}{typeof state.files_done==='number'?` · ${state.files_done} 个文件`:''}</p>}
     {typeof state.pages_total==='number'&&state.pages_total>0&&<p className="ice-startup__detail">数据库页 {state.pages_done||0} / {state.pages_total}</p>}

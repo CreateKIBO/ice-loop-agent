@@ -22,6 +22,8 @@ class StartupProgress {
     if(this.finished)return;
     const view=this.view=new this.BrowserWindow({width:580,height:420,minWidth:460,minHeight:380,show:false,
       title:'ICE Loop · 正在准备工作区',autoHideMenuBar:true,resizable:true,
+      // 第27轮：与主窗口一致的应用图标
+      icon:path.join(__dirname,'assets','icon',process.platform==='win32'?'icon.ico':'icon.png'),
       webPreferences:{preload:this.preload,nodeIntegration:false,contextIsolation:true,sandbox:true}});
     view.on('close',event=>{if(!this.finished){event.preventDefault();this.cancel();}});
     view.webContents.setWindowOpenHandler(()=>({action:'deny'}));

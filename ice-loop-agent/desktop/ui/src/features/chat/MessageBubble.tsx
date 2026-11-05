@@ -22,8 +22,9 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
   const isUser = row.role === "user";
   const reduced = useActivityReducedMotion();
   const entering = animateIn && !reduced;
-  const x = useMotionValue(entering ? (isUser ? 12 : -12) : 0);
-  const y = useMotionValue(entering ? 10 : 0), opacity = useMotionValue(entering ? 0 : 1);
+  // 第28轮：入场方向改为"从输入框升起"（用户消息 14px、助手回复 6px），不再左右横移。
+  const x = useMotionValue(0);
+  const y = useMotionValue(entering ? (isUser ? 14 : 6) : 0), opacity = useMotionValue(entering ? 0 : 1);
   const emptyStreaming = !row.content && row.status === "streaming";
   React.useLayoutEffect(() => {
     if (!emptyStreaming && reduced) {
@@ -35,8 +36,8 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
   const preflight = !isUser ? tokenReceipt(row.metadata?.input_preflight) : null;
   if (emptyStreaming) return null; // 空的生成中消息由打字指示代替
   return (
-    <motion.div initial={entering ? { opacity: 0, y: 10, x: isUser ? 12 : -12 } : false}
-                animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32 }}
+    <motion.div initial={entering ? { opacity: 0, y: isUser ? 14 : 6, x: 0 } : false}
+                animate={{ opacity: 1, y: 0, x: 0 }} transition={{ duration: isUser ? 0.24 : 0.2, ease: [0.2, 0, 0, 1] }}
                 className={"ice-message" + (isUser ? " ice-message--user" : "") + (highlighted ? " ice-message--find-hit" : "")}
                 style={{ x, y, opacity, display: "grid", gap: 4, justifyItems: isUser ? "end" : "start", minWidth: 0 }}>
       <span className="ice-message__speaker">{isUser ? "你" : "创作助手"}</span>

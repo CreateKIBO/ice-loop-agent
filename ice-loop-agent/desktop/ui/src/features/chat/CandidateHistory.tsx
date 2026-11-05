@@ -7,6 +7,8 @@ import { errorCopy, diagnosticText } from "../../components/errorText";
 import { refreshAfterWrite } from "../../data/receipts";
 import { queryClient, rpc, useAccountQuery, useCurrentAccount } from "../../data/client";
 import type { ChatResult } from "../../data/workbenchResponses";
+import { flashSurface } from "../../components/flash";
+import { flashDraft } from "../../app/uiState";
 import { CANDIDATE_WINDOW, type CandidatePosition } from "./historyWindow";
 import { CandidateCompareDialog, compareStatusNote, toggleComparePick, type ComparePick } from "./CandidateCompare";
 
@@ -87,6 +89,7 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
   const [busy, setBusy] = React.useState<"save" | "submit" | null>(null);
   // 2026-10-20 交互验收：同 tick 连点会绕过 state 闭包守卫（与重命名同缺陷模式），ref 双闸。
   const busyRef = React.useRef(false);
+  const cardRef = React.useRef<HTMLDivElement>(null);
   const guardBusy = (kind: "save" | "submit", run: () => Promise<void>) => async () => {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -102,10 +105,13 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
   const saveDraft = guardBusy("save", async () => {
     setError(null); setErrorDetail(null);
     try {
-      await rpc("chat.save_draft", {
+      const result = await rpc<{ draft?: { draft_id?: string } }>("chat.save_draft", {
         candidate_id: candidate.id, content_hash: candidate.content_hash,
       });
       toast.success({ title: "已保存为草稿", detail: "在左栏「草稿箱」可随时查看；保存不等于采纳" });
+      // 第29轮：结果落点反馈——本卡片闪成功色，左栏草稿箱对应行定位并轻闪。
+      flashSurface(cardRef.current, "--ice-success-bg");
+      if (result?.draft?.draft_id) flashDraft(result.draft.draft_id);
       // 保存已成功；会话/草稿列表刷新失败单独提示（批次A-04）。
       await refreshAfterWrite("保存草稿", async () => {
         await onChanged();
@@ -124,6 +130,8 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
     try {
       await rpc("chat.submit", { candidate_id: candidate.id, content_hash: candidate.content_hash });
       toast.success({ title: "已提交人工审阅", detail: "审阅通过前不会发布" });
+      // 第29轮：提交只把候选标为待审，不生成右栏任务；结果就在本卡片上（按钮变为"已提交审阅"）。
+      flashSurface(cardRef.current, "--ice-info-bg");
       await refreshAfterWrite("提交审阅", onChanged);
     } catch (err) {
       const copy = errorCopy(err);
@@ -134,7 +142,7 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
     finally { /* busy 由 guardBusy 复位 */ }
   });
   return (
-    <div role="region" aria-label="初稿候选" style={{
+    <div ref={cardRef} role="region" aria-label="初稿候选" style={{
       border: "1px solid var(--ice-signal-blue)", borderRadius: "var(--ice-radius-lg)",
       padding: "var(--ice-space-3)", background: "var(--ice-surface)", display: "grid", gap: 8,
     }}>

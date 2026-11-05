@@ -21,6 +21,7 @@
     "browser-smoke.cjs",
     "renderer/**/*",
     "ui/dist/**/*",
+    "assets/icon/**/*",
     "package.json",
     "automation.cjs",
     "prompt-smoke.cjs",
@@ -57,7 +58,8 @@
       "zip"
     ],
     "signAndEditExecutable": false,
-    "artifactName": "ICE-Loop-Studio-${version}-${arch}.${ext}"
+    "artifactName": "ICE-Loop-Studio-${version}-${arch}.${ext}",
+    "icon": "assets/icon/icon.ico"
   },
   "nsis": {
     "oneClick": false,
