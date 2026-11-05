@@ -48,16 +48,17 @@ if(app.isPackaged)process.env.ICE_PACKAGED='1';
 const backupActions = new (require('./backup-actions.cjs').BackupActions)({
   request: (...args) => request(...args), dialog, window: () => window, project, selection: dataSelection,
 });
+// v3（C-03）：已退场的代码执行入口；渲染层（含经典界面）调用时给出明确提示，不进入引擎。
+const RETIRED_EXECUTION_METHODS = new Set(['execution.approve','execution.inputs','execution.code_save','execution.policy_save','supplements.prepare','supplements.execute']);
 const methods = new Set(['bootstrap', 'brief.suggest', 'jobs.list', 'jobs.create', 'jobs.get', 'jobs.resume', 'jobs.stop',
   'approvals.decide', 'approvals.edit', 'articles.save', 'articles.finalize', 'assets.select', 'assets.preview',
-  'execution.approve', 'execution.inputs', 'claims.verify', 'models.save', 'models.routes_save', 'models.probe', 'library.list', 'library.read']);
+  'claims.verify', 'models.save', 'models.routes_save', 'models.probe', 'library.list', 'library.read']);
 for (const method of ['accounts.save','accounts.switch','accounts.export','resources.list','resources.preview','resources.analyze','resources.apply','resources.use','resources.update','resources.vision','resources.recommend','vision.save','vision.probe','drafts.list','drafts.get','drafts.save','history.list','history.get','history.update','history.progress','planning.context','planning.propose','planning.confirm']) methods.add(method);
 for (const method of ['articles.revisions','articles.compare','articles.restore']) methods.add(method);
-for (const method of ['supplements.from_library','supplements.plan','supplements.prepare','supplements.execute','assets.review','outlines.list','outlines.preview','outlines.save','outlines.update','outlines.match']) methods.add(method);
+// v3（C-03）：execution.* 与 supplements.prepare/execute 已从渲染层白名单移除；引擎侧亦拒绝。
+for (const method of ['supplements.from_library','supplements.plan','assets.review','outlines.list','outlines.preview','outlines.save','outlines.update','outlines.match']) methods.add(method);
 for(const method of ['rules.list','rules.save','rules.resolve','rules.remove','tools.status','tools.diagnostics','reminders.list','reminders.save','reminders.dismiss','git.preview','git.apply','models.catalog','articles.semantic_review','assets.redo','resources.transform','resources.cover','capture.windows','capture.native'])methods.add(method);
 methods.add('tools.execution_settings');
-methods.add('execution.code_save');
-methods.add('execution.policy_save');
 for(const method of ['prompts.generate','prompts.save','prompts.references','resources.import_style','budgets.get','budgets.save'])methods.add(method);
 for(const method of ['chat.list','chat.create','chat.get','chat.update','chat.send','chat.stop','chat.sources','chat.candidate_save','chat.submit','chat.reviews','chat.review','chat.rebase','chat.prepare_assets'])methods.add(method);
 methods.add('chat.fork');
@@ -97,24 +98,8 @@ function request(method, params = {}) {
   });
 }
 
-async function captureRun(jobId,figureNo,runKeys,automatic=false){
-    const context=await request('assets.capture_context',{job_id:jobId,figure_no:figureNo,run_keys:runKeys,automatic});
-    const capture=new BrowserWindow({width:1100,height:800,show:false,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
-    let temporaryFile;
-    try{
-      await capture.loadURL('ice://app/capture.html');
-      const height=await capture.webContents.executeJavaScript('window.renderCapture('+JSON.stringify(context)+')');
-      if(height>7000)throw Error('运行内容较长，请减少截图内容后重试');
-      capture.setContentSize(1100,Math.max(400,height+20));
-      await capture.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(true))))');
-      const image=await capture.webContents.capturePage(),folder=path.join(runtime,'screenshots');fs.mkdirSync(folder,{recursive:true});
-      const file=path.join(folder,'execution-'+randomUUID()+'.png');temporaryFile=file;fs.writeFileSync(file,image.toPNG());
-      // Finish both durable imports before discarding the owned intermediate PNG.
-      return await request('assets.capture_finish',{job_id:jobId,figure_no:figureNo,run_keys:context.run_keys,capture_hash:context.capture_hash,file_path:file,automatic});
-    }finally{
-      try{if(!capture.isDestroyed())capture.destroy();}
-      finally{if(temporaryFile){try{fs.unlinkSync(temporaryFile);}catch(error){if(error.code!=='ENOENT')console.error('运行截图中间文件清理失败：',temporaryFile,error.message);}}}
-    }
+async function captureRun(){
+    throw new Error('[CODE_EXECUTION_RETIRED] 终端输出截图已在 v3 退场；历史截图仍保留。');
 }
 
 // 受信应用页面白名单：旧 renderer 与 v2.0 新工作台（同一 window、同一 preload）。
@@ -392,10 +377,14 @@ function registerIPC() {
   });
   ipcMain.handle('ice:request', async (event, method, params) => {
     assertSender(event);
-    if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > 500000) throw new Error('无效请求');
-    if (method === 'articles.export_bundle') exportApprovals.assert(params.destination);
+    // v3 文章正文（含粘贴原件、剪贴板图片）可能大于旧接口的 500KB 上限。
+    if (RETIRED_EXECUTION_METHODS.has(method)) throw new Error('[CODE_EXECUTION_RETIRED] 代码执行功能已在 v3 退场，不能再启动、批准或修改代码运行；历史运行记录仍可查看。旧任务如需继续写作，请在文章首页使用“复制为新文章”。');
+    const limit = method.startsWith('documents.') ? 6000000 : 500000;
+    if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > limit) throw new Error('无效请求');
+    const exporting = method === 'articles.export_bundle' || method === 'documents.export_bundle';
+    if (exporting) exportApprovals.assert(params.destination);
     const result=await request(method, params);
-    if (method === 'articles.export_bundle') result.can_open=exportApprovals.complete(params.destination);
+    if (exporting) result.can_open=exportApprovals.complete(params.destination);
     if(['accounts.switch','accounts.save','accounts.import'].includes(method)){embeddedBrowser.reset();void originalImages.clear();exportApprovals.clear();}
     return result;
   });
@@ -430,6 +419,43 @@ function registerIPC() {
     if (choice.canceled) return null;
     fs.writeFileSync(choice.filePath, JSON.stringify(bundle, null, 2));
     return { file: choice.filePath };
+  });
+  // v3（B-01）：插入图片由主进程弹出系统对话框；渲染层不接触本地路径。
+  ipcMain.handle('ice:document-pick-image', async (event, accountId) => {
+    assertSender(event);
+    const choice = await dialog.showOpenDialog(window, { title: '插入图片', properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png','jpg','jpeg','webp','gif','bmp'] }] });
+    if (choice.canceled || !choice.filePaths[0]) return null;
+    const params = { file_path: choice.filePaths[0] };
+    if (typeof accountId === 'string' && accountId && accountId.length <= 200) params.account_id = accountId;
+    return request('documents.image_import', params);
+  });
+  // v3（B-04）：交付复制。HTML 由引擎按冻结版本渲染，渲染层不能注入任意剪贴板内容；
+  // 写入后回读确认，确认成功才登记一次交付（复制≠发布）。
+  ipcMain.handle('ice:document-copy', async (event, params) => {
+    assertSender(event);
+    if (!params || typeof params !== 'object' || !['html','text'].includes(params.mode)) throw Error('复制请求无效');
+    for (const key of ['document_id','version_id','account_id'])
+      if (typeof params[key] !== 'string' || !params[key] || params[key].length > 200) throw Error('复制请求无效');
+    const ids = { document_id: params.document_id, version_id: params.version_id, account_id: params.account_id };
+    const payload = await request('documents.copy_payload', ids);
+    if (payload.version_id !== params.version_id) throw Error('交付版本已变化，请刷新预览后再复制');
+    const plain = String(payload.text).replace(/\r\n/g, '\n');
+    const text = process.platform === 'win32' ? plain.replace(/\n/g, '\r\n') : plain;
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        if (params.mode === 'html') clipboard.write({ html: payload.html, text });
+        else clipboard.writeText(text);
+        const back = clipboard.readText().replace(/\r\n/g, '\n').trimEnd();
+        ok = back === plain.trimEnd() && (params.mode !== 'html' || clipboard.readHTML().includes('data-ice-delivery'));
+      } catch { ok = false; }
+      if (!ok) await new Promise(resolve => setTimeout(resolve, 75));
+    }
+    if (!ok) return { ok: false, message: '当前系统剪贴板不可用或拒绝写入，请稍后重试，或改用“导出图文包”。' };
+    const record = await request('documents.delivery_record', { ...ids, kind: params.mode === 'html' ? 'copy_html' : 'copy_text',
+      delivery_hash: payload.delivery_hash, issues: payload.issues });
+    return { ok: true, delivery_id: record.delivery_id, complete: payload.complete, issues: payload.issues.length };
   });
   ipcMain.handle('ice:import-resource', async event => {
     assertSender(event);

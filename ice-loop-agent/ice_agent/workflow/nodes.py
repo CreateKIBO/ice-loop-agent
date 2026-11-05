@@ -302,6 +302,8 @@ def node_verify_code(ctx: NodeContext) -> dict[str, Any]:
     """真实执行正文演示代码（§14）：输入、输出、退出码全部留痕。"""
     from ..execution.plan import execution_plan
     plan=execution_plan(ctx.state)
+    if getattr(ctx.cfg,'code_execution_retired',False):
+        return _verify_code_retired(ctx,plan)
     if ctx.state['spec'].get('production_mode')=='auto_prepare' and ctx.state['spec'].get('execution_mode')=='docker':
         # Opt-in automation may approve only the configured isolated container runner.
         # Generated code is never auto-authorized for the host execution mode.
@@ -338,13 +340,7 @@ def node_verify_code(ctx: NodeContext) -> dict[str, Any]:
         if lang not in ('python','java'):
             raise NodeFailed('verify_code','EXECUTION_LANGUAGE_UNSUPPORTED',f'第{i}段使用{lang}；当前执行器支持Python和Java，请将只展示的代码标为text。')
         cached=previous.get(f'run-{i}',{})
-        if (cached.get('code_sha256')==block['code_sha256'] and cached.get('stdin_hash')==block['stdin_hash'] and
-            sha256_text(cached.get('source',''))==block['code_sha256'] and
-            cached.get('expected_failure',False)==block['expected_failure'] and
-            cached.get('execution_mode')==ctx.state['spec'].get('execution_mode','local_reviewed') and
-            (ctx.state['spec'].get('execution_mode')!='docker' or cached.get('runtime',{}).get('container_image')==ctx.state['spec'].get('container_images',{}).get(lang,'')) and
-            cached.get('verdict') in ('ok','expected_failure_ok') and
-            cached.get('output_sha256')==sha256_text(cached.get('stdout','')+'\x00'+cached.get('stderr',''))):
+        if _cached_run_valid(ctx,block,cached):
             runs[f'run-{i}']=cached
             ctx.emit('execution.reused',{'run_id':cached['run_id'],'index':i})
             continue
@@ -380,6 +376,26 @@ def node_verify_code(ctx: NodeContext) -> dict[str, Any]:
             "run_ids": sorted(runs.keys()),
             "code_hashes": [r["code_sha256"] for r in runs.values()]}
 
+
+
+def _cached_run_valid(ctx: NodeContext, block: dict, cached: dict) -> bool:
+    lang=block['language']
+    return bool(cached.get('code_sha256')==block['code_sha256'] and cached.get('stdin_hash')==block['stdin_hash'] and
+        sha256_text(cached.get('source',''))==block['code_sha256'] and
+        cached.get('expected_failure',False)==block['expected_failure'] and
+        cached.get('execution_mode')==ctx.state['spec'].get('execution_mode','local_reviewed') and
+        (ctx.state['spec'].get('execution_mode')!='docker' or cached.get('runtime',{}).get('container_image')==ctx.state['spec'].get('container_images',{}).get(lang,'')) and
+        cached.get('verdict') in ('ok','expected_failure_ok') and
+        cached.get('output_sha256')==sha256_text(cached.get('stdout','')+'\x00'+cached.get('stderr','')))
+
+
+def _verify_code_retired(ctx: NodeContext, plan: dict) -> dict[str, Any]:
+    """旧代码任务不继续生成/整合运行证据；保留历史 state 原件，不调用执行器。"""
+    if plan['blocks']:
+        raise NodeFailed('verify_code','CODE_EXECUTION_RETIRED',
+            '代码执行功能已在 v3 退场，本任务不再运行代码。历史正文、运行记录和截图仍可查看；'
+            '如需继续写作，请在文章首页打开这篇旧任务并使用“复制为新文章”。')
+    return {'runs':0,'run_ids':[],'code_hashes':[], 'execution_retired':True}
 
 def node_integrate_evidence(ctx: NodeContext) -> dict[str, Any]:
     """把 RunRecord 的真实输出回填正文（§9.4：输出块由运行记录渲染）。"""

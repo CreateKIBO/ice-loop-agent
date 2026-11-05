@@ -16,4 +16,13 @@ module.exports = Object.freeze([
   'backup.queue', 'backup.resume_queue',
   'models.limits_save', 'models.window_refresh',
   'skills.get', 'skills.save',
+  // v3 普通文章 / 收藏 / 人工发布登记（documents.copy_payload、delivery_record、image_import 只供主进程，不在此列）
+  'documents.list', 'documents.create', 'documents.get', 'documents.save_working', 'documents.commit_version',
+  'documents.versions', 'documents.version', 'documents.restore', 'documents.update_meta', 'documents.trash',
+  'documents.untrash', 'documents.duplicate', 'documents.markdown', 'documents.open_legacy',
+  'documents.convert_paste', 'documents.import_paste', 'documents.import_original', 'documents.reconvert',
+  'documents.image_import_data', 'documents.image_view', 'documents.images_library',
+  'documents.render_delivery', 'documents.export_bundle', 'documents.from_candidate', 'documents.ai_draft_start',
+  'publications.register', 'publications.list', 'publications.withdraw',
+  'bookmarks.list', 'bookmarks.save', 'bookmarks.remove', 'bookmarks.reorder', 'bookmarks.restore_defaults',
 ]);

@@ -34,3 +34,19 @@ export function openPublicationSetup(entry: "identity" | "new" | "history") {
 export const draftFlashStore = createValueStore<{ id: string; at: number } | null>(null);
 export function flashDraft(id: string) { draftFlashStore.set({ id, at: Date.now() }); }
 export const engineStore = createValueStore<"ready" | "exited">("ready");
+
+/** v3（C-01）：主区三入口。默认进入“文章”；“网页”以浮层打开，不占用此状态。 */
+export type Workspace = "articles" | "assistant";
+function initialWorkspace(): Workspace {
+  try { return window.localStorage.getItem("ice.ui.workspace") === "assistant" ? "assistant" : "articles"; }
+  catch { return "articles"; }
+}
+export const workspaceStore = createValueStore<Workspace>(initialWorkspace());
+export function setWorkspace(next: Workspace) {
+  workspaceStore.set(next);
+  try { window.localStorage.setItem("ice.ui.workspace", next); } catch { /* 记忆失败不影响导航 */ }
+}
+/** 当前打开的普通文章（document_id）；与旧 jobId 编辑器互不复用。 */
+export const documentStore = createValueStore<string | null>(null);
+/** 粘贴导入/AI 起草对话框（文章首页与命令面板共用）。 */
+export const articleCreateStore = createValueStore<null | "paste" | "ai">(null);

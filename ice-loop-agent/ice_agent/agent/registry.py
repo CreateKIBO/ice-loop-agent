@@ -407,7 +407,8 @@ def _t_prepare_execution(ctx: AgentContext, args: PrepareExecutionArgs) -> dict:
                             for b in blocks],
             "risks": ["执行需要现有有效批准；批准针对 source/input/timeout hash",
                       "修改代码后原批准失效"],
-            "note": "仅准备摘要；执行走 execution.approve，Agent 无权批准"}
+            "note": "代码执行已在 v3 退场；这里只提供只读摘要，任何入口都不能启动新的执行",
+            "execution_retired": True}
 
 
 def _t_inspect_run_evidence(ctx: AgentContext, args: InspectEvidenceArgs) -> dict:
@@ -513,9 +514,9 @@ def _build_registry() -> dict[str, RegisteredTool]:
          _t_compose_image_prompt),
         (ToolSpec("request_user_input", "提出澄清问题并持久化", "propose", RequestInputArgs),
          _t_request_user_input),
-        (ToolSpec("create_production_task", "创建文章任务：kind只能为production；payload.spec需含series、已确认期号episode和主题topic；运行代码仍需用户批准", "action", CreateTaskArgs),
+        (ToolSpec("create_production_task", "创建文章任务：kind只能为production；payload.spec需含series、已确认期号episode和主题topic；v3 起不再运行代码", "action", CreateTaskArgs),
          _t_create_production_task),
-        (ToolSpec("prepare_execution", "准备演示代码执行摘要（不批准）", "read", PrepareExecutionArgs),
+        (ToolSpec("prepare_execution", "查看正文代码块摘要（代码执行已在 v3 退场，不能运行或批准）", "read", PrepareExecutionArgs),
          _t_prepare_execution),
         (ToolSpec("inspect_run_evidence", "查看真实运行证据（RunRecord）", "read", InspectEvidenceArgs),
          _t_inspect_run_evidence),

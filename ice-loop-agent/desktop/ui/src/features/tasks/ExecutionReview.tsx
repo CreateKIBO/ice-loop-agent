@@ -26,6 +26,10 @@ export function ExecutionReview({detail,disabled,onDirty,onRun,onResume}: {
     const next={...expectations,[name]:value};setExpectations(next);setReviewed(false);
     onDirty(JSON.stringify({inputs,expectations:next})!==initial);
   };
+  if(detail.execution_retired)return <section className="ice-task-review" aria-label="代码执行已退场">
+    <p>代码执行与终端截图已在 v3 退场。历史记录只读保留；如需继续写作，请复制为新文章。</p>
+    <RunResults detail={detail}/>
+  </section>;
   return <section className="ice-task-review" aria-label="审阅代码与示例输入">
     <div className="ice-task-review__heading"><h3>审阅代码与示例输入</h3><span className="ice-badge">{plan.mode==='docker'?'隔离容器':'本机执行'}</span></div>
     <p className="ice-task-review__hint">请检查实际源码与输入。每行对应一次输入；执行输出会作为文章的真实运行证据。</p>

@@ -222,10 +222,13 @@ class TestRecoveryPoints(unittest.TestCase):
     def test_actual_previous_schema20_gets_full_point_before21(self):
         self.store.close()
         with closing(sqlite3.connect(self.runtime/'app.db')) as db:
-            db.execute('DROP TABLE creative_send_receipts');db.execute('DELETE FROM schema_migrations WHERE version=21')
+            for table in ('publication_records','bookmark_seeds','bookmarks','document_deliveries','document_import_originals',
+                          'document_versions','document_working','documents','writing_skill_settings','creative_send_receipts'):
+                db.execute(f'DROP TABLE {table}')
+            db.execute('DELETE FROM schema_migrations WHERE version>=21')
             db.execute('PRAGMA user_version=20');db.commit();db.execute('PRAGMA journal_mode=DELETE')
         before=backup.digest(self.runtime/'app.db')
         point=prepare_upgrade(self.runtime,self.service.settings)
         self.assertEqual(backup.digest(self.runtime/'app.db'),before)
         self.assertEqual(point['database_schema'],20)
-        self.assertEqual(point['database_target_schema'],21)
+        self.assertEqual(point['database_target_schema'],MAX_KNOWN_VERSION)

@@ -15,7 +15,10 @@ import {
 } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
 import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
-import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore } from "../../app/uiState";
+import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore,
+  articleCreateStore, documentStore, setWorkspace, workspaceStore, type Workspace } from "../../app/uiState";
+import { createBlankDocument, openDocument } from "../documents/ArticleHome";
+import type { DocumentList } from "../documents/documentsApi";
 import { flashSurface, motionReduced } from "../../components/flash";
 import { CopyButton } from "../../components/CopyButton";
 import { openWebsite } from '../../data/websites';
@@ -56,6 +59,79 @@ const refreshConversationLists = (account = accountStore.get()) =>
 export function LeftNav({ accounts, activeAccountId, version }: {
   accounts: BootstrapAccount[]; activeAccountId: string; version?: string;
 }) {
+  const workspace = workspaceStore.use();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+      <WorkspaceTabs workspace={workspace} />
+      {workspace === "articles" ? <ArticleNav /> : <AssistantNav />}
+      <NavFooter version={version} />
+    </div>
+  );
+}
+
+/** v3（C-01）：文章 / 助手 / 网页 三入口；设置类入口留在底部。 */
+function WorkspaceTabs({ workspace }: { workspace: Workspace }) {
+  const go = async (next: Workspace) => {
+    if (next === workspace) { if (next === "articles") { try { await flushAllDirty(); documentStore.set(null); editorStore.set(null); } catch (error) { toast.error({ title: "无法离开当前文章", detail: (error as Error).message }); } } return; }
+    try { await flushAllDirty(); editorStore.set(null); setWorkspace(next); }
+    catch (error) { toast.error({ title: "无法切换", detail: (error as Error).message }); }
+  };
+  return (
+    <nav className="ice-workspace-tabs" aria-label="主要入口">
+      <button type="button" aria-current={workspace === "articles" ? "page" : undefined} onClick={() => void go("articles")}>文章</button>
+      <button type="button" aria-current={workspace === "assistant" ? "page" : undefined} onClick={() => void go("assistant")}>助手</button>
+      <button type="button" onClick={() => openWebsite("web")} title="通用网页、公众号后台、TapNow 与收藏">网页</button>
+    </nav>
+  );
+}
+
+function ArticleNav() {
+  const active = usePaneActive();
+  const current = documentStore.use();
+  const [creating, setCreating] = React.useState(false);
+  const list = useAccountQuery<DocumentList>("documents.list", { lifecycle: "active", query: "", include_legacy: false },
+    { enabled: active, staleTime: 3_000, refetchInterval: 20_000 });
+  const rows = (list.data?.documents ?? []).slice(0, 30);
+  return (
+    <>
+      <div className="ice-nav-new" style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)", display: "grid", gap: 6 }}>
+        <Button variant="primary" loading={creating} onClick={async () => {
+          setCreating(true);
+          try { await createBlankDocument(); } catch (error) { toast.error({ title: "没有新建文章", detail: (error as Error).message }); }
+          finally { setCreating(false); }
+        }}>新建文章</Button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <Button size="sm" style={{ flex: 1 }} onClick={() => { void flushAllDirty().then(() => { documentStore.set(null); articleCreateStore.set("paste"); }).catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message })); }}>粘贴导入</Button>
+          <Button size="sm" style={{ flex: 1 }} onClick={() => { void flushAllDirty().then(() => { documentStore.set(null); articleCreateStore.set("ai"); }).catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message })); }}>AI 起草</Button>
+        </div>
+      </div>
+      <div className="ice-nav-summary"><span>最近文章 · {rows.length}</span>
+        <button type="button" className="ice-link-btn" onClick={() => { void flushAllDirty().then(() => documentStore.set(null)).catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message })); }}>全部</button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, padding: "0 var(--ice-space-2)" }}>
+        {list.isLoading && <SkeletonRows rows={6} height={16} />}
+        {list.error && <ErrorNote error={list.error} onRetry={() => list.refetch()} retryLabel="重新加载文章" />}
+        {!list.isLoading && !list.error && rows.length === 0 && <EmptyState title="还没有文章" hint="点击上方「新建文章」开始。" />}
+        <ul className="ice-nav-list" aria-label="最近文章">
+          {rows.map(row => (
+            <li key={row.document_id}>
+              <div className={"ice-nav-row" + (current === row.document_id ? " ice-nav-row--selected" : "")}>
+                <button type="button" className="ice-nav-row__main" aria-current={current === row.document_id ? "true" : undefined}
+                        title={row.title} onClick={() => { void openDocument(row.document_id).catch(error => toast.error({ title: "无法打开文章", detail: (error as Error).message })); }}>
+                  <span className="ice-nav-row__title">{row.generation_state === "running" ? "⏳ " : ""}{row.title || "未命名文章"}</span>
+                  <span className="ice-nav-row__meta">{shortTime(row.updated_at)}</span>
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+function AssistantNav() {
   const active = usePaneActive();
   const [filter, setFilter] = React.useState("");
   const [creating, setCreating] = React.useState(false);
@@ -95,8 +171,7 @@ export function LeftNav({ accounts, activeAccountId, version }: {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
+    <>
       <div className="ice-nav-new" style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)" }}>
         <Button variant="primary" loading={creating} disabled={creating} onClick={newConversation}>新建会话</Button>
         {createError && <ErrorNote error={createError} note="没有创建任何会话，可安全重试（同一请求键不会建出两个会话）。"
@@ -156,7 +231,7 @@ export function LeftNav({ accounts, activeAccountId, version }: {
         {drafts.error && <ErrorNote error={drafts.error} onRetry={() => drafts.refetch()} retryLabel="重新加载草稿" />}
         {!drafts.isLoading && !drafts.error && filteredDrafts.length === 0 && (
           <div style={{ color: "var(--ice-text-secondary)", fontSize: "var(--ice-font-size-sm)", padding: "0 4px" }}>
-            {filter.trim() ? "没有匹配的草稿。" : "在对话中保存初稿后会出现在这里，保存不等于采纳。"}
+            {filter.trim() ? "没有匹配的草稿。" : "旧版草稿箱；新的 AI 初稿会直接出现在「文章」里。"}
           </div>
         )}
         <ul className="ice-nav-list">
@@ -165,8 +240,7 @@ export function LeftNav({ accounts, activeAccountId, version }: {
           ))}
         </ul>
       </div>
-      <NavFooter version={version} />
-    </div>
+    </>
   );
 }
 
@@ -191,7 +265,6 @@ function NavFooter({ version }: { version?: string }) {
       <div className="ice-nav-footer__tools">
       <Button variant="ghost" size="sm" onClick={()=>skillSettingsStore.set(true)}>写作技能</Button>
       <Button variant="ghost" size="sm" onClick={()=>void openGettingStarted().catch(error=>toast.error({title:'暂时无法返回指南',detail:(error as Error).message}))}>开始指南</Button>
-      <Button variant="ghost" size="sm" onClick={() => openWebsite('tapnow')}>网页工作台</Button>
       <Button variant="ghost" size="sm" onClick={()=>editorialStore.set(true)}>选题与排期</Button>
       <Button variant="ghost" size="sm" onClick={()=>backupSettingsStore.set(true)}>备份与恢复</Button>
       <Button variant="ghost" size="sm" onClick={()=>shortcutHelpStore.set(true)}>使用帮助</Button>

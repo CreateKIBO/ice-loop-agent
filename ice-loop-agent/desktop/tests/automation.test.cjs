@@ -1,5 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {PreparationQueue}=require('../automation.cjs');
+test('retired execution never creates screenshots, failures or a new finalization of history',async()=>{
+  const calls=[];
+  const queue=new PreparationQueue(async method=>{
+    calls.push(method);
+    if(method==='jobs.list')return[{job_id:'owned',state:'completed',production_mode:'auto_prepare'}];
+    if(method==='jobs.get')return{execution_retired:true,job:{},article:{spec:{production_mode:'auto_prepare'}},runs:{old:{}},slots:[]};
+    throw Error('unexpected write '+method);
+  },async()=>{throw Error('must not capture');});
+  await queue.tick();assert.deepEqual(calls,['jobs.list','jobs.get']);
+});
 test('automatic screenshots fill only empty real slots and re-export without human approval',async()=>{
   const calls=[],captures=[];
   const data={job:{lease:null},article:{spec:{production_mode:'auto_prepare'}},runs:{'run-1':{stdout:'real'}},slots:[{figure_no:1,kind:'cover'},{figure_no:2,kind:'body_real'},{figure_no:3,kind:'body_real',selected_candidate:'mine'}]};

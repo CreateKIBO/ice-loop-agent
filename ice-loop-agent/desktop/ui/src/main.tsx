@@ -1,4 +1,4 @@
-// ICE Loop Studio v2.0 新工作台入口（M2 壳 + M3 编辑器接入）。
+// ICE Loop Studio v3.0 工作台入口：默认进入“文章”（C-01），助手与网页为另外两个入口。
 // 数据面：TanStack Query over window.ice.request；账号切换整体清缓存。
 import { StartupScreen } from "./app/StartupScreen";
 import { StrictMode, Suspense, lazy, useEffect, useState, type ReactNode } from "react";
@@ -12,7 +12,7 @@ const ShortcutHelp = lazy(() => import("./components/ShortcutHelp").then(module 
 import type { BootstrapSettings } from "./app/modelBootstrap";
 import { ModelSettingsHost } from "./app/ModelSettingsHost";
 import { SkillSettingsHost } from "./app/SkillSettingsHost";
-import { engineStore, paletteStore } from "./app/uiState";
+import { documentStore, engineStore, paletteStore, setWorkspace, workspaceStore } from "./app/uiState";
 import { ErrorBoundary, WorkbenchShell } from "./app/WorkbenchShell";
 import { toast, Toaster } from "./components/toast";
 import { Button, ErrorPanel, Spinner } from "./components/ui";
@@ -30,8 +30,15 @@ import { EditorialHost } from './app/EditorialHost';
 
 // 编辑器带着 Tiptap / CodeMirror / remark，是启动包里最重的部分；
 // 大多数时候用户停留在对话里，所以点"编辑正文"时才下载。
-const ArticleEditor = lazy(() =>
-  import("./features/editor/ArticleEditor").then(module => ({ default: module.ArticleEditor })));
+const LegacyArticleView = lazy(() =>
+  import("./features/documents/LegacyArticleView").then(module => ({ default: module.LegacyArticleView })));
+const ArticleHome = lazy(() => import("./features/documents/ArticleHome").then(module => ({ default: module.ArticleHome })));
+const DocumentEditor = lazy(() => import("./features/documents/DocumentEditor").then(module => ({ default: module.DocumentEditor })));
+
+function Loading({ label }: { label: string }) {
+  return <div style={{ flex: 1, display: "grid", placeItems: "center", gap: 8, alignContent: "center" }}>
+    <Spinner size={20} /><span style={{ color: "var(--ice-text-secondary)" }}>{label}</span></div>;
+}
 
 type Bootstrap = BootstrapSettings & {
   version: string;
@@ -42,20 +49,28 @@ type Bootstrap = BootstrapSettings & {
 function Center() {
   const editorJob = useEditorJob();
   const conversationId = useCurrentConversation();
+  const workspace = workspaceStore.use();
+  const documentId = documentStore.use();
   useAnyDirtyGuard();
-  const view = editorJob ? "editor:" + editorJob : conversationId ? "chat:" + conversationId : "welcome";
+  // 从命令面板/通知等处打开会话或文章时，自动切到对应入口。
+  useEffect(() => { if (conversationId) setWorkspace("assistant"); }, [conversationId]);
+  useEffect(() => { if (documentId) setWorkspace("articles"); }, [documentId]);
+  // 旧任务编辑器（只读历史/旧链路）优先；其余按入口分派。
+  const view = editorJob ? "editor:" + editorJob
+    : workspace === "articles" ? (documentId ? "doc:" + documentId : "home")
+    : conversationId ? "chat:" + conversationId : "welcome";
   return (
     // 按视图重挂载并淡入：切会话/进编辑器时有明确的"换了一页"的感觉，旧内容不会残留闪烁。
     <motion.div key={view} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
                 style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {editorJob ? (
-        <Suspense fallback={
-          <div style={{ flex: 1, display: "grid", placeItems: "center", gap: 8, alignContent: "center" }}>
-            <Spinner size={20} />
-            <span style={{ color: "var(--ice-text-secondary)" }}>正在载入编辑器…</span>
-          </div>}>
-          <ArticleEditor key={editorJob} jobId={editorJob} />
+        <Suspense fallback={<Loading label="正在载入编辑器…" />}>
+          <LegacyArticleView key={editorJob} jobId={editorJob} />
+        </Suspense>
+      ) : workspace === "articles" ? (
+        <Suspense fallback={<Loading label={documentId ? "正在打开文章…" : "正在载入文章…"} />}>
+          {documentId ? <DocumentEditor key={documentId} documentId={documentId} /> : <ArticleHome />}
         </Suspense>
       ) : conversationId ? <ChatPane conversationId={conversationId} /> : <Welcome />}
     </motion.div>

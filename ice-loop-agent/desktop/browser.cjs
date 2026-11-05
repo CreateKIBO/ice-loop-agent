@@ -1,8 +1,9 @@
 /* Remote sites run in isolated Chromium views; only the local workbench owns IPC. */
-const {WebContentsView, BrowserWindow, session, ipcMain} = require('electron');
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
-const SITES = Object.freeze({tapnow:{name:'TapNow',url:'https://app.tapnow.media/home'},wechat:{name:'微信公众号',url:'https://mp.weixin.qq.com/'}});
-function siteFor(id){if(!Object.hasOwn(SITES,id))throw Error('请选择 TapNow 或微信公众号');return SITES[id];}
+// v3（C-02）：web 为当前公众号的通用网页会话（独立分区）；收藏地址在渲染层按域名选择会话。
+const SITES = Object.freeze({tapnow:{name:'TapNow',url:'https://app.tapnow.media/home'},wechat:{name:'微信公众号',url:'https://mp.weixin.qq.com/'},
+  web:{name:'网页',url:'about:blank'}});
+function siteFor(id){if(typeof id!=='string'||!Object.hasOwn(SITES,id))throw Error('请选择网页会话');return SITES[id];}
 function allowedURL(raw,blank=false){
   if(blank&&raw==='about:blank')return true;
   try{const url=new URL(raw);return url.protocol==='https:'&&!url.username&&!url.password&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname)&&raw.length<=4096;}catch{return false;}
@@ -15,6 +16,8 @@ function bounds(raw,size){
   return {x,y,width:Math.max(1,Math.min(Math.round(raw.width),size[0]-x)),height:Math.max(1,Math.min(Math.round(raw.height),size[1]-y))};
 }
 function installBrowser({window:owner,assertSender,request,runtime}){
+  // URL/分区/布局的纯逻辑测试无需启动或伪造 Electron。
+  const {WebContentsView, BrowserWindow, session, ipcMain, shell} = require('electron');
   let active=null,account=null,layout=null,visible=false,epoch=0;
   const pages=new Map(),popups=new Set(),configured=new Map(),downloads=new Set();
   function state(page=active){
@@ -137,6 +140,11 @@ function installBrowser({window:owner,assertSender,request,runtime}){
       if(!wc.isDestroyed())wc.close();emit();return state();
     }
     else if(action==='home')wc.loadURL(siteFor(active.site).url).catch(()=>{});
+    else if(action==='external'){
+      // 系统浏览器打开当前页：只传 https 地址，不带本应用会话；不打开本地/特权协议。
+      const url=wc.getURL();if(!allowedURL(url))throw Error('当前页面不能在系统浏览器中打开');
+      await shell.openExternal(url);return state();
+    }
     else if(action==='navigate'){if(!allowedURL(value))throw Error('请输入有效的 HTTPS 网页地址');wc.loadURL(value).catch(()=>{});}
     else if(action==='logout'){
       const page=active;for(const popup of popups)if(popup.webContents.session===page.session&&!popup.isDestroyed())popup.destroy();

@@ -29,6 +29,8 @@ class RuntimeConfig:
     profile: dict[str, Any]
     profile_path: Path
     db_path: Path = field(init=False)
+    # v3（C-03）：桌面工作台不再启动新的代码执行；历史运行证据只读保留。
+    code_execution_retired: bool = False
 
     def __post_init__(self) -> None:
         self.article_root = normalize(self.article_root)
