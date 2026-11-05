@@ -41,12 +41,14 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
                 style={{ x, y, opacity, display: "grid", gap: 4, justifyItems: isUser ? "end" : "start", minWidth: 0 }}>
       <span className="ice-message__speaker">{isUser ? "你" : "创作助手"}</span>
       <div style={{
-        maxWidth: isUser ? "min(640px, 92%)" : "100%", minWidth: 0, boxSizing: "border-box",
+        // 第24轮：助手回复限制舒适行宽，宽屏/专注模式下不再铺满整行。
+        maxWidth: isUser ? "min(640px, 92%)" : "min(var(--ice-reading-max), 100%)", minWidth: 0, boxSizing: "border-box",
         width: isUser ? undefined : "100%", padding: "var(--ice-space-2) var(--ice-space-3)",
         borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px", whiteSpace: isUser ? "pre-wrap" : "normal", overflowWrap: "anywhere",
-        lineHeight: 1.65, background: isUser ? "var(--ice-info-bg)" : "var(--ice-surface)",
-        border: `1px solid ${isUser ? "transparent" : "var(--ice-border)"}`,
-        boxShadow: isUser ? "none" : "0 1px 2px rgba(21, 25, 31, 0.04)",
+        // 写作岛是白底：助手气泡改为浅底 + 轻描边，与用户的蓝底气泡区分，不再白上叠白。
+        lineHeight: 1.65, background: isUser ? "var(--ice-info-bg)" : "var(--ice-surface-muted)",
+        border: `1px solid ${isUser ? "transparent" : "var(--ice-border-subtle)"}`,
+        boxShadow: "none",
       }}>
         {failure?<p style={{margin:0}}>生成未完成，原需求与已有稿件保留。</p>:isUser ? row.content : <MarkdownContent text={row.content} />}
         {row.status === "streaming" && <span className="ice-caret" aria-hidden />}

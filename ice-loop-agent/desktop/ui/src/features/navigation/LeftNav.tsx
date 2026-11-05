@@ -96,7 +96,7 @@ export function LeftNav({ accounts, activeAccountId, version }: {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
-      <div style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)" }}>
+      <div className="ice-nav-new" style={{ padding: "0 var(--ice-space-3) var(--ice-space-2)" }}>
         <Button variant="primary" loading={creating} disabled={creating} onClick={newConversation}>新建会话</Button>
         {createError && <ErrorNote error={createError} note="没有创建任何会话，可安全重试（同一请求键不会建出两个会话）。"
                                   onRetry={newConversation} retryLabel="重试新建" />}
@@ -180,13 +180,14 @@ const READINESS: Record<string, { dot: string; label: string }> = {
 function NavFooter({ version }: { version?: string }) {
   const readiness = READINESS[useModelReadiness()];
   return (
-    <div style={{ flexShrink: 0, borderTop: "1px solid var(--ice-border)", padding: "6px var(--ice-space-2)",
-                  display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2 }}>
-      <Button variant="ghost" size="sm" onClick={() => settingsStore.set(true)} title="模型与 Key 设置（Ctrl+,）">
+    // 第25轮：底部改为"模型状态条 + 两列工具"，按钮文案与顺序不变。
+    <div className="ice-nav-footer">
+      <Button variant="ghost" size="sm" className="ice-nav-footer__status" data-readiness={readiness.dot || "unknown"}
+              onClick={() => settingsStore.set(true)} title="模型与 Key 设置（Ctrl+,）">
         <span className={"ice-dot" + (readiness.dot ? " ice-dot--" + readiness.dot : "")} aria-hidden />
         {readiness.label}
       </Button>
-      <span style={{ flex: 1 }} />
+      <div className="ice-nav-footer__tools">
       <Button variant="ghost" size="sm" onClick={()=>void openGettingStarted().catch(error=>toast.error({title:'暂时无法返回指南',detail:(error as Error).message}))}>开始指南</Button>
       <Button variant="ghost" size="sm" onClick={() => openWebsite('tapnow')}>网页工作台</Button>
       <Button variant="ghost" size="sm" onClick={()=>editorialStore.set(true)}>选题与排期</Button>
@@ -197,8 +198,8 @@ function NavFooter({ version }: { version?: string }) {
                 toast.error({ title: "无法切换界面", detail: (error as Error).message }))}>
         经典界面
       </Button>
-      {version && <span style={{ fontSize: 11, color: "var(--ice-text-disabled)", paddingRight: 4,
-                                 whiteSpace: "nowrap", marginLeft: "auto" }}>v{version}</span>}
+      </div>
+      {version && <span className="ice-nav-footer__version">v{version}</span>}
     </div>
   );
 }
@@ -337,6 +338,13 @@ function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }
   const accounts=boot?.accounts??initialAccounts,activeAccountId=current||initialId;
   return (
     <div style={{ padding: "var(--ice-space-3)", display: "grid", gap: "var(--ice-space-2)" }}>
+      {/* 第25轮：账号卡（首字头像 + 原生 select），select 的 id、值与切换流程不变。 */}
+      <div className="ice-account-card" data-switching={switching || undefined}>
+      <span className="ice-account-card__avatar" aria-hidden>
+        {(accounts.find(account => account.id === activeAccountId)?.name || "?").trim().slice(0, 1).toUpperCase()}
+      </span>
+      <span className="ice-account-card__body">
+      <span className="ice-account-card__eyebrow" aria-hidden>公众号</span>
       <label className="ice-sr-only" htmlFor="ice-account-select">切换公众号</label>
       <select
         id="ice-account-select"
@@ -366,15 +374,14 @@ function AccountSwitcher({ accounts:initialAccounts, activeAccountId:initialId }
             setSwitching(false);
           }
         }}
-        style={{
-          height: "var(--ice-control-height)", borderRadius: "var(--ice-radius-md)",
-          border: "1px solid var(--ice-border)", background: "var(--ice-surface)", width: "100%",
-        }}
+        className="ice-account-card__select"
       >
         {accounts.map(account => (
           <option key={account.id} value={account.id}>{account.name}</option>
         ))}
       </select>
+      </span>
+      </div>
       <Button variant="ghost" size="sm" disabled={switching} onClick={()=>publicationSettingsStore.set(true)}>公众号与品牌</Button>
       {error != null && <ErrorNote error={error} note="账号未切换，当前账号数据保持不变。" />}
     </div>

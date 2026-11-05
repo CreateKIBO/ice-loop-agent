@@ -196,8 +196,9 @@
               box-shadow var(--ice-motion-fast) var(--ice-motion-ease),
               transform var(--ice-motion-fast) var(--ice-motion-ease);
 }
-.ice-quick:hover { border-color: var(--ice-signal-blue); box-shadow: 0 6px 18px rgba(36, 72, 219, 0.12); transform: translateY(-2px); }
-.ice-quick:active { transform: translateY(0) scale(0.98); }
+/* 第24轮：按 v1.5 设计规则"卡片不做悬停缩放/大阴影"，悬停只换描边与浅底。 */
+.ice-quick:hover { border-color: var(--ice-signal-blue); background: var(--ice-surface-muted); }
+.ice-quick:active { background: var(--ice-info-bg); }
 .ice-quick strong { font-size: var(--ice-font-size-lg); }
 .ice-quick span { color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
 .ice-quick kbd, .ice-kbd {

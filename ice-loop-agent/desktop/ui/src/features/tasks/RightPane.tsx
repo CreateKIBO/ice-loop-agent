@@ -91,10 +91,14 @@ export function RightPane() {
   const allJobs=jobs.data??[];
   const visibleJobs=allJobs.filter(job=>jobMatchesFilter(job,statusFilter,query));
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <KnowledgePanel />
-      <DownloadStaging />
-      <div style={{ padding: "var(--ice-space-3)", display: "flex", alignItems: "center",
+    <div className="ice-right-islands">
+      {/* 资料岛：知识检索与下载暂存；制作任务在下方另一座岛。 */}
+      <section className="ice-island ice-island--resources" aria-label="资料">
+        <KnowledgePanel />
+        <DownloadStaging />
+      </section>
+      <section className="ice-island ice-island--tasks" aria-label="制作任务">
+      <div className="ice-island__head" style={{ padding: "var(--ice-space-3)", display: "flex", alignItems: "center",
                     gap: "var(--ice-space-2)", flexWrap:"wrap", borderBottom: "1px solid var(--ice-border)" }}>
         <strong style={{ fontSize: "var(--ice-font-size-md)" }}>制作任务</strong>
         <input type="search" aria-label="搜索任务标题、栏目或期号" placeholder="搜索标题 / 栏目 / 期号"
@@ -163,6 +167,7 @@ export function RightPane() {
       {reviewJob&&<React.Suspense fallback={<div role="status" style={{padding:12}}><Spinner size={14} />正在打开任务…</div>}>
         <WorkflowReview key={account+':'+reviewJob} jobId={reviewJob} onClose={()=>setReviewJob(null)} />
       </React.Suspense>}
+      </section>
     </div>
   );
 }

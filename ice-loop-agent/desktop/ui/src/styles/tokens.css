@@ -65,6 +65,22 @@
   --ice-z-dialog: 200;
   --ice-z-toast: 300;
 
+  /* 岛屿布局（v2.0 界面优化）：画布比纸面深一档，面板以白色圆角岛浮起；
+     只用极浅的描边阴影，延续"不用大阴影/渐变"的约束。 */
+  --ice-canvas: #E9E7DF;
+  --ice-island-gap: 10px;          /* 岛与窗口边缘的距离 */
+  --ice-island-seam: 3px;          /* 岛与分隔条之间的距离；分隔条 5px，岛间距 = 3+5+3 */
+  --ice-island-radius: 14px;
+  --ice-island-border: #DCD9CF;
+  --ice-island-shadow: 0 1px 2px rgba(21, 25, 31, 0.05);
+  --ice-island-shadow-raised: 0 6px 20px rgba(21, 25, 31, 0.06), 0 1px 2px rgba(21, 25, 31, 0.04);
+  --ice-focus-max: 900px;          /* 专注写作时中岛最大宽度 */
+  /* 岛内的轻分割线/卡片描边与聚焦描边（第24轮从 island.css 硬编码收口） */
+  --ice-border-subtle: #ECEAE3;
+  --ice-border-faint: #E6E3DA;
+  --ice-border-focus: #B9C6F4;
+  --ice-reading-max: 760px;        /* 助手回复的舒适行宽 */
+
   /* 密度（紧凑模式由 [data-density=compact] 覆盖） */
   --ice-row-gap: var(--ice-space-2);
 }

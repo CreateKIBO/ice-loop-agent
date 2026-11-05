@@ -1,0 +1,180 @@
+/* ICE Loop Studio 岛屿布局（v2.0 界面优化）。
+   结构：画布（--ice-canvas）上放三座岛——导航岛、写作岛、右侧资料/任务双岛。
+   约束：
+   - 面板宽度、显隐、分隔条拖动仍由 WorkbenchShell/paneLayout 负责，这里只改视觉；
+     岛与边缘的距离做在 pane 的 padding 里，pane 本身尺寸不变（布局测试依赖它）。
+   - 只用浅描边阴影；不用渐变、不做悬停缩放。
+   - 切换显示状态时不改 display（交给 [hidden]），以免覆盖 .ice-shell__body > [hidden]。 */
+
+body { background: var(--ice-canvas); }
+.ice-shell { background: var(--ice-canvas); }
+
+/* ---------------------------------------------------------------- 顶栏（画在画布上） */
+.ice-shell .ice-shell-toolbar {
+  min-height: 48px; gap: 10px; padding: 0 var(--ice-island-gap);
+  background: transparent; border-bottom: 0;
+}
+.ice-shell-toolbar__brand {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  font-weight: 650; font-size: 14px; color: var(--ice-ink); letter-spacing: .01em; user-select: none;
+}
+.ice-shell-toolbar__mark {
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--ice-ink); color: #fff; font: 700 12px/1 Georgia, "Songti SC", serif;
+}
+.ice-shell-toolbar__search {
+  flex: 0 1 420px; min-width: 0; margin-inline: auto; height: 30px;
+  display: inline-flex; align-items: center; gap: 8px; padding: 0 6px 0 12px;
+  border-radius: 999px; border: 1px solid rgba(21, 25, 31, 0.08);
+  background: rgba(255, 255, 255, 0.7); color: var(--ice-text-secondary);
+  font-size: var(--ice-font-size-sm); cursor: pointer;
+  transition: background var(--ice-motion-fast) var(--ice-motion-ease),
+              border-color var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-shell-toolbar__search:hover { background: var(--ice-surface); border-color: var(--ice-border); }
+.ice-shell-toolbar__search:focus-visible { border-radius: 999px; }
+.ice-shell-toolbar__search-text { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ice-shell-toolbar__search kbd {
+  flex-shrink: 0; font: 11px var(--ice-font-ui); padding: 1px 6px; border-radius: 5px;
+  background: var(--ice-surface-sunken); border: 1px solid var(--ice-border); color: var(--ice-text-secondary);
+}
+/* 布局切换：一组胶囊分段按钮 */
+.ice-shell-toolbar__seg {
+  display: inline-flex; flex-shrink: 0; gap: 2px; padding: 3px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(21, 25, 31, 0.08);
+}
+.ice-shell-toolbar__seg .ice-btn { height: 26px; border-radius: 999px; padding: 0 10px; gap: 5px; color: var(--ice-text-secondary); }
+.ice-shell-toolbar__seg .ice-btn:hover { color: var(--ice-text); background: rgba(255, 255, 255, 0.7); }
+.ice-shell .ice-shell-toolbar__seg button[aria-pressed="true"] {
+  background: var(--ice-surface); color: var(--ice-text); box-shadow: 0 1px 2px rgba(21, 25, 31, 0.08);
+}
+.ice-shell .ice-shell-toolbar__seg button[aria-pressed="true"] svg { color: var(--ice-signal-blue); }
+.ice-shell-toolbar__seg .ice-btn:focus-visible { border-radius: 999px; }
+@media (max-width: 900px) { .ice-shell-toolbar__name { display: none; } }
+@media (max-width: 620px) {
+  .ice-shell-toolbar__search-text, .ice-shell-toolbar__search kbd { display: none; }
+  .ice-shell-toolbar__search { flex: 0 0 auto; margin-inline: 0; padding: 0 9px; }
+  .ice-shell .ice-shell-toolbar { gap: 4px; padding-inline: 6px; }
+  .ice-shell-toolbar__seg { margin-left: auto; }
+  .ice-shell-toolbar__seg .ice-btn { padding: 0 7px; }
+}
+
+/* ---------------------------------------------------------------- 面板 → 岛 */
+.ice-pane { display: flex; flex-direction: column; overflow: hidden; }
+.ice-shell .ice-pane--left, .ice-shell .ice-pane--right { background: transparent; border: 0; }
+.ice-shell .ice-pane--center { background: transparent; }
+.ice-shell .ice-pane--left  { padding: 0 var(--ice-island-seam) var(--ice-island-gap) var(--ice-island-gap); }
+.ice-shell .ice-pane--center { padding: 0 var(--ice-island-seam) var(--ice-island-gap); }
+.ice-shell .ice-pane--right { padding: 0 var(--ice-island-gap) var(--ice-island-gap) var(--ice-island-seam); }
+/* 一侧收起时，写作岛贴窗口那一侧留出完整边距 */
+.ice-shell #ice-navigation-pane[hidden] ~ #ice-writing-pane { padding-left: var(--ice-island-gap); }
+.ice-shell__body:has(> #ice-task-pane[hidden]) > #ice-writing-pane { padding-right: var(--ice-island-gap); }
+.ice-shell[data-compact="true"] .ice-pane,
+.ice-shell[data-compact="true"] .ice-pane--center { padding: 0 var(--ice-island-gap) var(--ice-island-gap); }
+
+.ice-island {
+  flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--ice-surface); border: 1px solid var(--ice-island-border);
+  border-radius: var(--ice-island-radius); box-shadow: var(--ice-island-shadow);
+}
+.ice-island--nav { background: var(--ice-surface-muted); overflow-y: auto; }
+.ice-island--nav > * { flex: 1; min-height: 0; }
+.ice-island--writing > * { flex: 1; min-height: 0; }
+
+/* 专注写作（两侧都收起、非窄窗口）：写作岛居中并限制行宽 */
+.ice-shell:not([data-compact]) .ice-shell__body:has(> #ice-navigation-pane[hidden]):has(> #ice-task-pane[hidden]) .ice-island--writing {
+  width: 100%; max-width: var(--ice-focus-max); margin-inline: auto;
+}
+
+/* 写作岛内部：头部与对话底色统一为纸白，分割线放轻 */
+.ice-island--writing .ice-conversation-header { background: transparent; border-bottom-color: var(--ice-border-subtle); padding: 14px 20px 12px; }
+.ice-island--writing .ice-chat-log { padding-inline: 24px !important; }
+
+/* ---------------------------------------------------------------- 行动岛（动作卡 + 输入框） */
+.ice-action-dock {
+  flex-shrink: 0; margin: 0 14px 14px; overflow: hidden;
+  border: 1px solid var(--ice-border); border-radius: var(--ice-island-radius);
+  background: var(--ice-surface); box-shadow: var(--ice-island-shadow-raised);
+  transition: border-color var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-action-dock:focus-within { border-color: var(--ice-border-focus); }
+.ice-action-dock:has(textarea[aria-invalid="true"]) { border-color: var(--ice-danger); }
+/* 动作卡区：有内容时作为行动岛的浅色上半部 */
+.ice-action-dock > :not(.ice-composer):not(:empty) {
+  background: var(--ice-surface-muted); border-bottom: 1px solid var(--ice-border-subtle);
+}
+.ice-action-dock .ice-composer { border-top: 0; background: transparent; padding: 10px 12px; gap: 6px; }
+.ice-action-dock .ice-composer textarea {
+  border: 0; border-radius: 0; background: transparent; padding: 6px 4px; min-height: 56px; font-size: 14px;
+}
+.ice-action-dock .ice-composer textarea:focus-visible { box-shadow: none; }
+.ice-action-dock .ice-composer__modes > button { border-radius: 7px; }
+.ice-action-dock .ice-composer__footer .ice-btn--primary { border-radius: 9px; min-width: 64px; }
+@media (max-width: 1000px) { .ice-action-dock { margin: 0 8px 8px; } }
+
+/* ---------------------------------------------------------------- 右侧双岛 */
+.ice-island-stack { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ice-island-stack > * { flex: 1; min-height: 0; }
+.ice-right-islands { display: flex; flex-direction: column; gap: var(--ice-island-gap); height: 100%; min-height: 0; }
+.ice-island--resources { flex: 1 1 0; min-height: 160px; overflow-y: auto; }
+.ice-island--resources:empty { display: none; }
+.ice-island--tasks { flex: 1.25 1 0; min-height: 220px; }
+.ice-island--tasks > .ice-island__head { border-bottom-color: var(--ice-border-subtle) !important; }
+.ice-island .ice-card { border-color: var(--ice-border-faint); background: var(--ice-surface-muted); }
+.ice-island .ice-card:hover { border-color: var(--ice-border-strong); }
+.ice-island .ice-card--selected, .ice-island .ice-card--selected:hover { border-color: var(--ice-signal-blue); }
+
+/* ---------------------------------------------------------------- 第24轮：岛内表面统一 */
+/* 编辑器吸顶工具条：原为纸面暖白，放在白色写作岛里会成一条色带；改为岛内浅底。 */
+.ice-island--writing .ice-editor-bar { background: var(--ice-surface-muted); border-bottom-color: var(--ice-border-subtle); }
+/* 对话框与岛同一圆角语言 */
+.ice-dialog { border-radius: var(--ice-island-radius); }
+/* 欢迎页：开始指南卡在白色岛上用浅底区分层级 */
+.ice-island--writing .ice-start-guide { background: var(--ice-surface-muted); border-color: var(--ice-border-subtle); }
+
+/* ---------------------------------------------------------------- 第25轮：导航岛 */
+/* 账号卡：首字头像 + 原生 select（保留 #ice-account-select 与键盘/读屏行为） */
+.ice-account-card {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  background: var(--ice-surface); border: 1px solid var(--ice-border); border-radius: 10px;
+  transition: border-color var(--ice-motion-fast) var(--ice-motion-ease);
+}
+.ice-account-card:hover { border-color: var(--ice-border-strong); }
+.ice-account-card:focus-within { border-color: var(--ice-signal-blue); }
+.ice-account-card[data-switching] { opacity: .7; }
+.ice-account-card__avatar {
+  width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; display: grid; place-items: center;
+  background: var(--ice-info-bg); color: var(--ice-signal-blue); font-weight: 700; font-size: 13px;
+}
+.ice-account-card__body { flex: 1; min-width: 0; display: grid; }
+.ice-account-card__eyebrow { font-size: 10px; letter-spacing: .08em; color: var(--ice-text-secondary); line-height: 1.3; }
+.ice-account-card__select {
+  appearance: none; -webkit-appearance: none; width: 100%; min-width: 0; height: 22px;
+  border: 0; padding: 0 18px 0 0; font-weight: 600; font-size: 13px; color: var(--ice-text);
+  cursor: pointer; text-overflow: ellipsis;
+  /* 下拉箭头：内联 SVG（CSP 允许 img-src data:），不用渐变拼角 */
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235A6069' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 2px center;
+}
+.ice-account-card__select:focus-visible { box-shadow: none; }
+.ice-account-card__select:disabled { cursor: progress; }
+
+/* 新建会话：整宽主按钮 */
+.ice-nav-new > .ice-btn { width: 100%; height: var(--ice-control-height-lg); border-radius: 9px; font-weight: 600; }
+
+/* 底部：模型状态条 + 两列工具 */
+.ice-nav-footer {
+  flex-shrink: 0; display: grid; gap: 4px; padding: 8px;
+  border-top: 1px solid var(--ice-border-subtle);
+}
+.ice-nav-footer__status {
+  width: 100%; justify-content: flex-start; gap: 8px; height: 30px !important; padding: 0 10px !important;
+  border-radius: 8px; background: var(--ice-surface); border: 1px solid var(--ice-border-subtle);
+  color: var(--ice-text) !important; font-size: 12px;
+}
+.ice-nav-footer__status[data-readiness="ok"] { background: var(--ice-success-bg); border-color: transparent; color: var(--ice-success) !important; }
+.ice-nav-footer__status[data-readiness="warn"] { background: var(--ice-warning-bg); border-color: transparent; color: var(--ice-warning) !important; }
+.ice-nav-footer__status[data-readiness="bad"] { background: var(--ice-danger-bg); border-color: transparent; color: var(--ice-danger) !important; }
+.ice-nav-footer__tools { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.ice-nav-footer__tools > .ice-btn { justify-content: flex-start; padding: 0 8px; color: var(--ice-text-secondary); border-radius: 7px; }
+.ice-nav-footer__tools > .ice-btn:hover { color: var(--ice-text); background: var(--ice-surface); }
+.ice-nav-footer__version { font-size: 11px; color: var(--ice-text-disabled); padding: 0 8px; }

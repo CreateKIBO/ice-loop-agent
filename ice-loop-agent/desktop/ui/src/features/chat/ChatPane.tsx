@@ -261,8 +261,11 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
         </motion.div>}
       </AnimatePresence>
       </div>
-      <AgentActionCards conversationId={conversationId} refreshSignal={toolSeq} />
-      <Composer key={account + ":" + conversationId} conversationId={conversationId} streaming={streaming} reuse={reuse} delivery={delivery} />
+      {/* 行动岛：待确认的动作卡与输入框合为一块，从对话流中抬起。 */}
+      <div className="ice-action-dock">
+        <AgentActionCards conversationId={conversationId} refreshSignal={toolSeq} />
+        <Composer key={account + ":" + conversationId} conversationId={conversationId} streaming={streaming} reuse={reuse} delivery={delivery} />
+      </div>
     </div>
   );
 }

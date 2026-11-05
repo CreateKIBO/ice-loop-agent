@@ -28,6 +28,7 @@
 - 根因：白名单编写于新目录产生之前。
 - 范围：打包。
 - 状态：M9-06 更新构建脚本时修复。
+- 复核（2026-11-05，第24轮）：当前 `desktop/electron-builder.json` 的 files 已含 `ui/dist/**/*`；仓库中不存在 `main-services/` 目录，主进程模块均为 desktop 根目录下逐个列出的 `.cjs`。白名单缺口按源码判断已关闭；真机打包内容尚未在本轮复验，复验时以 `build/check-asar-ui.cjs` 结果为准。
 
 ## KI-005 Ctrl+K 为本地记录搜索，非段落级检索
 

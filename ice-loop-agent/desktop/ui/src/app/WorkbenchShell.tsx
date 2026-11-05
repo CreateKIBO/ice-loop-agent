@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { Button, EmptyState } from "../components/ui";
 import { PaneActivity } from "./PaneActivity";
+import { paletteStore } from "./uiState";
 import {
   MAX_LEFT, MAX_RIGHT, MIN_LEFT, MIN_RIGHT, PANE_DEFAULTS, normalizeSizes, normalizeVisibility,
   resolveLayout, resizeVisiblePane, type CompactPane, type PaneSizes, type PaneVisibility,
@@ -144,39 +145,59 @@ export function WorkbenchShell({ left, center, right, navigationKey = "" }: {
              event.preventDefault(); setSelected("center");
            }
          }}>
-      <div className="ice-shell-toolbar" role="group" aria-label="工作区布局">
-        <Button size="sm" variant="ghost" aria-controls="ice-navigation-pane" aria-expanded={layout.left}
-                aria-pressed={layout.left} onClick={() => toggle("left")}>
-          <PaneIcon side="left" />会话与草稿
-        </Button>
-        <span className="ice-shell-toolbar__context">{compact ? "窄窗口 · 单面板" : "创作工作台"}</span>
-        <Button size="sm" variant="ghost" aria-controls="ice-writing-pane"
-                aria-pressed={compact ? layout.center : !docked.left && !docked.right} onClick={focusWriting}>
-          {compact ? "写作区" : docked.left || docked.right ? "专注写作" : "恢复侧栏"}
-        </Button>
-        <Button size="sm" variant="ghost" aria-controls="ice-task-pane" aria-expanded={layout.right}
-                aria-pressed={layout.right} onClick={() => toggle("right")}>
-          <PaneIcon side="right" />任务与资料
-        </Button>
-      </div>
+      {/* 岛屿布局：顶栏直接画在画布上，品牌 + 快捷搜索 + 布局切换；不再是一条白色工具栏。 */}
+      <header className="ice-shell-toolbar">
+        <span className="ice-shell-toolbar__brand" aria-hidden="true">
+          <span className="ice-shell-toolbar__mark">i</span>
+          <span className="ice-shell-toolbar__name">ICE Loop Studio</span>
+        </span>
+        <button type="button" className="ice-shell-toolbar__search" aria-keyshortcuts="Control+K"
+                aria-label="搜索会话、草稿、任务或页面（Ctrl K）" onClick={() => paletteStore.set(true)}>
+          <SearchIcon />
+          <span className="ice-shell-toolbar__search-text">搜索会话、草稿、任务或页面</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <div className="ice-shell-toolbar__seg" role="group" aria-label="工作区布局"
+             data-mode={compact ? "compact" : "docked"}>
+          <Button size="sm" variant="ghost" aria-controls="ice-navigation-pane" aria-expanded={layout.left}
+                  aria-pressed={layout.left} onClick={() => toggle("left")}>
+            <PaneIcon side="left" />会话与草稿
+          </Button>
+          <Button size="sm" variant="ghost" aria-controls="ice-writing-pane"
+                  aria-pressed={compact ? layout.center : !docked.left && !docked.right} onClick={focusWriting}>
+            <FocusIcon />{compact ? "写作区" : docked.left || docked.right ? "专注写作" : "恢复侧栏"}
+          </Button>
+          <Button size="sm" variant="ghost" aria-controls="ice-task-pane" aria-expanded={layout.right}
+                  aria-pressed={layout.right} onClick={() => toggle("right")}>
+            <PaneIcon side="right" />任务与资料
+          </Button>
+        </div>
+      </header>
       <div className="ice-shell__body">
       <nav id="ice-navigation-pane" aria-label="工作区导航" className="ice-pane ice-pane--left"
            hidden={!layout.left} inert={!layout.left} style={{ width: sizes.left }}>
-        <PaneActivity.Provider value={layout.left}>{left}</PaneActivity.Provider>
+        <div className="ice-island ice-island--nav">
+          <PaneActivity.Provider value={layout.left}>{left}</PaneActivity.Provider>
+        </div>
       </nav>
       <Divider label="调整导航栏宽度" value={sizes.left} min={MIN_LEFT} max={MAX_LEFT}
                hidden={compact || !layout.left}
                onDrag={delta => drag("left", delta)}
                onReset={() => setPreferred(previous => ({ ...previous, left: PANE_DEFAULTS.left }))} />
       <main id="ice-writing-pane" ref={centerRef} tabIndex={-1} aria-label="对话与行动" className="ice-pane--center"
-            hidden={!layout.center} inert={!layout.center}>{center}</main>
+            hidden={!layout.center} inert={!layout.center}>
+        <div className="ice-island ice-island--writing">{center}</div>
+      </main>
       <Divider label="调整任务栏宽度" value={sizes.right} min={MIN_RIGHT} max={MAX_RIGHT}
                hidden={compact || !layout.right}
                onDrag={delta => drag("right", delta)}
                onReset={() => setPreferred(previous => ({ ...previous, right: PANE_DEFAULTS.right }))} />
       <aside id="ice-task-pane" aria-label="文章与任务" className="ice-pane ice-pane--right"
              hidden={!layout.right} inert={!layout.right} style={{ width: sizes.right }}>
-        <PaneActivity.Provider value={layout.right}>{right}</PaneActivity.Provider>
+        {/* 右栏本身是透明容器，资料与制作任务在 RightPane 内各自成岛。 */}
+        <div className="ice-island-stack">
+          <PaneActivity.Provider value={layout.right}>{right}</PaneActivity.Provider>
+        </div>
       </aside>
       </div>
     </div>
@@ -187,6 +208,19 @@ function PaneIcon({ side }: { side: "left" | "right" }) {
   return <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
     <rect x="2.5" y="3" width="15" height="14" rx="2" />
     <path d={side === "left" ? "M7.5 3v14" : "M12.5 3v14"} />
+  </svg>;
+}
+
+function FocusIcon() {
+  return <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+    <rect x="5.5" y="3" width="9" height="14" rx="2" />
+  </svg>;
+}
+
+function SearchIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" aria-hidden>
+    <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
   </svg>;
 }
 
