@@ -49,7 +49,7 @@ def check_brand(ast: ArticleAST, profile: dict[str, Any],
     dash_n = body.count(pun["dash"])
     if dash_n > profile["article"]["max_dash"]:
         rpt.add("punct.dash", "block",
-                f"破折号「——」出现 {dash_n} 处，要求 0 处（用逗号或句号替代）")
+                f"破折号「——」出现 {dash_n} 处，最多允许 {profile['article']['max_dash']} 处")
     for q in pun["curly_quotes"]:
         if q in body:
             rpt.add("punct.curly_quote", "block",
@@ -63,7 +63,7 @@ def check_brand(ast: ArticleAST, profile: dict[str, Any],
     n_nbi = len(_NOT_BUT_IS.findall(body))
     if n_nbi > profile["article"]["max_not_but_is_pattern"]:
         rpt.add("style.not_but_is", "block",
-                f"「不是X，是Y」结构出现 {n_nbi} 次，每篇最多 1 次")
+                f"「不是X，是Y」结构出现 {n_nbi} 次，每篇最多 {profile['article']['max_not_but_is_pattern']} 次")
 
     short_paras = _count_single_sentence_paragraphs(ast)
     if short_paras < profile["article"]["min_short_paragraphs"]:
@@ -110,7 +110,7 @@ def check_brand(ast: ArticleAST, profile: dict[str, Any],
 def check_l1_quiet(title: str, profile: dict[str, Any]) -> RuleReport:
     """标题专项：禁用最全/终极/颠覆/必看/100%/震惊体（标题工坊 8.3）。"""
     rpt = RuleReport()
-    banned_title = ["最全", "终极", "颠覆", "必看", "100%", "震惊"]
+    banned_title = profile.get('title_banned_words', ["最全", "终极", "颠覆", "必看", "100%", "震惊"])
     for w in banned_title:
         if w in title:
             rpt.add("title.banned_word", "block", f"标题禁用词：「{w}」")

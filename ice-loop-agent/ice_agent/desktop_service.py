@@ -135,6 +135,8 @@ class DesktopService:
             cfg.profile = profile_from_account(account)
             from .workspace_assets import WorkspaceAssets
             cfg.profile['brand']['visual_references']=WorkspaceAssets(store,self.runtime,account['id']).style_context()
+            from .skills import WritingSkills
+            cfg.profile = WritingSkills(store, account).apply(cfg.profile)
             from .rules.sources import RuleSources
             cfg.profile = RuleSources(store,account['id']).apply(cfg.profile)
         if not demo:

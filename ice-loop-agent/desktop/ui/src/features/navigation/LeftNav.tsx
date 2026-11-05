@@ -15,7 +15,7 @@ import {
 } from "../../data/client";
 import { switchToClassic } from "../../data/desktop";
 import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
-import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,shortcutHelpStore,draftFlashStore } from "../../app/uiState";
+import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore } from "../../app/uiState";
 import { flashSurface, motionReduced } from "../../components/flash";
 import { CopyButton } from "../../components/CopyButton";
 import { openWebsite } from '../../data/websites';
@@ -189,6 +189,7 @@ function NavFooter({ version }: { version?: string }) {
         {readiness.label}
       </Button>
       <div className="ice-nav-footer__tools">
+      <Button variant="ghost" size="sm" onClick={()=>skillSettingsStore.set(true)}>写作技能</Button>
       <Button variant="ghost" size="sm" onClick={()=>void openGettingStarted().catch(error=>toast.error({title:'暂时无法返回指南',detail:(error as Error).message}))}>开始指南</Button>
       <Button variant="ghost" size="sm" onClick={() => openWebsite('tapnow')}>网页工作台</Button>
       <Button variant="ghost" size="sm" onClick={()=>editorialStore.set(true)}>选题与排期</Button>

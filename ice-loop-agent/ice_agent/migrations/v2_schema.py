@@ -426,3 +426,12 @@ def _creative_send_receipts(conn: sqlite3.Connection) -> None:
         " CHECK((state='accepted' AND message_id IS NOT NULL AND user_message_id IS NOT NULL) OR"
         " (state='cancelled' AND message_id IS NULL AND user_message_id IS NULL)))"
     )
+
+
+@migration(22, "写作技能设置：公众号隔离、版本与乐观并发保存")
+def _writing_skills(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE writing_skill_settings ("
+        " account_id TEXT PRIMARY KEY, revision INTEGER NOT NULL,"
+        " settings_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    )

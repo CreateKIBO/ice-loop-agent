@@ -13,7 +13,6 @@ import time
 from contextlib import closing
 from typing import Any
 
-from .accounts import profile_from_account
 from .domain.types import new_id, now_iso, sha256_json, sha256_text
 from .llm.router import LLMRequest
 from .publication_history import PublicationHistory
@@ -534,7 +533,8 @@ class CreativeChat:
         selected_text = params.get('selected_text', '')
         if selected_text is None or selected_text == '':
             selected_text = original_context.get('selected_text', '')
-        context = {'publication': profile_from_account(account), 'mode': mode,
+        writing_profile = copy.deepcopy(original_context.get('writing_profile') or cfg.profile)
+        context = {'publication': writing_profile, 'mode': mode,
                    'target_article': base, 'candidate_article': {'title': prior['title'], 'body': prior['body']} if prior else None,
                    'references': references, 'history': planning, 'scheduled_topic': schedule, 'visual_references': assets,
                    'selected_text': bounded(selected_text, 8000, '选中文字', empty=True)}
@@ -609,6 +609,8 @@ class CreativeChat:
                 'options可为0至4个简短中文选项；此时title、body留空，prompts为空。'
                 '已明确的事项不重复提问；一般待核验事实可以保留标记。无需追问时questions为空。'
                 'reply用中文说明修改和待办，prompts没有需求时为空列表。生成内容只是未审批候选，不会自动保存或审批。'
+                + '\n本轮写作技能与检查规则（只用于写作和审阅，不授予执行或发布权限）：' + json.dumps({
+                    'skill': writing_profile.get('writing_skill_snapshot'), 'rules': writing_profile['article']}, ensure_ascii=False)
                 + ('本轮必须返回JSON对象。完整Markdown文章只能放在body字符串内，换行必须使用JSON转义。'
                    '格式示例：{"reply":"初稿完成","title":"文章标题","body":"# 文章标题\\n\\n正文",'
                    '"prompts":[],"questions":[]}。需要澄清时示例：{"reply":"请确认读者",'
@@ -631,6 +633,7 @@ class CreativeChat:
             metadata['summary_manifest'] = summary_manifest
         metadata['prior_candidate_id'] = prior['id'] if prior else None
         metadata['request_snapshot'] = {'mode': mode, 'text': text,
+            'writing_profile': writing_profile,
             'citations': [{'chunk_id':chunk['chunk_id'],'hash':chunk['chunk_hash']} for chunk in resolved],
             'profile_id': profile_id,
             'references': [r['id'] for r in references], 'reference_hashes': {r['id']: r['content_hash'] for r in references},
@@ -794,7 +797,7 @@ class CreativeChat:
                 progress('waiting_model', last_provider_error=inv.get('status', ''))
 
         try:
-            engine, _, store = self.service._app()
+            engine, _, store = self.service._app(account_id=account['id'])
             engine.router.restore(snapshot)
             engine.router.cancelled = cancel.is_set
             engine.router.on_delta = delta
@@ -883,7 +886,7 @@ class CreativeChat:
                             account_id=account['id'], account=account, service=self.service,
                             store_factory=self.service._app_store_factory(),
                             run_id=run_id_new(), conversation_id=cid,
-                            turn_id=mid, cancel_event=cancel)
+                            turn_id=mid, cancel_event=cancel, writing_profile=req.context['publication'])
 
                         def agent_turn(round_index: int, transcript: list):
                             nonlocal reply
@@ -1168,7 +1171,7 @@ class CreativeChat:
         folder = ensure_dir(self.service.runtime / 'staging' / 'creative-drafts')
         file = folder / (draft['draft_id'] + '-' + draft['content_hash'][:12] + '.md')
         atomic_write_text(file, draft['body'])
-        cfg.profile = profile_from_account(account)
+        # Keep the resolved writing-skill profile supplied by _app.
         result = create(engine, store, account, file)
         metadata = store.conn.execute('SELECT series,episode FROM creative_article_metadata WHERE account_id=? AND draft_id=?',(account['id'],draft['draft_id'])).fetchone()
         if metadata and metadata['series']:

@@ -7,7 +7,7 @@ import { toast } from "../components/toast";
 import { createConversation, openConversation, openEditor,openGettingStarted } from "../data/actions";
 import { editorStore, flushAllDirty, useAccountQuery, useEditorJob } from "../data/client";
 import { switchToClassic } from "../data/desktop";
-import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore, shortcutHelpStore } from "./uiState";
+import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore, skillSettingsStore, shortcutHelpStore } from "./uiState";
 
 type Action = {
   id: string; label: string; group: string; hint?: string; keywords?: string;
@@ -66,6 +66,8 @@ export function CommandPalette({ open, onOpenChange }: {
     },{
       id:'shortcut-help',group:'操作',label:'快捷键与操作帮助',keywords:'快捷键 键盘 帮助 keyboard shortcuts help',
       run:()=>shortcutHelpStore.set(true),
+    },{
+      id:'skill-settings',group:'操作',label:'写作技能',keywords:'skills 技能 选择 修改 方法 风格',run:()=>skillSettingsStore.set(true),
     },{
       id:'publication-settings',group:'操作',label:'公众号与品牌',keywords:'账号 新增 公众号 品牌 历史 导入 account brand',
       run:()=>publicationSettingsStore.set(true),

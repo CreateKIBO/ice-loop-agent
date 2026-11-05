@@ -15,4 +15,5 @@ module.exports = Object.freeze([
   'recovery.list', 'recovery.create',
   'backup.queue', 'backup.resume_queue',
   'models.limits_save', 'models.window_refresh',
+  'skills.get', 'skills.save',
 ]);

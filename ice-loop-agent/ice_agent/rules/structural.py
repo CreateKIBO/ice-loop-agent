@@ -82,9 +82,9 @@ def check_structure(ast: ArticleAST, profile: dict[str, Any],
     # ---- 开头段不许有小标题 -----------------------------------------
     first_h2_idx = next((i for i, b in enumerate(ast.blocks)
                          if b.kind == "heading" and b.level == 2), None)
-    if first_h2_idx is None:
+    if first_h2_idx is None and rules.get('require_sections', True):
         rpt.add("h2.exists", "block", "缺少二级章节（## 一、…）")
-    else:
+    elif first_h2_idx is not None and rules.get('require_sections', True):
         opening = ast.blocks[:first_h2_idx]
         intro_paras = [b for b in opening if b.kind == "paragraph"]
         bad = [b for b in opening if b.kind == "heading" and b.level >= 3]
@@ -104,7 +104,7 @@ def check_structure(ast: ArticleAST, profile: dict[str, Any],
             rpt.add("h2.numbering", "block",
                     f"第 {i} 个章节应为「{want}」开头，实际是「{sec.text[:20]}」",
                     sec.text)
-    if not h2s or h2s[-1].text != ending:
+    if ending and (not h2s or h2s[-1].text != ending):
         rpt.add("h2.ending", "block",
                 f"最后一个 ## 必须是固定结尾「{ending}」且不编号")
 
@@ -146,24 +146,24 @@ def check_structure(ast: ArticleAST, profile: dict[str, Any],
         rpt.add("heading.depth", "warn", "出现五级及以下标题，超出模板层级")
 
     # ---- 结尾三件套 + 品牌句 ---------------------------------------
-    ending_blocks = _blocks_after(ast, ending)
+    ending_blocks = _blocks_after(ast, ending) if ending else []
     ending_text = "\n".join(b.text for b in ending_blocks if b.kind == "paragraph")
     if ending_blocks:
-        if triad["ice_recap_keyword"] not in ending_text:
+        if triad.get("ice_recap_keyword") and triad["ice_recap_keyword"] not in ending_text:
             rpt.add("ending.triad", "block",
                     f"「{ending}」缺少 ICE 循环回顾（关键词：{triad['ice_recap_keyword']}）")
-        if triad["preview_keyword"] not in ending_text:
+        if triad.get("preview_keyword") and triad["preview_keyword"] not in ending_text:
             rpt.add("ending.triad", "block",
                     f"「{ending}」缺少下期预告（关键词：{triad['preview_keyword']}）")
-        if triad["answer_promise_keyword"] not in ending_text:
+        if triad.get("answer_promise_keyword") and triad["answer_promise_keyword"] not in ending_text:
             rpt.add("ending.triad", "block",
                     "「写在最后」需承诺下期公布本期动手环节参考答案"
                     f"（关键词：{triad['answer_promise_keyword']}）")
-        if triad["follow_keyword"] not in ending_text:
+        if triad.get("follow_keyword") and triad["follow_keyword"] not in ending_text:
             rpt.add("ending.triad", "block", "「写在最后」缺少一句关注引导")
     pattern = rules.get("brand_sentence_pattern", "")
     brand_re = re.compile(re.escape(pattern).replace(re.escape("{X}"), ".+?"))
-    if pattern and not brand_re.search(ending_text):
+    if pattern and not brand_re.search(ending_text if ending else ast.body_text()):
         rpt.add("ending.brand_sentence", "block",
                 f"缺少配置的结尾品牌句「{pattern}」")
 

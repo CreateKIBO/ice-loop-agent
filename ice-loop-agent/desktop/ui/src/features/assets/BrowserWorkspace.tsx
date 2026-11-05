@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Banner, Button, Dialog, Input, Spinner } from '../../components/ui';
-import { paletteStore, publicationSettingsStore, settingsStore, shortcutHelpStore, backupSettingsStore, editorialStore } from '../../app/uiState';
+import { paletteStore, publicationSettingsStore, settingsStore, skillSettingsStore, shortcutHelpStore, backupSettingsStore, editorialStore } from '../../app/uiState';
 import { accountStore, useCurrentAccount } from '../../data/client';
 import type { Website } from '../../data/websites';
 import '../../styles/assets.css';
@@ -15,9 +15,10 @@ type BrowserBridge = { browserShow: (params: { site: Website; bounds: Bounds }) 
 export function BrowserWorkspace({ site, onSite, onClose }: { site: Website; onSite: (site: Website) => void; onClose: () => void }) {
   const account = useCurrentAccount(), palette = paletteStore.use(), settings = settingsStore.use(), publication = publicationSettingsStore.use();
   const help = shortcutHelpStore.use(), backup = backupSettingsStore.use(), editorial = editorialStore.use();
+  const skills = skillSettingsStore.use();
   const [releaseAll, setReleaseAll] = React.useState(false), [releasing, setReleasing] = React.useState(false);
   const releasingRef = React.useRef(false), mounted = React.useRef(true);
-  const externalSuspended = palette || settings || publication || help || backup || editorial;
+  const externalSuspended = palette || settings || publication || help || backup || editorial || skills;
   const suspended = externalSuspended || releaseAll;
   React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [region, setRegion] = React.useState<HTMLDivElement | null>(null);

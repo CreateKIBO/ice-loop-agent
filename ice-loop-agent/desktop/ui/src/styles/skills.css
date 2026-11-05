@@ -1,0 +1,17 @@
+.ice-skills { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 18px; min-width: 0; }
+.ice-skills > :not(fieldset):not(section) { grid-column: 1 / -1; }
+.ice-skills__choices { margin: 0; min-width: 0; align-self: start; padding: 14px; border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); display: grid; gap: 10px; }
+.ice-skills__choices legend { font-weight: 600; }
+.ice-skills__choices label, .ice-skills__check { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.ice-skills__choice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.ice-skills__choice label { flex: 1 1 180px; min-width: 0; }
+.ice-skills__choice .ice-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; height: auto; min-height: var(--ice-control-height); }
+.ice-skills__status { flex: 1 1 180px; min-width: 0; font-size: var(--ice-font-size-sm); }
+.ice-skills__editor { display: grid; gap: 14px; min-width: 0; }
+.ice-skills__editor > label:not(.ice-skills__check), .ice-skills__editor details label { display: grid; gap: 6px; }
+.ice-skills textarea { width: 100%; min-width: 0; box-sizing: border-box; resize: vertical; padding: 10px; line-height: 1.65; color: var(--ice-text); background: var(--ice-surface); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); font: inherit; }
+.ice-skills details textarea { font-family: var(--ice-font-mono); }
+.ice-skills__note { margin: 0; color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); overflow-wrap: anywhere; }
+.ice-skills summary { cursor: pointer; }
+.ice-skills small { color: var(--ice-text-secondary); }
+@media (max-width: 720px) { .ice-skills { grid-template-columns: minmax(0, 1fr); } }

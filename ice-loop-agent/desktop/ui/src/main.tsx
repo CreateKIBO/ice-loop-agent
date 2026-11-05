@@ -11,6 +11,7 @@ import { shortcutHelpStore } from "./app/uiState";
 const ShortcutHelp = lazy(() => import("./components/ShortcutHelp").then(module => ({ default: module.ShortcutHelp })));
 import type { BootstrapSettings } from "./app/modelBootstrap";
 import { ModelSettingsHost } from "./app/ModelSettingsHost";
+import { SkillSettingsHost } from "./app/SkillSettingsHost";
 import { engineStore, paletteStore } from "./app/uiState";
 import { ErrorBoundary, WorkbenchShell } from "./app/WorkbenchShell";
 import { toast, Toaster } from "./components/toast";
@@ -149,6 +150,7 @@ function App() {
       <CommandPalette open={palette} onOpenChange={paletteStore.set} />
       <ShortcutHelpHost />
       <ModelSettingsHost />
+      <SkillSettingsHost />
       <PublicationSettingsHost />
       <BackupSettingsHost />
       <EditorialHost />

@@ -85,6 +85,7 @@ _PRAGMA_APPLY: dict[int, Callable[[sqlite3.Connection], None]] = {
     19: lambda conn: conn.execute("PRAGMA user_version=19"),
     20: lambda conn: conn.execute("PRAGMA user_version=20"),
     21: lambda conn: conn.execute("PRAGMA user_version=21"),
+    22: lambda conn: conn.execute("PRAGMA user_version=22"),
 }
 
 
