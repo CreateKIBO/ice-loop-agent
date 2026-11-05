@@ -7,7 +7,7 @@ import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { accountStore, useAccountQuery, queryClient, useCurrentAccount } from "../../data/client";
 import {
-  FONT_SIZES, LINE_HEIGHTS, PARAGRAPH_SPACINGS, PRODUCER_LABEL, docRpc, formatBytes, formatTime, invalidateDocuments,
+  FONT_SIZES, LETTER_SPACINGS, LINE_HEIGHTS, PARAGRAPH_SPACINGS, PRODUCER_LABEL, docRpc, formatBytes, formatTime, invalidateDocuments,
   type Delivery, type DocStyle, type DocumentDetail, type PublicationRecord, type VersionSummary,
 } from "./documentsApi";
 
@@ -41,7 +41,7 @@ const BRAND_PRESETS = ["#2563eb", "#0f766e", "#b91c1c", "#7c3aed", "#c2410c", "#
 function StylePanel({ style, onStyle }: Props) {
   return (
     <div className="ice-doc-form">
-      <p className="ice-doc-muted">主题：简洁（首期唯一主题）。设置随文章保存，并用于复制和导出。</p>
+      <p className="ice-doc-muted">一键排版：主题“简洁”（首期唯一主题）。设置作用于全文，随文章保存，并用于复制和导出。</p>
       <label>品牌色
         <span className="ice-doc-row">
           <input type="color" value={style.brandColor} aria-label="品牌色" onChange={event => onStyle({ brandColor: event.target.value.toLowerCase() })} />
@@ -57,6 +57,11 @@ function StylePanel({ style, onStyle }: Props) {
       <label>行距
         <select aria-label="行距" value={style.lineHeight} onChange={event => onStyle({ lineHeight: Number(event.target.value) })}>
           {LINE_HEIGHTS.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </label>
+      <label>字间距
+        <select aria-label="字间距" value={style.letterSpacing ?? 0.5} onChange={event => onStyle({ letterSpacing: Number(event.target.value) })}>
+          {LETTER_SPACINGS.map(value => <option key={value} value={value}>{value}px</option>)}
         </select>
       </label>
       <label>段落间距
@@ -279,8 +284,12 @@ function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
             {!image.missing && <span className="ice-doc-muted"> · {image.width}×{image.height} · {formatBytes(image.size)}</span>}</li>)}</ol>
           <p className="ice-doc-muted">导出包中的图片为原图字节，按正文顺序编号；公众号后台的实际上传限制以实测为准。</p>
         </details>}
+        {(delivery.cover || delivery.info?.summary) && <div className="ice-doc-muted">
+          封面：{delivery.cover ? (delivery.cover.source === "explicit" ? "已指定" : "正文第一张图") : "未设置"}
+          {delivery.info?.summary ? ` · 摘要：${delivery.info.summary}` : " · 摘要：未填写（后台默认抓取正文开头）"}</div>}
         <div className="ice-doc-phone" aria-label="公众号排版预览">
           <div className="ice-doc-phone__title">{delivery.title}</div>
+          {delivery.info?.author && <div className="ice-doc-phone__meta">{delivery.info.author}</div>}
           <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
         </div>
       </>}

@@ -2,11 +2,16 @@
 // 规范值是结构化文档 JSON（ADR-018）；Markdown 只是只读投影。
 import { accountStore, queryClient, rpc } from "../../data/client";
 
-export type DocStyle = { theme: "clean"; brandColor: string; fontSize: number; lineHeight: number; paragraphSpacing: number };
+export type DocStyle = { theme: "clean"; brandColor: string; fontSize: number; lineHeight: number; paragraphSpacing: number; letterSpacing?: number };
+/** v3.2 文章设置：随版本冻结，随复制/导出交付。 */
+export type DocInfo = { author?: string; summary?: string; sourceUrl?: string; coverResourceId?: string };
 export type DocJSON = { type: "doc"; content?: Array<Record<string, unknown>> };
-export type DocContent = { schema: 1; doc: DocJSON; style: DocStyle };
+export type DocContent = { schema: 1; doc: DocJSON; style: DocStyle; info?: DocInfo };
 
-export const DEFAULT_STYLE: DocStyle = { theme: "clean", brandColor: "#2563eb", fontSize: 16, lineHeight: 1.75, paragraphSpacing: 16 };
+export const DEFAULT_STYLE: DocStyle = { theme: "clean", brandColor: "#2563eb", fontSize: 17, lineHeight: 1.75, paragraphSpacing: 16 };
+export const LETTER_SPACINGS = [0, 0.5, 1, 1.5, 2];
+export const TITLE_LIMIT = 64, AUTHOR_LIMIT = 8, SUMMARY_LIMIT = 120;
+export const HIGHLIGHTS = ["#fff3a3", "#ffe4c4", "#dcfce7", "#dbeafe", "#fce7f3", "#e5e7eb"];
 export const FONT_SIZES = [14, 15, 16, 17, 18];
 export const LINE_HEIGHTS = [1.5, 1.6, 1.75, 1.8, 2.0];
 export const PARAGRAPH_SPACINGS = [0, 8, 12, 16, 20, 24];
@@ -61,6 +66,8 @@ export type DeliveryImage = { order: number; resource_id: string; caption: strin
 export type Delivery = {
   document_id: string; version_id: string; version_created_at: string; title: string; content_hash: string;
   delivery_hash: string; html: string; text: string; images: DeliveryImage[]; issues: DeliveryIssue[]; complete: boolean; style: DocStyle;
+  info?: DocInfo;
+  cover?: { resource_id: string; source: "explicit" | "first_image"; mime: string; width: number; height: number; file_name: string } | null;
 };
 export type ImageView = { resource_id: string; title: string; width: number; height: number; mime: string; size: number; preview: string; ok: boolean };
 export type Bookmark = { bookmark_id: string; url: string; title: string; position: number; is_default: boolean };

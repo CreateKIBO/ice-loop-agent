@@ -8,12 +8,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { Banner, Button, ErrorPanel, Input, Spinner } from "../../components/ui";
 import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
-import { accountStore, dirtyStore, flushAllDirty, registerDirtyFlush, useCurrentAccount, useObjectDirty } from "../../data/client";
+import { accountStore, dirtyStore, flushAllDirty, registerDirtyFlush, useCurrentAccount } from "../../data/client";
 import { conversationStore } from "../../data/client";
 import { documentStore, setWorkspace } from "../../app/uiState";
 import {
-  DEFAULT_STYLE, INLINE_FONT_SIZES, docRpc, formatTime, invalidateDocuments, pendingCache,
-  type DocContent, type DocStyle, type DocumentDetail, type ImageView, type ImportReport, type SaveResult,
+  AUTHOR_LIMIT, DEFAULT_STYLE, HIGHLIGHTS, INLINE_FONT_SIZES, LETTER_SPACINGS, LINE_HEIGHTS, PARAGRAPH_SPACINGS, SUMMARY_LIMIT, TITLE_LIMIT,
+  docRpc, formatTime, invalidateDocuments, pendingCache,
+  type DocContent, type DocInfo, type DocStyle, type DocumentDetail, type ImageView, type ImportReport, type SaveResult,
 } from "./documentsApi";
 import { ArticleImage, BlockId, DocImageSlot, DocRawBlock, DocRunOutput, RawHtml, TextAlign, TextStyle, imageActions } from "./docExtensions";
 import { DocumentSidePanel } from "./DocumentSidePanel";
@@ -87,7 +88,6 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const account = useCurrentAccount();
   const documentId = initial.document_id;
   const dirtyKey = "doc:" + documentId;
-  const dirty = useObjectDirty(dirtyKey);
   const [title, setTitle] = React.useState(initial.title);
   const [style, setStyle] = React.useState<DocStyle>({ ...DEFAULT_STYLE, ...initial.content.style });
   const [saveState, setSaveState] = React.useState<SaveState>("saved");
@@ -108,6 +108,11 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const saving = React.useRef<Promise<void> | null>(null);
   const titleRef = React.useRef(initial.title);
   const styleRef = React.useRef(style);
+  // v3.2：文章设置（作者/摘要/原文链接/封面）随正文一起保存为同一份规范值。
+  const [info, setInfo] = React.useState<DocInfo>(() => ({ ...(initial.content.info ?? {}) }));
+  const infoRef = React.useRef(info);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [words, setWords] = React.useState(0);
   const editorRef = React.useRef<Editor | null>(null);
   const mounted = React.useRef(true);
   React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -115,7 +120,10 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const content = React.useCallback((): DocContent | null => {
     const editor = editorRef.current;
     if (!editor) return null;
-    return { schema: 1, doc: editor.getJSON() as DocContent["doc"], style: styleRef.current };
+    const value: DocContent = { schema: 1, doc: editor.getJSON() as DocContent["doc"], style: styleRef.current };
+    const meta = Object.fromEntries(Object.entries(infoRef.current).filter(([, v]) => typeof v === "string" && v.trim())) as DocInfo;
+    if (Object.keys(meta).length) value.info = meta;
+    return value;
   }, []);
 
   const saveNow = React.useCallback(async (force = false): Promise<void> => {
@@ -238,6 +246,13 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     },
     onUpdate: () => schedule(),
   });
+  // 正文字数（与公众号底栏一致：不计空白）。
+  React.useEffect(() => {
+    if (!editor) return;
+    const count = () => setWords(editor.state.doc.textContent.replace(/\s+/g, "").length);
+    count(); editor.on("update", count);
+    return () => { editor.off("update", count); };
+  }, [editor]);
   React.useEffect(() => { editorRef.current = editor; }, [editor]);
   React.useEffect(() => {
     imageActions.current = { pickImage: pickDocumentImage };
@@ -247,6 +262,25 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const updateStyle = (patch: Partial<DocStyle>) => {
     const next = { ...styleRef.current, ...patch };
     styleRef.current = next; setStyle(next); schedule();
+  };
+  const updateInfo = (patch: Partial<DocInfo>) => {
+    const next = { ...infoRef.current, ...patch };
+    infoRef.current = next; setInfo(next); schedule();
+  };
+  const insertImage = async () => {
+    const image = await pickDocumentImage();
+    if (image) editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
+  };
+  const insertSlot = () => {
+    let count = 0;
+    editor?.state.doc.descendants(node => { if (node.type.name === "imageSlot" || node.type.name === "articleImage") count += 1; return true; });
+    editor?.chain().focus().insertContent({ type: "imageSlot", attrs: { figureNo: count + 1, caption: "待配图", kind: "生图", obtain: "见配图方案表" } }).run();
+  };
+  const saveVersion = async () => {
+    try {
+      const result = await commitVersion("");
+      toast.success({ title: result.created ? "已保存为新版本" : "内容与最新版本相同，未重复保存" });
+    } catch (error) { toast.error({ title: "版本没有保存", detail: (error as Error).message }); }
   };
 
   const toggleTextOnly = async () => {
@@ -289,6 +323,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     if (!recovery || !editor) return;
     editor.commands.setContent(recovery.content.doc);
     styleRef.current = { ...DEFAULT_STYLE, ...recovery.content.style }; setStyle(styleRef.current);
+    infoRef.current = { ...(recovery.content.info ?? {}) }; setInfo(infoRef.current);
     titleRef.current = recovery.title; setTitle(recovery.title);
     // 修订不匹配的缓存也可找回，但须进入冲突处理，不能覆盖他处的新稿。
     revision.current = recovery.base_revision;
@@ -297,24 +332,33 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
 
   const statusText = saveState === "saving" ? "正在保存…" : saveState === "dirty" ? "有修改，即将自动保存"
     : saveState === "error" ? "保存失败" : saveState === "conflict" ? "存在版本冲突"
-    : `已保存 ${formatTime(savedAt)}${unversioned ? " · 尚未存为版本" : ""}`;
+    : `已保存 ${formatTime(savedAt)}`;
+  const leave = () => {
+    void flushAllDirty().then(() => documentStore.set(null))
+      .catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message }));
+  };
+  const togglePanel = (value: "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
 
   return (
     <div className="ice-doc-layout" style={{
       ["--doc-font-size" as string]: style.fontSize + "px", ["--doc-line-height" as string]: String(style.lineHeight),
-      ["--doc-gap" as string]: style.paragraphSpacing + "px", ["--doc-brand" as string]: style.brandColor }}>
+      ["--doc-gap" as string]: style.paragraphSpacing + "px", ["--doc-brand" as string]: style.brandColor,
+      ["--doc-letter" as string]: (style.letterSpacing ?? 0.5) + "px" }}>
       <div className="ice-doc-main">
-        <div className="ice-doc-topbar">
-          <Button variant="ghost" size="sm" onClick={() => {
-            void flushAllDirty().then(() => documentStore.set(null))
-              .catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message }));
-          }} aria-label="返回文章列表">← 文章</Button>
-          <span className={"ice-doc-status ice-doc-status--" + saveState} role="status" aria-live="polite">{statusText}{dirty && saveState === "saved" ? "" : ""}</span>
+        {/* v3.2：参照公众号编辑页——第一行“插入”，第二行“格式”。 */}
+        <div className="ice-doc-insertbar" role="toolbar" aria-label="插入">
+          <Button variant="ghost" size="sm" onClick={leave} aria-label="返回文章列表">← 文章</Button>
           <span style={{ flex: 1 }} />
-          {initial.series && <span className="ice-doc-chip">{initial.series}{initial.episode ? ` · 第${initial.episode}期` : ""}</span>}
-          <Button size="sm" variant={panel === "style" ? "primary" : "secondary"} onClick={() => setPanel(panel === "style" ? null : "style")}>排版</Button>
-          <Button size="sm" variant={panel === "versions" ? "primary" : "secondary"} onClick={() => setPanel(panel === "versions" ? null : "versions")}>版本</Button>
-          <Button size="sm" variant={panel === "delivery" ? "primary" : "secondary"} onClick={() => setPanel(panel === "delivery" ? null : "delivery")}>交付与发布</Button>
+          <div className="ice-doc-insertgrp">
+            <button type="button" onClick={() => void insertImage()} title="插入本地图片（也可直接粘贴或拖入）">图片</button>
+            <button type="button" onClick={() => document.dispatchEvent(new CustomEvent("ice-doc-link"))} title="给选中文字添加链接">超链接</button>
+            <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()}>引用</button>
+            <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>分隔线</button>
+            <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()}>代码块</button>
+            <button type="button" onClick={insertSlot} title="先占位，稍后插入实际图片；交付前必须补齐">待配图位</button>
+          </div>
+          <span style={{ flex: 1 }} />
+          {initial.series ? <span className="ice-doc-chip">{initial.series}{initial.episode ? ` · 第${initial.episode}期` : ""}</span> : <span style={{ width: 64 }} />}
         </div>
         {initial.origin === "legacy_job" && <Banner tone="info" title="从旧制作任务接入的独立文章">
           原任务、审批、运行记录保持只读；这里的修改只属于这篇文章。代码执行已在 v3 退场，历史运行输出在交付时省略。</Banner>}
@@ -334,19 +378,43 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           另一处保存于 {formatTime(conflict.server.updated_at)}。你的修改仍保留在编辑器中，不会丢失。</Banner>}
         {saveState === "error" && saveError != null && <ErrorNote error={saveError} note="修改仍在编辑器和本地恢复缓存中。"
           onRetry={() => void saveNow().catch(() => undefined)} retryLabel="重试保存" />}
-        <Toolbar editor={editor} style={style} onImage={async () => {
-          const image = await pickDocumentImage();
-          if (image) editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
-        }} />
+        <Toolbar editor={editor} style={style} onStyle={updateStyle} />
         <AnimatePresence>{(paste || pasting) && <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
           <PasteReportBar state={paste} busy={pasting} onToggle={() => void toggleTextOnly()} onClose={() => setPaste(null)} />
         </motion.div>}</AnimatePresence>
         <div className="ice-doc-scroll">
           <div className="ice-doc-paper">
-            <input className="ice-doc-title" value={title} placeholder="文章标题" maxLength={300} aria-label="文章标题"
-                   onChange={event => { titleRef.current = event.target.value; setTitle(event.target.value); schedule(); }} />
+            <div className="ice-doc-titlerow">
+              <textarea className="ice-doc-title" value={title} placeholder="请在这里输入标题" maxLength={300} aria-label="文章标题" rows={1}
+                        onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); editor?.commands.focus("start"); } }}
+                        onChange={event => { const value = event.target.value.replace(/\n/g, ""); titleRef.current = value; setTitle(value); schedule(); }} />
+              <span className={"ice-doc-counter" + (title.length > TITLE_LIMIT ? " is-over" : "")} title={`公众号标题上限 ${TITLE_LIMIT} 字`}>{title.length}/{TITLE_LIMIT}</span>
+            </div>
+            <div className="ice-doc-authorrow">
+              <input className="ice-doc-author" value={info.author ?? ""} placeholder="请输入作者" maxLength={20} aria-label="作者"
+                     onChange={event => updateInfo({ author: event.target.value })} />
+              {(info.author ?? "").length > 0 && <span className={"ice-doc-counter" + ((info.author ?? "").length > AUTHOR_LIMIT ? " is-over" : "")}>{(info.author ?? "").length}/{AUTHOR_LIMIT}</span>}
+            </div>
             <EditorContent editor={editor} />
           </div>
+        </div>
+        <div className="ice-doc-fab">
+          <AnimatePresence>{settingsOpen && <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.16 }}>
+            <ArticleSettings info={info} onChange={updateInfo} onClose={() => setSettingsOpen(false)} editor={editor} />
+          </motion.div>}</AnimatePresence>
+          <button type="button" className={"ice-doc-pill" + (panel === "style" ? " is-on" : "")} onClick={() => togglePanel("style")}>✦ 一键排版</button>
+          <button type="button" className={"ice-doc-pill" + (settingsOpen ? " is-on" : "")} aria-expanded={settingsOpen}
+                  onClick={() => setSettingsOpen(value => !value)}>⚙ 文章设置</button>
+        </div>
+        <div className="ice-doc-bottombar">
+          <span>正文字数 {words.toLocaleString()}</span>
+          <span className={"ice-doc-status ice-doc-status--" + saveState} role="status" aria-live="polite">· {statusText}</span>
+          {unversioned && saveState === "saved" && <span className="ice-doc-chip is-warn">尚未存为版本</span>}
+          <span style={{ flex: 1 }} />
+          <Button size="sm" variant="ghost" onClick={() => togglePanel("versions")} aria-pressed={panel === "versions"}>历史版本</Button>
+          <Button size="sm" variant="primary" onClick={() => void saveVersion()}>保存版本</Button>
+          <Button size="sm" onClick={() => togglePanel("delivery")} aria-pressed={panel === "delivery"}>手机预览与交付</Button>
         </div>
       </div>
       <AnimatePresence>{panel && <motion.aside className="ice-doc-side" key="side"
@@ -386,7 +454,7 @@ function PasteReportBar({ state, busy, onToggle, onClose }: { state: PasteState;
   );
 }
 
-function Toolbar({ editor, style, onImage }: { editor: Editor | null; style: DocStyle; onImage: () => void }) {
+function Toolbar({ editor, style, onStyle }: { editor: Editor | null; style: DocStyle; onStyle: (patch: Partial<DocStyle>) => void }) {
   const [, force] = React.useReducer((value: number) => value + 1, 0);
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [href, setHref] = React.useState("");
@@ -395,15 +463,21 @@ function Toolbar({ editor, style, onImage }: { editor: Editor | null; style: Doc
     editor.on("selectionUpdate", force); editor.on("transaction", force);
     return () => { editor.off("selectionUpdate", force); editor.off("transaction", force); };
   }, [editor]);
+  React.useEffect(() => {
+    const open = () => { if (editor) { setHref(String(editor.getAttributes("link").href ?? "")); setLinkOpen(true); } };
+    document.addEventListener("ice-doc-link", open);
+    return () => document.removeEventListener("ice-doc-link", open);
+  }, [editor]);
   if (!editor) return <div className="ice-doc-toolbar" />;
   const chain = () => editor.chain().focus();
   const block = editor.isActive("heading", { level: 1 }) ? "h1" : editor.isActive("heading", { level: 2 }) ? "h2"
     : editor.isActive("heading", { level: 3 }) ? "h3" : "p";
   const align = (editor.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").textAlign as string | null) ?? "left";
-  const textStyle = editor.getAttributes("textStyle") as { color?: string | null; fontSize?: string | null };
-  const setTextStyle = (patch: { color?: string | null; fontSize?: string | null }) => {
-    const next = { color: textStyle.color ?? null, fontSize: textStyle.fontSize ?? null, ...patch };
-    if (!next.color && !next.fontSize) chain().unsetMark("textStyle").run();
+  const indent = Boolean(editor.getAttributes("paragraph").indent);
+  const textStyle = editor.getAttributes("textStyle") as { color?: string | null; fontSize?: string | null; backgroundColor?: string | null };
+  const setTextStyle = (patch: { color?: string | null; fontSize?: string | null; backgroundColor?: string | null }) => {
+    const next = { color: textStyle.color ?? null, fontSize: textStyle.fontSize ?? null, backgroundColor: textStyle.backgroundColor ?? null, ...patch };
+    if (!next.color && !next.fontSize && !next.backgroundColor) chain().unsetMark("textStyle").run();
     else chain().setMark("textStyle", next).run();
   };
   const setAlign = (value: string) => {
@@ -413,8 +487,21 @@ function Toolbar({ editor, style, onImage }: { editor: Editor | null; style: Doc
   const T = ({ label, active, onClick, children, disabled }: { label: string; active?: boolean; onClick: () => void; children: React.ReactNode; disabled?: boolean }) =>
     <button type="button" className={"ice-doc-tool" + (active ? " is-active" : "")} aria-label={label} title={label}
             aria-pressed={active} disabled={disabled} onMouseDown={event => event.preventDefault()} onClick={onClick}>{children}</button>;
+  const Swatches = ({ colors, current, onPick, reset, label }: { colors: string[]; current?: string | null; onPick: (c: string) => void; reset: string; label: string }) => (
+    <div className="ice-doc-pop__panel">
+      <div className="ice-doc-swatches">
+        {colors.map(color => <button key={color} type="button" style={{ background: color }} aria-label={label + " " + color} aria-pressed={current === color}
+          onMouseDown={event => event.preventDefault()} onClick={() => onPick(color)} />)}
+      </div>
+      <button type="button" className="ice-link-btn" onMouseDown={event => event.preventDefault()} onClick={() => onPick("")}>{reset}</button>
+    </div>
+  );
   return (
     <div className="ice-doc-toolbar" role="toolbar" aria-label="正文格式">
+      <T label="撤销 (Ctrl+Z)" disabled={!editor.can().undo()} onClick={() => chain().undo().run()}>↶</T>
+      <T label="重做 (Ctrl+Shift+Z)" disabled={!editor.can().redo()} onClick={() => chain().redo().run()}>↷</T>
+      <T label="清除格式" onClick={() => chain().unsetAllMarks().updateAttributes("paragraph", { textAlign: null, indent: null }).run()}>⌫</T>
+      <span className="ice-doc-tool-sep" />
       <select aria-label="段落类型" value={block} onChange={event => {
         const value = event.target.value;
         if (value === "p") chain().setParagraph().run();
@@ -422,42 +509,44 @@ function Toolbar({ editor, style, onImage }: { editor: Editor | null; style: Doc
       }}>
         <option value="p">正文</option><option value="h1">大标题</option><option value="h2">小标题</option><option value="h3">三级标题</option>
       </select>
+      <select aria-label="选中文字字号" title="选中文字的字号；全文字号在“一键排版”中设置" value={textStyle.fontSize ?? ""}
+              onChange={event => setTextStyle({ fontSize: event.target.value || null })}>
+        <option value="">{style.fontSize}px</option>{INLINE_FONT_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
+      </select>
       <span className="ice-doc-tool-sep" />
       <T label="加粗 (Ctrl+B)" active={editor.isActive("bold")} onClick={() => chain().toggleBold().run()}><b>B</b></T>
       <T label="斜体 (Ctrl+I)" active={editor.isActive("italic")} onClick={() => chain().toggleItalic().run()}><i>I</i></T>
       <T label="下划线 (Ctrl+U)" active={editor.isActive("underline")} onClick={() => chain().toggleUnderline().run()}><u>U</u></T>
       <T label="删除线" active={editor.isActive("strike")} onClick={() => chain().toggleStrike().run()}><s>S</s></T>
-      <T label="行内代码" active={editor.isActive("code")} onClick={() => chain().toggleCode().run()}>{"<>"}</T>
-      <span className="ice-doc-tool-sep" />
       <details className="ice-doc-pop">
         <summary className="ice-doc-tool" title="文字颜色" aria-label="文字颜色"><span style={{ borderBottom: `3px solid ${textStyle.color || "currentColor"}` }}>A</span></summary>
-        <div className="ice-doc-pop__panel">
-          <div className="ice-doc-swatches">
-            {[...new Set([style.brandColor, ...COLORS])].map(color => <button key={color} type="button" style={{ background: color }} aria-label={"颜色 " + color}
-              onMouseDown={event => event.preventDefault()} onClick={() => setTextStyle({ color })} />)}
-          </div>
-          <button type="button" className="ice-link-btn" onMouseDown={event => event.preventDefault()} onClick={() => setTextStyle({ color: null })}>恢复默认颜色</button>
-        </div>
+        <Swatches colors={[...new Set([style.brandColor, ...COLORS])]} current={textStyle.color} label="文字颜色" reset="恢复默认颜色"
+                  onPick={color => setTextStyle({ color: color || null })} />
       </details>
-      <select aria-label="局部字号" value={textStyle.fontSize ?? ""} onChange={event => setTextStyle({ fontSize: event.target.value || null })}>
-        <option value="">字号</option>{INLINE_FONT_SIZES.map(size => <option key={size} value={size}>{size.replace("px", "")}</option>)}
-      </select>
+      <details className="ice-doc-pop">
+        <summary className="ice-doc-tool" title="背景色（高亮）" aria-label="背景色"><span className="ice-doc-hl" style={{ background: textStyle.backgroundColor || "#fff3a3" }}>ab</span></summary>
+        <Swatches colors={HIGHLIGHTS} current={textStyle.backgroundColor} label="背景色" reset="清除背景色"
+                  onPick={color => setTextStyle({ backgroundColor: color || null })} />
+      </details>
       <span className="ice-doc-tool-sep" />
       {(["left", "center", "right", "justify"] as const).map(value =>
         <T key={value} label={{ left: "左对齐", center: "居中", right: "右对齐", justify: "两端对齐" }[value]} active={align === value}
            onClick={() => setAlign(value)}>{{ left: "⇤", center: "≡", right: "⇥", justify: "☰" }[value]}</T>)}
+      <T label="首行缩进两字" active={indent} onClick={() => chain().updateAttributes("paragraph", { indent: indent ? null : true }).run()}>⇥¶</T>
+      <select aria-label="全文行距" title="全文行距" value={style.lineHeight} onChange={event => onStyle({ lineHeight: Number(event.target.value) })}>
+        {LINE_HEIGHTS.map(value => <option key={value} value={value}>行距 {value}</option>)}
+      </select>
+      <select aria-label="全文段距" title="全文段落间距" value={style.paragraphSpacing} onChange={event => onStyle({ paragraphSpacing: Number(event.target.value) })}>
+        {PARAGRAPH_SPACINGS.map(value => <option key={value} value={value}>段距 {value}</option>)}
+      </select>
+      <select aria-label="全文字间距" title="全文字间距" value={style.letterSpacing ?? 0.5} onChange={event => onStyle({ letterSpacing: Number(event.target.value) })}>
+        {LETTER_SPACINGS.map(value => <option key={value} value={value}>字距 {value}</option>)}
+      </select>
       <span className="ice-doc-tool-sep" />
-      <T label="无序列表" active={editor.isActive("bulletList")} onClick={() => chain().toggleBulletList().run()}>•</T>
+      <T label="无序列表" active={editor.isActive("bulletList")} onClick={() => chain().toggleBulletList().run()}>•≡</T>
       <T label="有序列表" active={editor.isActive("orderedList")} onClick={() => chain().toggleOrderedList().run()}>1.</T>
-      <T label="引用" active={editor.isActive("blockquote")} onClick={() => chain().toggleBlockquote().run()}>❝</T>
-      <T label="代码块" active={editor.isActive("codeBlock")} onClick={() => chain().toggleCodeBlock().run()}>{"{ }"}</T>
-      <T label="分隔线" onClick={() => chain().setHorizontalRule().run()}>—</T>
-      <span className="ice-doc-tool-sep" />
+      <T label="行内代码" active={editor.isActive("code")} onClick={() => chain().toggleCode().run()}>{"<>"}</T>
       <T label="链接" active={editor.isActive("link")} onClick={() => { setHref(String(editor.getAttributes("link").href ?? "")); setLinkOpen(value => !value); }}>🔗</T>
-      <T label="插入图片" onClick={onImage}>图片</T>
-      <span className="ice-doc-tool-sep" />
-      <T label="撤销 (Ctrl+Z)" disabled={!editor.can().undo()} onClick={() => chain().undo().run()}>↶</T>
-      <T label="重做 (Ctrl+Shift+Z)" disabled={!editor.can().redo()} onClick={() => chain().redo().run()}>↷</T>
       {linkOpen && <form className="ice-doc-linkform" onSubmit={event => {
         event.preventDefault();
         const value = href.trim();
@@ -471,4 +560,49 @@ function Toolbar({ editor, style, onImage }: { editor: Editor | null; style: Doc
       </form>}
     </div>
   );
+}
+
+/** 文章设置（对应公众号编辑页的“文章设置”）：封面、摘要、原文链接。作者在标题下方填写。 */
+function ArticleSettings({ info, onChange, onClose, editor }: { info: DocInfo; onChange: (patch: Partial<DocInfo>) => void; onClose: () => void; editor: Editor | null }) {
+  const firstImage = React.useMemo(() => {
+    let id: string | null = null;
+    editor?.state.doc.descendants(node => { if (!id && node.type.name === "articleImage" && node.attrs.resourceId) id = String(node.attrs.resourceId); return !id; });
+    return id;
+  }, [editor, info]);
+  const coverId = info.coverResourceId || firstImage;
+  const summary = info.summary ?? "";
+  return (
+    <div className="ice-doc-settings" role="dialog" aria-label="文章设置">
+      <div className="ice-doc-row"><strong>文章设置</strong><span style={{ flex: 1 }} /><button type="button" className="ice-link-btn" onClick={onClose}>收起</button></div>
+      <label>封面
+        <div className="ice-doc-cover">
+          {coverId ? <CoverThumb resourceId={coverId} /> : <div className="ice-doc-cover__empty">正文还没有图片</div>}
+          <div className="ice-doc-cover__actions">
+            <Button size="sm" onClick={async () => { const image = await pickDocumentImage(); if (image) onChange({ coverResourceId: image.resource_id }); }}>另选封面</Button>
+            {info.coverResourceId && <button type="button" className="ice-link-btn" onClick={() => onChange({ coverResourceId: "" })}>改回正文第一张图</button>}
+          </div>
+        </div>
+        <span className="ice-doc-muted">{info.coverResourceId ? "已指定封面" : "默认取正文第一张图"}；导出图文包时另存为“封面”文件，便于在后台上传。</span>
+      </label>
+      <label>摘要
+        <textarea aria-label="摘要" className="ice-doc-textarea" rows={3} maxLength={SUMMARY_LIMIT} value={summary} placeholder="选填，不填写则后台默认抓取正文前 54 字"
+                  onChange={event => onChange({ summary: event.target.value })} />
+        <span className="ice-doc-counter">{summary.length}/{SUMMARY_LIMIT}</span>
+      </label>
+      <label>原文链接（选填）
+        <Input aria-label="原文链接（选填）" value={info.sourceUrl ?? ""} placeholder="https://" onChange={event => onChange({ sourceUrl: event.target.value })} />
+      </label>
+      <p className="ice-doc-muted">这些信息随版本保存，并写入导出包的 manifest；粘贴到公众号后，请在后台对应位置填写。</p>
+    </div>
+  );
+}
+
+function CoverThumb({ resourceId }: { resourceId: string }) {
+  const [view, setView] = React.useState<ImageView | null>(null);
+  React.useEffect(() => {
+    let active = true;
+    docRpc<ImageView>("documents.image_view", { resource_id: resourceId }).then(value => { if (active) setView(value); }).catch(() => { if (active) setView(null); });
+    return () => { active = false; };
+  }, [resourceId]);
+  return view?.ok ? <img className="ice-doc-cover__img" src={view.preview} alt="封面" /> : <div className="ice-doc-cover__empty">封面图片缺失</div>;
 }

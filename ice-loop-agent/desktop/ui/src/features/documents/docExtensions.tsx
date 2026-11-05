@@ -72,27 +72,47 @@ export const TextAlign = Extension.create({
           renderHTML: attributes => attributes.textAlign ? { style: `text-align:${attributes.textAlign}` } : {},
         },
       },
+    }, {
+      // v3.2：段落首行缩进两字（对应公众号工具栏的“首行缩进”）。
+      types: ["paragraph"],
+      attributes: {
+        indent: {
+          default: null,
+          parseHTML: element => (element.dataset.indent === "1" || /^[1-9]/.test(element.style.textIndent)) ? true : null,
+          renderHTML: attributes => attributes.indent ? { "data-indent": "1", style: "text-indent:2em" } : {},
+        },
+      },
     }];
   },
 });
 
-/** 局部样式：颜色与字号（受限集合）。其余 CSS 不进入正文。 */
+/** 浏览器把内联颜色读成 rgb()，规范值只收 #RRGGBB。 */
+function toHex(value: string): string | null {
+  if (!value) return null;
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
+  const match = value.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  return match ? "#" + match.slice(1, 4).map(part => Math.min(255, Number(part)).toString(16).padStart(2, "0")).join("") : null;
+}
+
+/** 局部样式：颜色、背景色（高亮）与字号（受限集合）。其余 CSS 不进入正文。 */
 export const TextStyle = Mark.create({
   name: "textStyle",
   addAttributes() {
     return {
-      color: { default: null, parseHTML: element => element.style.color || null },
+      color: { default: null, parseHTML: element => toHex(element.style.color) },
       fontSize: { default: null, parseHTML: element => element.style.fontSize || null },
+      backgroundColor: { default: null, parseHTML: element => toHex(element.style.backgroundColor) },
     };
   },
   parseHTML() {
     return [{ tag: "span[style]", getAttrs: element => {
       const el = element as HTMLElement;
-      return el.style.color || el.style.fontSize ? {} : false;
+      return el.style.color || el.style.fontSize || el.style.backgroundColor ? {} : false;
     } }];
   },
   renderHTML({ HTMLAttributes }) {
-    const css = [HTMLAttributes.color ? `color:${HTMLAttributes.color}` : "", HTMLAttributes.fontSize ? `font-size:${HTMLAttributes.fontSize}` : ""]
+    const css = [HTMLAttributes.color ? `color:${HTMLAttributes.color}` : "", HTMLAttributes.fontSize ? `font-size:${HTMLAttributes.fontSize}` : "",
+      HTMLAttributes.backgroundColor ? `background-color:${HTMLAttributes.backgroundColor}` : ""]
       .filter(Boolean).join(";");
     return ["span", css ? { style: css } : {}, 0];
   },

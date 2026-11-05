@@ -502,3 +502,48 @@ class TestClarificationQuestions(unittest.TestCase):
             CreativeChat._questions({'questions': [{'id': 'a', 'question': '?', 'options': [{'label': ''}]}]})
         with self.assertRaises(ValueError):
             CreativeChat._questions({'questions': [{'id': 'a', 'question': '?', 'options': ['同', {'label': '同'}]}]})
+
+
+class TestWechatEditorParity(Fixture):
+    """v3.2：参照公众号编辑页——背景色、字间距、首行缩进、作者/摘要/封面、17px 默认、标题 64 字提示。"""
+    def test_new_document_defaults_to_17px(self):
+        created = self.docs.create({'kind': 'blank'})
+        self.assertEqual(created['content']['style']['fontSize'], 17)
+        self.assertNotIn('letterSpacing', created['content']['style'])  # 未设置时不写入，旧文章 hash 不变
+
+    def test_new_formats_render_and_info_is_delivered(self):
+        image = self.docs.image_import_data({'data_url': png_data_url(), 'name': '首图'})
+        created = self.docs.create({'kind': 'blank', 'title': '长' * 70})
+        content = doc({'type': 'paragraph', 'attrs': {'indent': True}, 'content': [
+                          {'type': 'text', 'text': '高亮', 'marks': [{'type': 'textStyle', 'attrs': {'backgroundColor': '#FFF3A3'}}]}]},
+                      {'type': 'articleImage', 'attrs': {'resourceId': image['resource_id'], 'caption': '图一'}},
+                      style={'letterSpacing': 1})
+        content['info'] = {'author': '冰环', 'summary': '一句话摘要', 'sourceUrl': 'https://example.com/a'}
+        saved = self.docs.save_working({'document_id': created['document_id'], 'base_revision': 1, 'content': content})
+        rendered = self.docs.render_delivery({'document_id': created['document_id'], 'base_revision': saved['revision']})
+        self.assertIn('text-indent:2em', rendered['html'])
+        self.assertIn('background-color:#fff3a3', rendered['html'])
+        self.assertIn('letter-spacing:1px', rendered['html'])
+        self.assertEqual(rendered['info']['author'], '冰环')
+        self.assertEqual(rendered['cover']['source'], 'first_image')
+        self.assertTrue(any(i['kind'] == 'title_too_long' for i in rendered['issues']))
+        target = self.root / 'bundle-with-cover'
+        self.docs.export_bundle({'document_id': created['document_id'], 'version_id': rendered['version_id'], 'destination': str(target)})
+        manifest = json.loads((target / 'manifest.json').read_text(encoding='utf-8'))
+        self.assertEqual(manifest['article']['summary'], '一句话摘要')
+        self.assertTrue((target / manifest['article']['cover']['file']).is_file())
+
+    def test_info_validation(self):
+        created = self.docs.create({'kind': 'blank'})
+        bad = doc(paragraph('x')); bad['info'] = {'summary': '字' * 121}
+        with self.assertRaises(DocumentError):
+            self.docs.save_working({'document_id': created['document_id'], 'base_revision': 1, 'content': bad})
+        bad['info'] = {'sourceUrl': 'javascript:alert(1)'}
+        with self.assertRaises(DocumentError):
+            self.docs.save_working({'document_id': created['document_id'], 'base_revision': 1, 'content': bad})
+
+    def test_paste_keeps_highlight_and_indent(self):
+        result = self.docs.convert_paste({'html': '<p style="text-indent:2em">缩进<span style="background-color:rgb(255,243,163)">高亮</span></p>'})
+        block = result['content']['doc']['content'][0]
+        self.assertTrue(block['attrs'].get('indent'))
+        self.assertEqual(block['content'][1]['marks'][0]['attrs']['backgroundColor'], '#fff3a3')

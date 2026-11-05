@@ -167,6 +167,13 @@ class Converter:
                 size = _font_size(val)
                 if size and size != f'{self.base_font}px':
                     text_style['fontSize'] = size
+            elif prop in ('background-color', 'background') and el.tag in ('span', 'strong', 'b', 'em', 'i', 'u', 'mark', 'font'):
+                # 行内文字背景色（高亮）；整块背景仍按复杂模块处理。
+                background = _color(val.split()[0]) if val else None
+                if background and background not in ('#ffffff', '#fefefe'):
+                    text_style['backgroundColor'] = background
+                elif el.tag == 'mark':
+                    text_style['backgroundColor'] = '#fff3a3'
             elif prop == 'font-weight' and (val == 'bold' or val.isdigit() and int(val) >= 600):
                 add.append({'type': 'bold'})
             elif prop == 'font-style' and val == 'italic':
@@ -245,6 +252,10 @@ class Converter:
         align = self._align(el) if el is not None else None
         if align:
             node['attrs']['textAlign'] = align
+        if el is not None and self.mode == 'adapt':
+            indent = _style_map(el.style).get('text-indent', '')
+            if re.match(r'^[1-9]\d*(\.\d+)?(em|px)$', indent.strip()):
+                node['attrs']['indent'] = True
         self.report['paragraphs'] += 1
         self.report['characters'] += sum(len(c.get('text', '')) for c in content)
         return node

@@ -32,7 +32,7 @@ def theme_styles(style: dict) -> dict[str, str]:
     gap = style['paragraphSpacing']
     soft = _lighten(brand, 0.9)
     return {
-        'root': f'font-size:{size}px;line-height:{line};color:#333333;letter-spacing:0.5px;word-break:break-word;',
+        'root': f'font-size:{size}px;line-height:{line};color:#333333;letter-spacing:{style.get("letterSpacing", 0.5)}px;word-break:break-word;',
         'p': f'margin:0 0 {gap}px 0;',
         'h1': f'margin:{gap + 8}px 0 {gap}px 0;font-size:{size + 8}px;line-height:1.4;font-weight:bold;color:{brand};',
         'h2': f'margin:{gap + 8}px 0 {gap}px 0;font-size:{size + 4}px;line-height:1.45;font-weight:bold;color:#1f2937;'
@@ -95,7 +95,8 @@ class Renderer:
                 piece = f'<span style="text-decoration:line-through;">{piece}</span>'
             if 'textStyle' in marks:
                 attrs = marks['textStyle']['attrs']
-                css = ''.join(f'{k}:{v};' for k, v in (('color', attrs.get('color')), ('font-size', attrs.get('fontSize'))) if v)
+                css = ''.join(f'{k}:{v};' for k, v in (('color', attrs.get('color')), ('font-size', attrs.get('fontSize')),
+                                                       ('background-color', attrs.get('backgroundColor'))) if v)
                 piece = f'<span style="{css}">{piece}</span>'
             if 'link' in marks:
                 href = htmllib.escape(marks['link']['attrs']['href'], quote=True)
@@ -114,7 +115,7 @@ class Renderer:
         bid = attrs.get('id', '')
         if kind == 'paragraph':
             inner, text = self.inline(node.get('content'))
-            style = (self.css['li_p'] if in_list else self.css['p']) + self._align(attrs)
+            style = (self.css['li_p'] if in_list else self.css['p']) + self._align(attrs) + ('text-indent:2em;' if attrs.get('indent') else '')
             return f'<p style="{style}">{inner or "<br>"}</p>', text
         if kind == 'heading':
             inner, text = self.inline(node.get('content'))

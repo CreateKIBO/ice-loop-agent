@@ -459,12 +459,45 @@ class DocumentService:
             if large:
                 result['issues'].append({'severity': 'info', 'kind': 'clipboard_downscaled', 'block_id': '',
                                          'message': f'{len(large)} 张大图在剪贴板中使用了缩小副本；原图在导出图片包中'})
+        info, cover = self._article_info(version, images, result['issues'])
         blocking = [i for i in result['issues'] if i['severity'] == 'error']
         return {'document_id': version['document_id'], 'version_id': version['version_id'],
                 'version_created_at': version['created_at'], 'title': version['title'],
                 'content_hash': version['content_hash'], 'delivery_hash': digest,
                 'html': result['html'], 'text': result['text'], 'images': images, 'issues': result['issues'],
-                'complete': not blocking, 'style': version['content']['style']}
+                'complete': not blocking, 'style': version['content']['style'], 'info': info, 'cover': cover}
+
+    def _article_info(self, version: dict, images: list[dict], issues: list[dict]) -> tuple[dict, dict | None]:
+        """v3.2 文章设置：标题/作者长度按公众号上限提示；封面优先用指定图，否则取正文第一张图。"""
+        from .schema import AUTHOR_LIMIT, TITLE_LIMIT
+        info = dict(version['content'].get('info') or {})
+        if len(version['title']) > TITLE_LIMIT:
+            issues.append({'severity': 'warning', 'kind': 'title_too_long', 'block_id': '',
+                           'message': f'标题 {len(version["title"])} 字，超过公众号 {TITLE_LIMIT} 字上限，粘贴到后台前请缩短'})
+        if len(info.get('author', '')) > AUTHOR_LIMIT:
+            issues.append({'severity': 'warning', 'kind': 'author_too_long', 'block_id': '',
+                           'message': f'作者超过公众号 {AUTHOR_LIMIT} 字上限'})
+        cover = None
+        if info.get('coverResourceId'):
+            try:
+                resource = self.assets.resource(info['coverResourceId'])
+                self.assets.checked_path(resource)
+                cover = {'resource_id': resource['resource_id'], 'source': 'explicit', 'mime': resource['mime'],
+                         'width': resource['width'], 'height': resource['height'], 'sha256': resource['sha256']}
+            except (ValueError, OSError):
+                issues.append({'severity': 'warning', 'kind': 'cover_missing', 'block_id': '',
+                               'message': '指定的封面图片已缺失，请在“文章设置”中重新选择'})
+        if cover is None:
+            first = next((i for i in images if not i.get('missing')), None)
+            if first:
+                cover = {'resource_id': first['resource_id'], 'source': 'first_image', 'mime': first['mime'],
+                         'width': first['width'], 'height': first['height'], 'sha256': first['sha256']}
+            elif not info.get('coverResourceId'):
+                issues.append({'severity': 'info', 'kind': 'cover_none', 'block_id': '',
+                               'message': '没有封面：正文没有图片，也没有在“文章设置”中指定，发布前需在后台选择封面'})
+        if cover:
+            cover['file_name'] = '封面' + {'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp'}.get(cover['mime'], '')
+        return info, cover
 
     def copy_payload(self, params: dict) -> dict:
         """仅供桌面主进程写系统剪贴板（渲染层不能注入任意 HTML）。"""
@@ -528,6 +561,12 @@ class DocumentService:
                                         'caption': image['caption'], 'mime': image['mime'], 'size': image['size'],
                                         'width': image['width'], 'height': image['height'], 'sha256': image['sha256'],
                                         'source_url': image.get('source_url', ''), 'block_id': image['block_id']})
+            cover = rendered.get('cover')
+            if cover:
+                source = resolver({'resourceId': cover['resource_id']})
+                if not source or source['sha256'] != cover['sha256']:
+                    raise DocumentError('封面图片在导出期间发生变化，请重新导出')
+                shutil.copyfile(source['file_path'], staging / cover['file_name'])
             # 预览 HTML 使用相对图片路径；与复制用 HTML 来自同一渲染器与同一版本。
             local = Renderer(version['content'], resolve_image=lambda attrs: (
                 {**src, 'data_url': (lambda _p, n=names.get(attrs.get('id')): '图片/' + n)}
@@ -544,6 +583,9 @@ class DocumentService:
                         'delivery_hash': rendered['delivery_hash'], 'title': rendered['title'],
                         'exported_at': now_iso(), 'complete': rendered['complete'], 'issues': rendered['issues'],
                         'images': manifest_images, 'files': _tree_hashes(staging),
+                        'article': {'author': rendered['info'].get('author', ''), 'summary': rendered['info'].get('summary', ''),
+                                    'source_url': rendered['info'].get('sourceUrl', ''),
+                                    'cover': ({'file': cover['file_name'], 'source': cover['source']} if cover else None)},
                         'note': '导出不等于已发布；发布后请在应用中登记发布链接与时间。'}
             (staging / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n',
                                                    encoding='utf-8', newline='\n')

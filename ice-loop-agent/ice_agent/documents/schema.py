@@ -27,8 +27,15 @@ PARAGRAPH_SPACINGS = (0, 8, 12, 16, 20, 24)
 ALIGNS = ('left', 'center', 'right', 'justify')
 INLINE_FONT_SIZES = ('12px', '13px', '14px', '15px', '16px', '17px', '18px', '20px', '22px', '24px')
 
-DEFAULT_STYLE = {'theme': 'clean', 'brandColor': '#2563eb', 'fontSize': 16,
+# v3.2：默认正文字号与公众号编辑器一致（17px）；只影响新文章，已有文章的样式里都显式带着字号。
+DEFAULT_STYLE = {'theme': 'clean', 'brandColor': '#2563eb', 'fontSize': 17,
                  'lineHeight': 1.75, 'paragraphSpacing': 16}
+# 字间距（px）。为不改变已有文章的内容 hash，仅在用户设置过时才写入 style。
+LETTER_SPACINGS = (0, 0.5, 1, 1.5, 2)
+DEFAULT_LETTER_SPACING = 0.5
+TITLE_LIMIT = 64          # 公众号标题上限（超出只提示，不阻止保存）
+AUTHOR_LIMIT = 8          # 公众号作者上限
+SUMMARY_LIMIT = 120       # 公众号摘要上限
 
 _COLOR = re.compile(r'^#[0-9a-fA-F]{6}$')
 _ID = re.compile(r'^[A-Za-z0-9_-]{4,40}$')
@@ -76,6 +83,41 @@ def normalize_style(style: Any) -> dict:
     if spacing not in PARAGRAPH_SPACINGS:
         raise DocumentError('段距不在可选范围')
     out.update(theme=theme, brandColor=color.lower(), fontSize=size, lineHeight=line, paragraphSpacing=spacing)
+    if 'letterSpacing' in style:
+        letter = style['letterSpacing']
+        if letter not in LETTER_SPACINGS:
+            raise DocumentError('字间距不在可选范围')
+        out['letterSpacing'] = letter
+    return out
+
+
+def normalize_info(info: Any) -> dict:
+    """文章设置（作者/摘要/原文链接/封面），随版本冻结、随交付输出。空值不写入。"""
+    if info is None:
+        return {}
+    if not isinstance(info, dict):
+        raise DocumentError('文章设置格式无效')
+    out: dict = {}
+    author = info.get('author', '')
+    if not isinstance(author, str) or len(author.strip()) > 20:
+        raise DocumentError('作者最多 20 字（公众号限 8 字）')
+    if author.strip():
+        out['author'] = author.strip()
+    summary = info.get('summary', '')
+    if not isinstance(summary, str) or len(summary.strip()) > SUMMARY_LIMIT:
+        raise DocumentError(f'摘要最多 {SUMMARY_LIMIT} 字')
+    if summary.strip():
+        out['summary'] = summary.strip()
+    source = info.get('sourceUrl', '')
+    if not isinstance(source, str) or len(source) > 2000 or (source.strip() and not re.match(r'^https?://', source.strip(), re.I)):
+        raise DocumentError('原文链接需为 http(s) 地址')
+    if source.strip():
+        out['sourceUrl'] = source.strip()
+    cover = info.get('coverResourceId', '')
+    if not isinstance(cover, str) or (cover and (not cover.startswith('resource-') or len(cover) > 80)):
+        raise DocumentError('封面图片引用无效')
+    if cover:
+        out['coverResourceId'] = cover
     return out
 
 
@@ -117,6 +159,9 @@ class _Normalizer:
                 size = attrs.get('fontSize')
                 if size in INLINE_FONT_SIZES:
                     clean['fontSize'] = size
+                background = attrs.get('backgroundColor')
+                if isinstance(background, str) and _COLOR.match(background):
+                    clean['backgroundColor'] = background.lower()
                 if not clean:
                     continue
                 out.append({'type': 'textStyle', 'attrs': clean})
@@ -173,6 +218,8 @@ class _Normalizer:
             align = self.align(attrs)
             if align:
                 out['attrs']['textAlign'] = align
+            if attrs.get('indent') is True:
+                out['attrs']['indent'] = True
             content = self.inline(node.get('content'))
             if content:
                 out['content'] = content
@@ -275,8 +322,12 @@ def normalize(content: Any) -> dict:
         raise DocumentError('正文超过 40 万字上限')
     if not blocks:
         blocks = [{'type': 'paragraph', 'attrs': {'id': worker._id({})}}]
-    return {'schema': SCHEMA_VERSION, 'doc': {'type': 'doc', 'content': blocks},
-            'style': normalize_style(content.get('style') or {})}
+    out = {'schema': SCHEMA_VERSION, 'doc': {'type': 'doc', 'content': blocks},
+           'style': normalize_style(content.get('style') or {})}
+    info = normalize_info(content.get('info'))
+    if info:
+        out['info'] = info
+    return out
 
 
 def content_hash(content: dict) -> str:
