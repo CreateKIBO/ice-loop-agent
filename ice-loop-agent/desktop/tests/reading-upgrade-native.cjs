@@ -124,7 +124,13 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',windowsVirtualKeyCode:27});
  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',windowsVirtualKeyCode:27});
  await until(`!${cdialog}`);
- check('compare_native_close_focus_returns',await e(`document.activeElement===[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='打开对照')`));
+ // 2026-11-05：与浏览器侧同口径的有界等待（≤2s），并记录焦点实际落点/时延用于区分
+ // “离场动效延迟恢复”与“真不恢复”；判定标准不变（最终必须回到触发按钮）。
+ let focusLanded=false;const focusStart=Date.now();
+ {const end=focusStart+2000;while(Date.now()<end){if(await e(`document.activeElement===[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='打开对照')`)){focusLanded=true;break;}await wait(50);}}
+ (report.closeFocus ??= {}).compare={landed:focusLanded,afterMs:Date.now()-focusStart,
+   final:await e(`(()=>{const a=document.activeElement;return {tag:a?a.tagName:null,text:a?a.textContent.trim().slice(0,24):null};})()`)};
+ check('compare_native_close_focus_returns',focusLanded);
  // Historical candidate via real paging; each wait fails rather than silently returning false.
  // 2026-10-25 候选对照轮：seed 增加了更多历史候选（同题对照稿），分页深度变化——
  // 逐页向前翻直到目标候选出现（有界：最多 8 页），不再假设一次到位。
@@ -271,6 +277,8 @@ const fault=value=>fs.writeFileSync(f.fault,JSON.stringify(value));
  {const end=Date.now()+8000;while(Date.now()<end&&!slowId){const rows=trace();for(const sRow of rows.filter(x=>x.method==='jobs.get'&&x.phase==='started'&&x.at>=slowMark)){if(rows.some(x=>x.id===sRow.id&&x.phase==='handler_returned')&&!rows.some(x=>x.id===sRow.id&&x.phase==='resolved')){slowId=sRow.id;break;}}await wait(100);}}
  fs.writeFileSync(f.fault,originalFault);
  check('native_slow_detail_held_before_reply',Boolean(slowId));
+ // 遮挡会暂停列表的间隔轮询（产品按可见性设计）：观察 renderer 徽标前置前页面。
+ await call('Page.bringToFront');
  const created=await rpc('jobs.create',{demo:true});
  let runningSeen=false,stateBeforeStop=null;
  {const end=Date.now()+6000;while(Date.now()<end){const d=await rpc('jobs.get',{job_id:created.job_id});stateBeforeStop=d.job.state;if(d.job.state==='running'){runningSeen=true;break;}if(['awaiting_approval','paused','completed'].includes(d.job.state))break;await wait(80);}}

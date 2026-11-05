@@ -25,7 +25,7 @@ async function openNativeSession(repo,runtime,{useWorkspaceSelection=false,entry
   for(const key of ['ICE_PYTHON','ICE_TEACHING_PYTHON','PYTHONPATH','VIRTUAL_ENV','NODE_PATH'])delete env[key];
   args=[];
  }
- const child=spawn(executable,[...args,'--new-ui','--startup-diagnostics','--remote-debugging-port='+port],{cwd:repo,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
+ const child=spawn(executable,[...args,'--new-ui','--startup-diagnostics','--disable-backgrounding-occluded-windows','--remote-debugging-port='+port],{cwd:repo,env,windowsHide:true,stdio:['ignore','pipe','pipe']});
  const log=fs.createWriteStream(path.join(runtime,'resource-electron.log'));child.stdout.pipe(log,{end:false});child.stderr.pipe(log,{end:false});
  let closed=false,ws,sequence=0;const pending=new Map(),errors=[],parsedScripts=[];child.once('exit',()=>{closed=true;});
  const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('CDP timeout '+method));},45000);pending.set(id,{resolve:v=>{clearTimeout(timer);resolve(v);},reject:e=>{clearTimeout(timer);reject(e);}});ws.send(JSON.stringify({id,method,params}));});

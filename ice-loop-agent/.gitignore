@@ -66,3 +66,8 @@ docs/screenshots/
 
 # Standalone startup recovery profile (no source code)
 .ice-startup-recovery/
+
+# 个人磁盘分析/清理记录（含本机绝对路径），严禁入库（2026-11-05 隐私清理）
+docs/G盘*
+*盘存储分析*
+*盘清理*
