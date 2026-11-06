@@ -15,7 +15,7 @@ async function run() {
     import React from 'react';import{createRoot}from'react-dom/client';import{QueryClientProvider}from'@tanstack/react-query';
     import{DocumentEditor}from'./features/documents/DocumentEditor';import{documentStore}from'./app/uiState';
     import{LegacyArticleView}from'./features/documents/LegacyArticleView';
-    import{accountStore,queryClient,flushAllDirty,dirtyStore}from'./data/client';import{Toaster}from'./components/toast';
+    import{accountStore,queryClient,flushAllDirty,dirtyStore,resetForAccountSwitch}from'./data/client';import{Toaster}from'./components/toast';
     import './styles/tokens.css';
     accountStore.set('owned');queryClient.setDefaultOptions({queries:{retry:false}});
     const content={schema:1,style:{theme:'clean',brandColor:'#2563eb',fontSize:16,lineHeight:1.75,paragraphSpacing:16},
@@ -51,6 +51,7 @@ async function run() {
         return{document_id:p.document_id,version_id:'ver-'+row.revision,title:row.title,html:'<p>原始正文</p>',text:'原始正文',
           version_created_at:row.working_updated_at,content_hash:row.content_hash,delivery_hash:'delivery',images:[],issues:[],complete:true,style:row.content.style};
       }
+      if(method==='documents.image_import_data'){if(window.holdImage)await new Promise(resolve=>window.releaseImage=resolve);return structuredClone(image);}
       if(method==='documents.image_view')return structuredClone(image);
       if(method==='publications.list')return[];
       if(method==='documents.versions')return[{version_id:'ver-original',producer:'user',created_at:row.working_updated_at,word_count:4,images:0,note:'原版本'}];
@@ -62,7 +63,7 @@ async function run() {
       throw Error('Unexpected method '+method);
     }};
     window.flush=()=>flushAllDirty().then(()=>true,error=>error.message);window.isDirty=()=>dirtyStore.anyDirty();
-    window.openDoc=id=>documentStore.set(id);documentStore.set('doc-one');
+    window.switchAccount=resetForAccountSwitch;window.openDoc=id=>documentStore.set(id);documentStore.set('doc-one');
     function Host(){const id=documentStore.use();return id==='legacy'?<LegacyArticleView jobId='job-owned'/>:id?<DocumentEditor key={id} documentId={id}/>:<button onClick={()=>documentStore.set('doc-one')}>重新打开</button>;}
     createRoot(document.getElementById('root')).render(<React.StrictMode><QueryClientProvider client={queryClient}><Host/><Toaster/></QueryClientProvider></React.StrictMode>);
   `,resolveDir:path.join(ui,'src'),loader:'tsx'},bundle:true,outfile:path.join(folder,'app.js'),jsx:'automatic',logLevel:'silent'});
@@ -188,6 +189,46 @@ async function run() {
     await page.getByRole('button',{name:'加粗 (Ctrl+B)',exact:true}).click();
     await page.getByText('已过期',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:'采纳所选（0）',exact:true}).isDisabled(),true);
+  });
+  await check('image_batch_inserts_in_order_for_origin_account',async()=>{
+    await fresh();await page.evaluate(()=>{
+      const data=new DataTransfer();
+      for(const name of ['first','second'])data.items.add(new File(['owned image'],name+'.png',{type:'image/png'}));
+      document.querySelector('.ice-doc-prose').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,clipboardData:data}));
+    });
+    await page.waitForFunction(()=>document.querySelectorAll('.ice-doc-image').length===2);
+    assert.deepEqual(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.image_import_data').map(c=>[c.p.account_id,c.p.name])),
+      [['owned','first'],['owned','second']]);
+    assert.equal(await page.evaluate(()=>window.flush()),true);
+    assert.equal(await page.evaluate(()=>JSON.stringify(window.rows['doc-one'].content).split('"type":"articleImage"').length-1),2);
+  });
+  await check('image_read_cancelled_on_account_switch',async()=>{
+    await fresh();await page.evaluate(()=>{
+      const NativeReader=window.FileReader;
+      window.FileReader=class extends NativeReader{readAsDataURL(file){window.releaseRead=()=>super.readAsDataURL(file);}};
+      const data=new DataTransfer();data.items.add(new File(['owned image'],'owned.png',{type:'image/png'}));
+      document.querySelector('.ice-doc-prose').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,clipboardData:data}));
+    });
+    await page.waitForFunction(()=>typeof window.releaseRead==='function');
+    await page.evaluate(()=>window.switchAccount('other-owned'));
+    await page.getByRole('button',{name:'重新打开',exact:true}).waitFor();
+    await page.evaluate(()=>window.releaseRead());await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.image_import_data').length),0,
+      'reading an old account file must not start an import after switching accounts');
+  });
+  await check('image_batch_stops_after_leaving_document',async()=>{
+    await fresh();await page.evaluate(()=>{
+      window.holdImage=true;const data=new DataTransfer();
+      for(const name of ['first','second'])data.items.add(new File(['owned image'],name+'.png',{type:'image/png'}));
+      document.querySelector('.ice-doc-prose').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,clipboardData:data}));
+    });
+    await page.waitForFunction(()=>typeof window.releaseImage==='function');
+    await page.getByRole('button',{name:'返回文章列表',exact:true}).click();
+    await page.getByRole('button',{name:'重新打开',exact:true}).waitFor();
+    await page.evaluate(()=>{window.holdImage=false;window.releaseImage();});await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.image_import_data').length),1,
+      'only the already dispatched import may finish; later files must not import after leaving');
+    assert.equal(await page.evaluate(()=>window.calls.some(c=>c.method==='documents.save_working')),false);
   });
   assert.deepEqual(report.errors,[]);
 }

@@ -198,14 +198,22 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   }, [dirtyKey, flush]);
 
   const insertImageFiles = React.useCallback(async (files: File[]) => {
+    const target = editorRef.current;
+    if (!target) return;
+    const active = () => mounted.current && accountStore.get() === account
+      && !target.isDestroyed && editorRef.current === target;
     for (const file of files.slice(0, 20)) {
+      if (!active()) return;
       try {
         const dataUrl = await readAsDataURL(file);
-        const image = await docRpc<ImageView>("documents.image_import_data", { data_url: dataUrl, name: file.name.replace(/\.[^.]+$/, "") });
-        editorRef.current?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
-      } catch (error) { toast.error({ title: `「${file.name}」没有导入`, detail: (error as Error).message }); }
+        if (!active()) return;
+        const image = await docRpc<ImageView>("documents.image_import_data", { account_id: account, data_url: dataUrl, name: file.name.replace(/\.[^.]+$/, "") });
+        // 已发出的请求可能在离开后完成；资源仍归原公众号，但不能写回已离开的正文。
+        if (!active()) return;
+        target.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
+      } catch (error) { if (active()) toast.error({ title: `「${file.name}」没有导入`, detail: (error as Error).message }); }
     }
-  }, []);
+  }, [account]);
 
   const convertPaste = React.useCallback(async (html: string, mode: "adapt" | "text") => {
     setPasting(true);
