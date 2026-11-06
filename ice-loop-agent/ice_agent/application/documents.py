@@ -16,12 +16,23 @@ PUBLIC = frozenset({
     'documents.untrash', 'documents.duplicate', 'documents.markdown', 'documents.open_legacy',
     'documents.convert_paste', 'documents.import_paste', 'documents.import_original', 'documents.reconvert',
     'documents.image_import_data', 'documents.image_view', 'documents.images_library',
+    'documents.image_edit', 'documents.image_source_update', 'documents.import_docx',
+    'documents.batch', 'documents.plan', 'documents.calendar', 'documents.suggestions', 'documents.suggestions_dismiss',
+    'documents.library', 'documents.image_tags',
     'documents.render_delivery', 'documents.export_bundle',
-    'documents.from_candidate', 'documents.ai_draft_start',
+    'documents.from_candidate', 'documents.ai_draft_start', 'documents.ai_guided_start', 'documents.variants',
+    'documents.assist_start', 'documents.assist_list', 'documents.assist_get', 'documents.assist_cancel',
+    'documents.assist_apply', 'documents.assist_dismiss', 'documents.assist_revert', 'documents.assist_search',
     'publications.register', 'publications.list', 'publications.withdraw',
     'bookmarks.list', 'bookmarks.save', 'bookmarks.remove', 'bookmarks.reorder', 'bookmarks.restore_defaults',
 })
-MAIN_ONLY = frozenset({'documents.copy_payload', 'documents.delivery_record', 'documents.image_import'})
+# P1 生成模式提示：随需求一并发送，用户在助手会话里可以看到原文。
+QUICK_HINT = '\n\n（快速生成：不要提问；信息不足时按合理默认补全，直接写出完整初稿。）'
+GUIDED_HINT = ('\n\n（引导模式：先用提问框确认最影响成稿的 2–4 个问题，例如读者、篇幅、角度、必须包含的要点，'
+               '每题给出选项；我回答后再写完整初稿。）')
+VARIANT_B_HINT = '\n（这是第二个版本：换一个切入角度、开头和结构，与另一版明显不同，但遵守同样的需求。）'
+MAIN_ONLY = frozenset({'documents.copy_payload', 'documents.delivery_record', 'documents.image_import',
+                       'documents.long_image_page', 'documents.long_image_compose', 'documents.svg_import'})
 
 _ROUTES = {
     'documents.list': 'list', 'documents.create': 'create', 'documents.get': 'get',
@@ -32,13 +43,27 @@ _ROUTES = {
     'documents.convert_paste': 'convert_paste', 'documents.import_paste': 'import_paste', 'documents.import_original': 'import_original',
     'documents.reconvert': 'reconvert', 'documents.image_import_data': 'image_import_data',
     'documents.image_import': 'image_import', 'documents.image_view': 'image_view',
-    'documents.images_library': 'images_library', 'documents.render_delivery': 'render_delivery',
+    'documents.images_library': 'images_library', 'documents.image_edit': 'image_edit',
+    'documents.image_source_update': 'image_source_update', 'documents.import_docx': 'import_docx', 'documents.render_delivery': 'render_delivery',
     'documents.copy_payload': 'copy_payload', 'documents.delivery_record': 'delivery_record',
-    'documents.export_bundle': 'export_bundle', 'documents.from_candidate': 'from_candidate',
+    'documents.long_image_page': 'long_image_page', 'documents.long_image_compose': 'long_image_compose',
+    'documents.svg_import': 'svg_import',
+    'documents.export_bundle': 'export_bundle', 'documents.from_candidate': 'from_candidate', 'documents.variants': 'variants',
     'publications.register': 'register_publication', 'publications.list': 'publications',
     'publications.withdraw': 'withdraw_publication',
     'bookmarks.list': 'bookmarks', 'bookmarks.save': 'bookmark_save', 'bookmarks.remove': 'bookmark_remove',
     'bookmarks.reorder': 'bookmark_reorder', 'bookmarks.restore_defaults': 'bookmark_restore_defaults',
+}
+# P2 运营增强（ice_agent/documents/ops.py）
+_OPS = {
+    'documents.batch': 'batch', 'documents.plan': 'plan', 'documents.calendar': 'calendar',
+    'documents.suggestions': 'suggestions', 'documents.suggestions_dismiss': 'dismiss_suggestions',
+    'documents.library': 'library', 'documents.image_tags': 'tag',
+}
+_ASSIST = {
+    'documents.assist_start': 'start', 'documents.assist_list': 'list', 'documents.assist_get': 'get',
+    'documents.assist_cancel': 'cancel', 'documents.assist_apply': 'apply', 'documents.assist_dismiss': 'dismiss',
+    'documents.assist_revert': 'revert', 'documents.assist_search': 'search',
 }
 
 
@@ -52,6 +77,18 @@ class DocumentsHandler(Handler):
             raise ValueError('公众号已切换，请刷新文章列表')
         if method == 'documents.ai_draft_start':
             return self._ai_draft(account, params)
+        if method == 'documents.ai_guided_start':
+            return self._ai_guided(account, params)
+        if method in _ASSIST:
+            return self._assist(account, method, params)
+        if method in _OPS:
+            from ..documents.ops import DocumentOps
+            from ..domain.store import Store
+            store = Store(self.service.runtime / 'app.db')
+            try:
+                return getattr(DocumentOps(self.service, store, account), _OPS[method])(params)
+            finally:
+                store.close()
         from ..documents.service import DocumentService
         from ..domain.store import Store
         store = Store(self.service.runtime / 'app.db')
@@ -61,31 +98,107 @@ class DocumentsHandler(Handler):
             store.close()
 
     def _ai_draft(self, account: dict, params: dict) -> dict:
-        """整篇生成（C-04）：先建“生成中”的独立文章，再经创作会话后台生成；不抢焦点。"""
-        from ..creative_chat import CreativeChat
+        """整篇生成（C-04 + P1 快速模式/两版对照）：先建“生成中”的独立文章，再经创作会话后台生成；不抢焦点。"""
+        import re
+        from ..documents.schema import DocumentError
         from ..documents.service import DocumentService
         from ..domain.store import Store
+        variants = params.get('variants', 1)
+        if variants not in (1, 2):
+            raise DocumentError('一次最多生成两个版本')
         store = Store(self.service.runtime / 'app.db')
         try:
             documents = DocumentService(self.service, store, account)
-            started = documents.ai_draft_start(params)
-            document = started['document']
-            if not started['created']:
-                return documents.get({'document_id': document['document_id']})
-            request_id = started['request_id']
-            chat = CreativeChat(self.service)
-            conversation_id = ''
+            base = {k: v for k, v in params.items() if k not in ('variants', 'mode', 'variant', 'variant_group')}
+            request_id = params.get('request_id')
+            if variants == 2:
+                if not isinstance(request_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,70}', request_id):
+                    raise DocumentError('起草请求标识无效')
+                plans = [({**base, 'request_id': request_id, 'variant': 'A', 'variant_group': 'vg-' + request_id}, ''),
+                         ({**base, 'request_id': request_id + '_b', 'variant': 'B', 'variant_group': 'vg-' + request_id},
+                          VARIANT_B_HINT)]
+            else:
+                plans = [(base, '')]
+            ids = [self._draft_one(documents, plan, hint) for plan, hint in plans]
+            detail = documents.get({'document_id': ids[0]})
+            if variants == 2:
+                detail['variant_documents'] = ids
+            return detail
+        finally:
+            store.close()
+
+    def _draft_one(self, documents: Any, params: dict, extra_hint: str) -> str:
+        from ..creative_chat import CreativeChat
+        started = documents.ai_draft_start(params)
+        document = started['document']
+        if not started['created']:
+            return document['document_id']
+        request_id = started['request_id']
+        chat = CreativeChat(self.service)
+        conversation_id = ''
+        try:
+            conversation = chat.call('chat.create', {'title': document['title'].replace('（生成中）', '')[:120],
+                                                     'request_id': 'doc-' + request_id})
+            conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
+            sent = chat.call('chat.send', {'conversation_id': conversation_id,
+                                           'text': document['meta']['brief'] + QUICK_HINT + extra_hint,
+                                           'mode': 'draft', 'request_id': 'docsend-' + request_id})
+            if not sent.get('accepted') or sent.get('status') == 'failed':
+                raise ValueError('生成任务未能启动，请检查模型配置后重试')
+            documents.ai_draft_bind(document['document_id'], conversation_id, sent['message_id'], None)
+        except Exception as error:  # 失败如实记录在文章上，不冒充完成
+            documents.ai_draft_bind(document['document_id'], conversation_id, None, str(error) or '生成失败')
+        return document['document_id']
+
+    def _ai_guided(self, account: dict, params: dict) -> dict:
+        """引导模式（P1）：在助手会话里先用提问框确认关键问题，再出初稿；用户满意后“存为文章”。"""
+        import re
+        from ..creative_chat import CreativeChat
+        from ..documents.schema import DocumentError
+        brief = params.get('brief')
+        if not isinstance(brief, str) or not 4 <= len(brief.strip()) <= 4000:
+            raise DocumentError('请用 4–4000 字描述要写的文章')
+        request_id = params.get('request_id')
+        if not isinstance(request_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', request_id):
+            raise DocumentError('起草请求标识无效')
+        chat = CreativeChat(self.service)
+        conversation = chat.call('chat.create', {'title': re.sub(r'\s+', ' ', brief.strip())[:40], 'request_id': 'guide-' + request_id})
+        conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
+        sent = chat.call('chat.send', {'conversation_id': conversation_id, 'text': brief.strip() + GUIDED_HINT,
+                                       'mode': 'draft', 'request_id': 'guidesend-' + request_id})
+        if not sent.get('accepted') or sent.get('status') == 'failed':
+            raise DocumentError('引导式起草未能启动，请检查模型配置后重试')
+        return {'conversation_id': conversation_id, 'message_id': sent.get('message_id')}
+
+    # ------------------------------------------------ P1-01 文章内助手提案链
+    def _assist(self, account: dict, method: str, params: dict) -> Any:
+        import copy
+        from ..documents.assist import DocumentAssist
+        from ..domain.store import Store
+        store = Store(self.service.runtime / 'app.db')
+        try:
+            def submit(proposal_id: str, request: dict, cancel: Any) -> None:
+                self.service.workers.submit(self._assist_worker, copy.deepcopy(account), proposal_id, request, cancel)
+            return getattr(DocumentAssist(self.service, store, account, submit=submit), _ASSIST[method])(params)
+        finally:
+            store.close()
+
+    def _assist_worker(self, account: dict, proposal_id: str, request: dict, cancel: Any) -> None:
+        from ..documents.assist import DocumentAssist, release
+        from ..domain.store import Store
+        try:
+            engine, cfg, store = self.service._app(account_id=account['id'])
+        except Exception as error:  # 模型/账号配置不可用：如实记在提案上
+            release(proposal_id)
+            store = Store(self.service.runtime / 'app.db')
             try:
-                conversation = chat.call('chat.create', {'title': document['title'].replace('（生成中）', '')[:120],
-                                                         'request_id': 'doc-' + request_id})
-                conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
-                sent = chat.call('chat.send', {'conversation_id': conversation_id, 'text': document['meta']['brief'],
-                                               'mode': 'draft', 'request_id': 'docsend-' + request_id})
-                if not sent.get('accepted') or sent.get('status') == 'failed':
-                    raise ValueError('生成任务未能启动，请检查模型配置后重试')
-                documents.ai_draft_bind(document['document_id'], conversation_id, sent['message_id'], None)
-            except Exception as error:  # 失败如实记录在文章上，不冒充完成
-                documents.ai_draft_bind(document['document_id'], conversation_id, None, str(error) or '生成失败')
-            return documents.get({'document_id': document['document_id']})
+                DocumentAssist(self.service, store, account)._finish(proposal_id, error=str(error) or '助手无法启动')
+            finally:
+                store.close()
+            return
+        try:
+            engine.router.cancelled = cancel.is_set
+            DocumentAssist(self.service, store, account).run(
+                proposal_id, request, lambda req: engine.router.generate(req, max_attempts=1), profile=cfg.profile)
         finally:
             store.close()

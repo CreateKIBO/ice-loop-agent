@@ -379,7 +379,8 @@ function registerIPC() {
     assertSender(event);
     // v3 文章正文（含粘贴原件、剪贴板图片）可能大于旧接口的 500KB 上限。
     if (RETIRED_EXECUTION_METHODS.has(method)) throw new Error('[CODE_EXECUTION_RETIRED] 代码执行功能已在 v3 退场，不能再启动、批准或修改代码运行；历史运行记录仍可查看。旧任务如需继续写作，请在文章首页使用“复制为新文章”。');
-    const limit = method.startsWith('documents.') ? 6000000 : 500000;
+    // P1 Word 导入：.docx 原文件（≤20MB）以 base64 传给引擎在本地转换。
+    const limit = method === 'documents.import_docx' ? 30000000 : method.startsWith('documents.') ? 6000000 : 500000;
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > limit) throw new Error('无效请求');
     const exporting = method === 'articles.export_bundle' || method === 'documents.export_bundle';
     if (exporting) exportApprovals.assert(params.destination);
@@ -456,6 +457,78 @@ function registerIPC() {
     const record = await request('documents.delivery_record', { ...ids, kind: params.mode === 'html' ? 'copy_html' : 'copy_text',
       delivery_hash: payload.delivery_hash, issues: payload.issues });
     return { ok: true, delivery_id: record.delivery_id, complete: payload.complete, issues: payload.issues.length };
+  });
+  // P2 长图与切片：引擎按冻结版本生成无脚本页面 → 隐藏窗口按视口滚动分段截图 → 引擎拼接并在空白行切片，
+  // 写入经 ice:choose-export-dir 授权的新目录（与导出图文包同一授权链）。
+  const captureHidden = async (html, width, viewport, run) => {
+    const shot = new BrowserWindow({ show: false, width, height: viewport, useContentSize: true, paintWhenInitiallyHidden: true,
+      webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, javascript: true, spellcheck: false } });
+    shot.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    shot.webContents.on('will-navigate', event => event.preventDefault());
+    try {
+      shot.setContentSize(width, viewport);
+      await shot.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+      await shot.webContents.executeJavaScript('Promise.all(Array.from(document.images).map(image => image.decode().catch(() => null))).then(() => true)');
+      return await run(shot);
+    } finally { shot.destroy(); }
+  };
+  // 隐藏窗口在部分系统上不能高于屏幕工作区，视口取屏幕高度以内。
+  const viewportHeight = () => Math.max(600, Math.min(1600, screen.getPrimaryDisplay().workAreaSize.height - 40));
+  const frame = shot => shot.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))');
+  ipcMain.handle('ice:document-long-image', async (event, params) => {
+    assertSender(event);
+    if (!params || typeof params !== 'object') throw Error('长图请求无效');
+    for (const key of ['document_id', 'version_id', 'account_id', 'destination'])
+      if (typeof params[key] !== 'string' || !params[key] || params[key].length > 2000) throw Error('长图请求无效');
+    const width = [375, 414, 750].includes(params.width) ? params.width : 375;
+    const sliceHeight = Number.isInteger(params.slice_height) && params.slice_height >= 400 && params.slice_height <= 4000 ? params.slice_height : 1200;
+    exportApprovals.assert(params.destination);
+    const ids = { document_id: params.document_id, version_id: params.version_id, account_id: params.account_id };
+    const page = await request('documents.long_image_page', { ...ids, width });
+    if (page.version_id !== params.version_id) throw Error('交付版本已变化，请刷新预览后再导出长图');
+    const viewport = viewportHeight();
+    const captured = await captureHidden(page.html, width, viewport, async shot => {
+      const total = Math.ceil(await shot.webContents.executeJavaScript('document.documentElement.scrollHeight'));
+      if (!total) throw Error('长图渲染失败');
+      if (total > 60000) throw Error('文章太长（超过 60000 像素），请分篇导出长图');
+      const segments = [];
+      for (let y = 0; y < total; y += viewport) {
+        const top = Math.min(y, Math.max(0, total - viewport));
+        await shot.webContents.executeJavaScript(`window.scrollTo(0, ${top}); true`);
+        await frame(shot);
+        segments.push({ y: top, png_base64: (await shot.webContents.capturePage()).toPNG().toString('base64') });
+      }
+      return { total, segments };
+    });
+    const result = await request('documents.long_image_compose', { ...ids, destination: params.destination, width,
+      total_height: captured.total, slice_height: sliceHeight, segments: captured.segments });
+    result.can_open = exportApprovals.complete(params.destination);
+    return result;
+  });
+  // P2 SVG 转图片：SVG 只放在 <img> 里渲染（图片上下文不执行脚本、不加载外链），正文插入的是 PNG。
+  ipcMain.handle('ice:document-svg-image', async (event, params) => {
+    assertSender(event);
+    if (!params || typeof params !== 'object' || typeof params.svg !== 'string' || !params.svg.trim() || params.svg.length > 2000000) throw Error('SVG 文件需小于 2MB');
+    if (typeof params.account_id !== 'string' || !params.account_id || params.account_id.length > 200) throw Error('SVG 请求无效');
+    const width = Number.isInteger(params.width) && params.width >= 200 && params.width <= 2160 ? params.width : 1080;
+    const name = typeof params.name === 'string' ? params.name.slice(0, 100) : 'SVG 图';
+    const source = 'data:image/svg+xml;base64,' + Buffer.from(params.svg, 'utf8').toString('base64');
+    const html = '<!doctype html><html><head><meta charset="utf-8">'
+      + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'">'
+      + '<style>html,body{margin:0;background:#fff;overflow:hidden}img{display:block;width:' + width + 'px;height:auto}</style></head>'
+      + '<body><img id="svg" alt="" src="' + source + '"></body></html>';
+    const viewport = viewportHeight();
+    const png = await captureHidden(html, width, viewport, async shot => {
+      const size = await shot.webContents.executeJavaScript('(() => { const image = document.getElementById("svg"); return { ok: image.complete && image.naturalWidth > 0, height: Math.ceil(image.getBoundingClientRect().height) }; })()');
+      if (!size.ok || !size.height) throw Error('SVG 无法渲染（文件可能损坏，或依赖外部字体/图片）');
+      // 过高的 SVG 按比例缩窄，保证一屏截完（不拼接）。
+      const fitWidth = size.height > viewport ? Math.max(100, Math.floor(width * viewport / size.height)) : width;
+      if (fitWidth !== width) await shot.webContents.executeJavaScript(`document.getElementById("svg").style.width = "${fitWidth}px"; true`);
+      shot.setContentSize(fitWidth, Math.min(viewport, Math.ceil(size.height * fitWidth / width)));
+      await frame(shot);
+      return (await shot.webContents.capturePage()).toPNG().toString('base64');
+    });
+    return request('documents.svg_import', { account_id: params.account_id, svg: params.svg, name, png_base64: png });
   });
   ipcMain.handle('ice:import-resource', async event => {
     assertSender(event);

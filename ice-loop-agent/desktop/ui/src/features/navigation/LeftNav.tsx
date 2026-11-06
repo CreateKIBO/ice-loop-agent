@@ -16,9 +16,9 @@ import {
 import { switchToClassic } from "../../data/desktop";
 import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
 import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore,
-  articleCreateStore, documentStore, setWorkspace, workspaceStore, type Workspace } from "../../app/uiState";
+  articleCreateStore, documentEditingStore, documentPanelStore, documentStore, setWorkspace, workspaceStore, type Workspace } from "../../app/uiState";
 import { createBlankDocument, openDocument } from "../documents/ArticleHome";
-import type { DocumentList } from "../documents/documentsApi";
+import { PRODUCER_LABEL, type DocumentList, type DocumentSummary, type ImageView, type VersionSummary } from "../documents/documentsApi";
 import { flashSurface, motionReduced } from "../../components/flash";
 import { CopyButton } from "../../components/CopyButton";
 import { openWebsite } from '../../data/websites';
@@ -106,6 +106,7 @@ function ArticleNav() {
           <Button size="sm" style={{ flex: 1 }} onClick={() => { void flushAllDirty().then(() => { documentStore.set(null); articleCreateStore.set("ai"); }).catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message })); }}>AI 起草</Button>
         </div>
       </div>
+      {current && <EditingCard documentId={current} row={rows.find(row => row.document_id === current)} />}
       <div className="ice-nav-summary"><span>最近文章 · {rows.length}</span>
         <button type="button" className="ice-link-btn" onClick={() => { void flushAllDirty().then(() => documentStore.set(null)).catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message })); }}>全部</button>
       </div>
@@ -128,6 +129,53 @@ function ArticleNav() {
         </ul>
       </div>
     </>
+  );
+}
+
+/** v3.8（布局稿遗留）：左栏顶部显示“正在编辑”的文章卡片——封面、保存状态与最近几个版本。 */
+function EditingCard({ documentId, row }: { documentId: string; row?: DocumentSummary }) {
+  const editing = documentEditingStore.use();
+  const state = editing?.documentId === documentId ? editing : null;
+  const cover = useAccountQuery<ImageView>("documents.image_view", { resource_id: row?.cover_resource_id ?? "" },
+    { enabled: Boolean(row?.cover_resource_id), staleTime: 5 * 60_000 });
+  const versions = useAccountQuery<VersionSummary[]>("documents.versions", { document_id: documentId },
+    { staleTime: 10_000, refetchInterval: 30_000 });
+  const open = (panel: "versions" | "assist" | "delivery") => documentPanelStore.set({ panel, at: Date.now() });
+  const title = state?.title || row?.title || "未命名文章";
+  const status = !state ? "" : state.saveState === "saving" ? "正在保存…" : state.saveState === "dirty" ? "有修改，即将保存"
+    : state.saveState === "error" ? "保存失败" : state.saveState === "conflict" ? "版本冲突" : "已保存 " + shortTime(state.savedAt);
+  return (
+    <section className="ice-nav-editing" aria-label="正在编辑">
+      <div className="ice-nav-editing__label">正在编辑</div>
+      <div className="ice-nav-editing__card">
+        <div className="ice-nav-editing__cover" aria-hidden>
+          {cover.data?.ok ? <img src={cover.data.preview} alt="" /> : <span>{title.slice(0, 1)}</span>}
+        </div>
+        <div className="ice-nav-editing__text">
+          <strong title={title}>{title}</strong>
+          <span className={"ice-nav-editing__status" + (state && ["error", "conflict"].includes(state.saveState) ? " is-bad" : "")}>
+            {status}{state ? ` · ${state.words.toLocaleString()} 字` : row ? `${row.word_count} 字` : ""}</span>
+          {state?.unversioned && state.saveState === "saved" && <span className="ice-nav-editing__hint">尚未存为版本</span>}
+        </div>
+      </div>
+      <div className="ice-nav-editing__actions">
+        <button type="button" className="ice-link-btn" onClick={() => open("assist")}>AI 助手</button>
+        <button type="button" className="ice-link-btn" onClick={() => open("delivery")}>预览与交付</button>
+      </div>
+      <div className="ice-nav-editing__versions">
+        <div className="ice-nav-summary" style={{ padding: 0 }}><span>历史版本</span>
+          <button type="button" className="ice-link-btn" onClick={() => open("versions")}>全部</button></div>
+        {versions.isLoading && <SkeletonRows rows={2} height={12} />}
+        <ul aria-label="最近版本">
+          {(versions.data ?? []).slice(0, 4).map((version, index) => <li key={version.version_id}>
+            <button type="button" onClick={() => open("versions")} title={version.note}>
+              <span>{PRODUCER_LABEL[version.producer] ?? version.producer}{index === 0 ? " · 最新" : ""}</span>
+              <span className="ice-nav-row__meta">{shortTime(version.created_at)}</span>
+            </button></li>)}
+        </ul>
+        {versions.data && versions.data.length === 0 && <span className="ice-nav-editing__hint">还没有版本；点编辑器底栏“保存版本”。</span>}
+      </div>
+    </section>
   );
 }
 

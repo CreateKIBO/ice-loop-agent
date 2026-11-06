@@ -301,6 +301,51 @@ class DocumentService:
             self.docs.bind_import(converted['import_id'], document['document_id'])
         return {**document, 'report': converted['report'], 'import_id': converted['import_id']}
 
+    def import_docx(self, params: dict) -> dict:
+        """P1 Word（.docx）文件导入：本地转换为受限 HTML 后复用粘贴管线；原文件另存一份，转换中间件作为可重转原件。"""
+        from .docx_import import docx_to_html
+        name = str(params.get('file_name') or 'Word 文档')[:200]
+        if not name.lower().endswith('.docx'):
+            raise DocumentError('只支持 .docx 文件；旧版 .doc 请先在 Word 中另存为 .docx')
+        raw = params.get('data_base64')
+        if not isinstance(raw, str) or not raw or len(raw) > 28_000_000:
+            raise DocumentError('Word 文件需小于 20MB')
+        try:
+            data = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError):
+            raise DocumentError('Word 文件数据无效') from None
+        mode = params.get('mode', 'adapt')
+        html, docx_report = docx_to_html(data)
+        digest = hashlib.sha256(data).hexdigest()
+
+        def import_image(src: str, alt: str) -> dict | None:
+            match = _DATA_URL.match(src or '')
+            if not match:
+                return None
+            try:
+                return self.import_image_bytes(base64.b64decode(match.group(2), validate=False), alt or '文档图片',
+                                               {'kind': 'docx', 'original_name': name})
+            except (DocumentError, ValueError, binascii.Error, OSError):
+                return None
+        try:
+            content, report = convert_html(html, mode=mode, style=normalize_style(params.get('style') or {}), import_image=import_image)
+        except ValueError as error:
+            raise DocumentError(str(error)) from None
+        report['docx'] = {**docx_report, 'file_name': name, 'sha256': digest, 'bytes': len(data)}
+        folder = self.service.runtime / 'imports' / self.account['id']
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / (digest + '.docx')).write_bytes(data)
+        stem = re.sub(r'\.docx$', '', name, flags=re.I).strip()
+        title = params.get('title') or None
+        document = self.docs.create(title=title or (None if any(b['type'] == 'heading' for b in content['doc']['content'][:1]) else stem[:300]),
+                                    content=content, origin='import',
+                                    meta={'source_label': 'Word 导入', 'file_name': name, 'docx_sha256': digest},
+                                    note='Word 导入（' + ('适配当前样式' if mode == 'adapt' else '仅保留文字') + '）')
+        with self.store.transaction():
+            import_id = self.docs.record_import(document_id=None, kind='html', original=html, report=report)
+            self.docs.bind_import(import_id, document['document_id'])
+        return {**self.get({'document_id': document['document_id']}), 'report': report, 'import_id': import_id}
+
     def import_original(self, params: dict) -> dict:
         document_id = self._id(params)
         self.docs.get(document_id)
@@ -336,12 +381,13 @@ class DocumentService:
         if not match:
             return None
         try:
-            return self.import_image_bytes(base64.b64decode(match.group(2), validate=False), alt or '粘贴图片')
+            return self.import_image_bytes(base64.b64decode(match.group(2), validate=False), alt or '粘贴图片',
+                                           {'kind': 'paste_html'})
         except (DocumentError, ValueError, binascii.Error, OSError):
             return None
 
     # ============================================================ images
-    def import_image_bytes(self, data: bytes, title: str) -> dict:
+    def import_image_bytes(self, data: bytes, title: str, source: dict | None = None) -> dict:
         if not data or len(data) > 32 * 1024 * 1024:
             raise DocumentError('图片需小于 32MB')
         from PIL import Image, UnidentifiedImageError
@@ -365,7 +411,9 @@ class DocumentService:
         temp = staging / (uuid4().hex + ('.png' if converted or fmt == 'PNG' else '.jpg' if fmt == 'JPEG' else '.webp'))
         temp.write_bytes(data)
         try:
-            resource = self._resource_from_file(temp, title, {'kind': 'paste', 'converted_from': converted or ''})
+            info = {'kind': 'paste', **(source or {}), 'converted_from': converted or '', 'original_format': fmt or '',
+                    'original_bytes': len(data), 'imported_at': now_iso()}
+            resource = self._resource_from_file(temp, title, info)
         finally:
             temp.unlink(missing_ok=True)
         return resource
@@ -375,7 +423,7 @@ class DocumentService:
         path = Path(str(params.get('file_path', '')))
         if not path.is_file():
             raise DocumentError('图片文件不存在')
-        resource = self.import_image_bytes(path.read_bytes(), path.stem)
+        resource = self.import_image_bytes(path.read_bytes(), path.stem, {'kind': 'file', 'original_name': path.name[:200]})
         return self._image_view(resource)
 
     def image_import_data(self, params: dict) -> dict:
@@ -386,7 +434,8 @@ class DocumentService:
             data = base64.b64decode(match.group(2), validate=False)
         except binascii.Error:
             raise DocumentError('剪贴板图片数据无效') from None
-        return self._image_view(self.import_image_bytes(data, str(params.get('name') or '粘贴图片')[:100]))
+        name = str(params.get('name') or '粘贴图片')[:100]
+        return self._image_view(self.import_image_bytes(data, name, {'kind': 'clipboard', 'original_name': name}))
 
     def image_view(self, params: dict) -> dict:
         resource = self.assets.resource(params.get('resource_id', ''))
@@ -400,7 +449,102 @@ class DocumentService:
             preview, ok = '', False
         return {'resource_id': resource['resource_id'], 'title': resource.get('title', ''), 'width': resource.get('width'),
                 'height': resource.get('height'), 'mime': resource.get('mime'), 'size': resource.get('size'),
-                'preview': preview, 'ok': ok}
+                'preview': preview, 'ok': ok, 'source': self._source_view(resource)}
+
+    # ------------------------------------------- P1 图片来源、裁切与压缩
+    _SOURCE_LABEL = {'paste': '粘贴', 'paste_html': '从网页/文档粘贴', 'docx': 'Word 文件', 'svg': 'SVG 转图', 'clipboard': '剪贴板截图', 'file': '本地文件',
+                     'edit': '裁切/压缩生成', 'library': '素材库'}
+
+    def _source_view(self, resource: dict) -> dict:
+        source = dict(resource.get('document_source') or {})
+        kind = source.get('kind') or ('library' if not source else 'paste')
+        return {'kind': kind, 'label': self._SOURCE_LABEL.get(kind, '其他'), 'original_name': source.get('original_name', ''),
+                'source_url': source.get('source_url', ''), 'rights_note': source.get('rights_note', ''),
+                'derived_from': source.get('derived_from', ''), 'operation': source.get('operation'),
+                'imported_at': source.get('imported_at', ''), 'original_bytes': source.get('original_bytes'),
+                'converted_from': source.get('converted_from', '')}
+
+    def image_source_update(self, params: dict) -> dict:
+        """用户补充图片来源与权利说明（来源记录不等于使用许可）。"""
+        resource = self.assets.resource(params.get('resource_id', ''))
+        url = params.get('source_url', '')
+        if not isinstance(url, str) or len(url) > 2000:
+            raise DocumentError('来源链接过长')
+        url = url.strip()
+        if url and urlsplit(url).scheme not in ('http', 'https'):
+            raise DocumentError('来源链接只支持 http/https')
+        note = params.get('rights_note', '')
+        if not isinstance(note, str) or len(note) > 200:
+            raise DocumentError('权利说明最多 200 字')
+        source = dict(resource.get('document_source') or {})
+        source.update(source_url=url, rights_note=note.strip())
+        resource['document_source'] = source
+        self.assets.save_resource(resource)
+        return self._image_view(self.assets.resource(resource['resource_id']))
+
+    def image_edit(self, params: dict) -> dict:
+        """裁切/缩放/压缩：生成一张新图片资源，原图保持不变（可在素材库找回）。"""
+        from PIL import Image, ImageOps
+        from ..image_memory import IMAGE_DECODE_GATE
+        resource = self.assets.resource(params.get('resource_id', ''))
+        path = self.assets.checked_path(resource)
+        crop = params.get('crop')
+        if crop is not None:
+            if not isinstance(crop, dict) or any(not isinstance(crop.get(k), (int, float)) or isinstance(crop.get(k), bool)
+                                                 for k in ('x', 'y', 'w', 'h')):
+                raise DocumentError('裁切区域无效')
+            x, y, w, h = (float(crop[k]) for k in ('x', 'y', 'w', 'h'))
+            if not (0 <= x < 1 and 0 <= y < 1 and 0.02 <= w <= 1 and 0.02 <= h <= 1 and x + w <= 1.0001 and y + h <= 1.0001):
+                raise DocumentError('裁切区域超出图片范围')
+        max_width = params.get('max_width')
+        if max_width is not None and (type(max_width) is not int or not 200 <= max_width <= 4096):
+            raise DocumentError('最大宽度需在 200–4096 像素之间')
+        fmt = params.get('format', 'keep')
+        if fmt not in ('keep', 'jpeg', 'png'):
+            raise DocumentError('输出格式只支持保持原格式、JPEG 或 PNG')
+        quality = params.get('quality', 85)
+        if type(quality) is not int or not 50 <= quality <= 95:
+            raise DocumentError('压缩质量需在 50–95 之间')
+        if crop is None and max_width is None and fmt == 'keep' and resource.get('mime') not in ('image/jpeg', 'image/webp'):
+            raise DocumentError('没有需要处理的设置')
+        with IMAGE_DECODE_GATE:
+            with Image.open(path) as opened:
+                image = ImageOps.exif_transpose(opened)
+                image.load()
+        if crop is not None:
+            box = (round(x * image.width), round(y * image.height),
+                   min(image.width, round((x + w) * image.width)), min(image.height, round((y + h) * image.height)))
+            if box[2] - box[0] < 8 or box[3] - box[1] < 8:
+                raise DocumentError('裁切后的图片太小')
+            image = image.crop(box)
+        if max_width is not None and image.width > max_width:
+            image = image.resize((max_width, max(1, round(image.height * max_width / image.width))), Image.LANCZOS)
+        source_mime = resource.get('mime', '')
+        out = 'jpeg' if fmt == 'jpeg' or (fmt == 'keep' and source_mime == 'image/jpeg') else 'png' \
+            if fmt == 'png' or source_mime == 'image/png' else 'webp'
+        buffer = io.BytesIO()
+        if out == 'jpeg':
+            if image.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                rgba = image.convert('RGBA')
+                background.paste(rgba, mask=rgba.split()[-1])
+                image = background
+            image.convert('RGB').save(buffer, 'JPEG', quality=quality, optimize=True, progressive=True)
+        elif out == 'png':
+            image.save(buffer, 'PNG', optimize=True)
+        else:
+            image.save(buffer, 'WEBP', quality=quality)
+        data = buffer.getvalue()
+        operation = {'crop': crop, 'max_width': max_width, 'format': out, 'quality': quality if out != 'png' else None,
+                     'width': image.width, 'height': image.height}
+        original = dict(resource.get('document_source') or {})
+        edited = self.import_image_bytes(data, (resource.get('title') or '图片')[:90] + '（处理后）', {
+            'kind': 'edit', 'derived_from': resource['resource_id'], 'operation': operation,
+            'source_url': original.get('source_url', ''), 'rights_note': original.get('rights_note', ''),
+            'original_name': original.get('original_name', '')})
+        view = self._image_view(edited)
+        view['before'] = {'size': resource.get('size'), 'width': resource.get('width'), 'height': resource.get('height')}
+        return view
 
     def images_library(self, params: dict) -> list[dict]:
         rows = self.assets.resources()[:200]
@@ -513,6 +657,54 @@ class DocumentService:
                                                 delivery_hash=str(params.get('delivery_hash', ''))[:80], kind=kind,
                                                 issues=params.get('issues') if isinstance(params.get('issues'), list) else [])
         return {'delivery_id': delivery_id, 'version_id': version['version_id']}
+
+    # ------------------------------------------------ P2 长图与切片、SVG 转图
+    def long_image_page(self, params: dict) -> dict:
+        """主进程专用：返回冻结版本的长图页面（无脚本、仅 data: 图片）。"""
+        from .longimage import page_html
+        width = params.get('width', 375)
+        rendered = self.render_delivery({k: v for k, v in params.items() if k != 'width'}, variant='preview')
+        version = self.docs.version(rendered['document_id'], rendered['version_id'], content=False)
+        return {'html': page_html(rendered['html'], version['title'], (rendered.get('info') or {}).get('author', ''), width),
+                'version_id': rendered['version_id'], 'issues': rendered['issues']}
+
+    def long_image_compose(self, params: dict) -> dict:
+        """主进程专用：拼接分段截图，按空白行切片，写入经目录选择器授权的新目录。"""
+        from ..export.bundle import _assert_no_links
+        from ..paths import assert_not_c_drive
+        from .longimage import WIDTHS, stitch, write_bundle
+        destination = params.get('destination')
+        if not isinstance(destination, str) or not destination.strip() or not Path(destination).is_absolute():
+            raise DocumentError('请先通过目录选择器选择导出位置')
+        destination = Path(destination)
+        assert_not_c_drive(destination)
+        _assert_no_links(destination)
+        destination = destination.resolve()
+        document_id = self._id(params)
+        version = self.docs.version(document_id, str(params.get('version_id', '')), content=False)
+        width = params.get('width')
+        if width not in WIDTHS:
+            raise DocumentError('长图宽度只支持 375/414/750')
+        canvas, scale = stitch(params.get('segments'), params.get('total_height'), width)
+        return write_bundle(destination, canvas, scale, params.get('slice_height', 1200), {
+            'kind': 'long_image', 'document_id': document_id, 'version_id': version['version_id'], 'title': version['title'],
+            'css_width': width, 'created_at': now_iso()})
+
+    def svg_import(self, params: dict) -> dict:
+        """主进程专用：SVG 已在隐藏窗口里以 <img> 渲染为 PNG；这里入库位图并留存 SVG 原件。"""
+        from .longimage import check_svg
+        svg = check_svg(params.get('svg'))
+        name = str(params.get('name') or 'SVG 图').strip()[:100] or 'SVG 图'
+        try:
+            data = base64.b64decode(str(params.get('png_base64', '')), validate=True)
+        except (binascii.Error, ValueError):
+            raise DocumentError('SVG 渲染结果无效') from None
+        digest = hashlib.sha256(svg.encode('utf-8')).hexdigest()
+        folder = self.service.runtime / 'imports' / self.account['id']
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / (digest + '.svg')).write_text(svg, encoding='utf-8')
+        resource = self.import_image_bytes(data, name, {'kind': 'svg', 'original_name': name[:200], 'svg_sha256': digest})
+        return self._image_view(resource)
 
     def export_bundle(self, params: dict) -> dict:
         from ..export.bundle import _assert_no_links, _cleanup_owned_staging, _file_sha256, _tree_hashes
@@ -763,12 +955,39 @@ class DocumentService:
         existing = self.store.conn.execute('SELECT document_id FROM documents WHERE account_id=? AND origin=? AND origin_ref=?',
                                            (self.account['id'], 'ai', origin_ref)).fetchone()
         title = re.sub(r'\s+', ' ', brief.strip())[:40]
+        meta = {'source_label': 'AI 初稿', 'brief': brief.strip(), 'started_at': now_iso(), 'request_id': request_id}
+        # P1：一次生成两版对照时，两篇文章共享 variant_group，分别标“版本 A/B”。
+        group, variant = params.get('variant_group'), params.get('variant')
+        if group is not None or variant is not None:
+            if not isinstance(group, str) or not re.fullmatch(r'vg-[A-Za-z0-9_-]{1,80}', group) or variant not in ('A', 'B'):
+                raise DocumentError('版本对照参数无效')
+            meta.update(variant_group=group, variant=variant, source_label=f'AI 初稿·版本{variant}')
         document = self.docs.create(title=title + '（生成中）', origin='ai', origin_ref=origin_ref, generation_state='running', version=False,
-                                    meta={'source_label': 'AI 初稿', 'brief': brief.strip(), 'started_at': now_iso(),
-                                          'request_id': request_id})
+                                    meta=meta)
         if document['meta'].get('brief') != brief.strip():
             raise DocumentError('该起草请求已用于其他需求，请使用新的请求标识')
         return {'document': document, 'request_id': request_id, 'created': existing is None}
+
+    def variants(self, params: dict) -> list[dict]:
+        """同一次“两版对照”生成的所有文章（含自身），按版本排序。"""
+        document = self.docs._row(self._id(params))
+        group = document['meta'].get('variant_group')
+        if not group:
+            return []
+        self.reconcile_generations()
+        out = []
+        for row in self.store.conn.execute("SELECT document_id FROM documents WHERE account_id=? AND origin='ai'",
+                                           (self.account['id'],)).fetchall():
+            item = self.docs._row(row['document_id'])
+            if item['meta'].get('variant_group') != group:
+                continue
+            working = self.docs.working(item['document_id'])
+            from .schema import word_count
+            out.append({'document_id': item['document_id'], 'title': item['title'], 'variant': item['meta'].get('variant'),
+                        'generation_state': item['generation_state'], 'lifecycle': item['lifecycle'],
+                        'word_count': word_count(working['content']), 'current': item['document_id'] == document['document_id'],
+                        'error': item['meta'].get('error', '')})
+        return sorted(out, key=lambda v: v['variant'] or '')
 
     def ai_draft_bind(self, document_id: str, conversation_id: str, message_id: str | None, error: str | None) -> None:
         with self.store.transaction():

@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('ice', Object.freeze({
   copyText: text => ipcRenderer.invoke('ice:copy-text',text),
   pickDocumentImage: accountId => ipcRenderer.invoke('ice:document-pick-image',accountId),
   copyDocument: params => ipcRenderer.invoke('ice:document-copy',params),
+  documentLongImage: params => ipcRenderer.invoke('ice:document-long-image',params),
+  documentSvgImage: params => ipcRenderer.invoke('ice:document-svg-image',params),
   importPublication: () => ipcRenderer.invoke('ice:import-publication'),
   exportPublication: () => ipcRenderer.invoke('ice:export-publication'),
   importResource: () => ipcRenderer.invoke('ice:import-resource'),

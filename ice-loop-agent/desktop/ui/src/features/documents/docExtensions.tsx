@@ -1,18 +1,20 @@
 // v3 文档编辑器扩展（B-01/B-02/B-03）：稳定块 id、对齐、局部样式、真实图片块、未支持模块原件岛。
 // 节点/属性与后端 ice_agent/documents/schema.py 一一对应；后端仍会再次规范化，前端不是安全边界。
 import { Extension, Mark, Node, mergeAttributes, type NodeViewProps } from "@tiptap/core";
-import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
+import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import * as React from "react";
 
+import { toast } from "../../components/toast";
 import { useCurrentAccount } from "../../data/client";
 import { ImageSlot as LegacyImageSlot, RawBlock as LegacyRawBlock, RunOutput as LegacyRunOutput } from "../editor/nodes";
 import { docRpc, formatBytes, newBlockId, type ImageView } from "./documentsApi";
+import { ImageEditDialog, ImageSourceDialog } from "./ImageTools";
 
 export const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "horizontalRule",
-  "codeBlock", "articleImage", "rawHtml", "rawBlock", "imageSlot", "runOutput"];
+  "codeBlock", "articleImage", "rawHtml", "rawBlock", "imageSlot", "runOutput", "callout", "imageGroup"];
 
 /** 每个块带稳定 id（版本对比、交付问题定位、图片顺序）。拆分/粘贴产生的重复或缺失 id 在同一事务后补齐。 */
 export const BlockId = Extension.create({
@@ -137,6 +139,7 @@ function ArticleImageView({ node, updateAttributes, deleteNode, selected, editor
   const attrs = node.attrs as { resourceId: string; caption: string; width: number; align: "left" | "center" | "right"; sourceUrl: string };
   const view = useImageView(attrs.resourceId);
   const [busy, setBusy] = React.useState(false);
+  const [tool, setTool] = React.useState<"edit" | "source" | null>(null);
   const editable = editor.isEditable;
   const replace = async () => {
     if (!imageActions.current || busy) return;
@@ -162,9 +165,17 @@ function ArticleImageView({ node, updateAttributes, deleteNode, selected, editor
               {align === "left" ? "左" : align === "center" ? "中" : "右"}</button>))}
         </div>
         <button type="button" className="ice-link-btn" disabled={busy} onClick={() => void replace()}>{busy ? "选择中…" : "替换"}</button>
+        {view.data?.ok && <button type="button" className="ice-link-btn" onClick={() => setTool("edit")} title="裁切、缩小或压缩；另存为新图，原图不变">裁切/压缩</button>}
+        {view.data?.ok && <button type="button" className="ice-link-btn" onClick={() => setTool("source")}
+                                  title={view.data.source?.source_url || view.data.source?.label || "记录来源与权利说明"}>
+          来源{view.data.source?.source_url || view.data.source?.rights_note ? "✓" : ""}</button>}
         <button type="button" className="ice-link-btn" onClick={() => deleteNode()}>删除</button>
-        {view.data?.ok && <span className="ice-doc-muted">{view.data.width}×{view.data.height} · {formatBytes(view.data.size)}</span>}
+        {view.data?.ok && <span className="ice-doc-muted">{view.data.width}×{view.data.height} · {formatBytes(view.data.size)}
+          {view.data.source?.label ? ` · ${view.data.source.label}` : ""}</span>}
       </div>}
+      {tool === "edit" && view.data && <ImageEditDialog view={view.data} open onClose={() => setTool(null)}
+        onDone={next => updateAttributes({ resourceId: next.resource_id })} />}
+      {tool === "source" && view.data && <ImageSourceDialog view={view.data} open onClose={() => setTool(null)} pastedFrom={attrs.sourceUrl} />}
       <input className="ice-doc-image__caption" value={attrs.caption} placeholder={editable ? "添加图注（可选）" : ""}
              readOnly={!editable} maxLength={300} aria-label="图注"
              onChange={event => updateAttributes({ caption: event.target.value, alt: event.target.value })}
@@ -276,3 +287,123 @@ function RunOutputView({ node }: NodeViewProps) {
 }
 export const DocRunOutput = LegacyRunOutput.extend({ addNodeView() { return ReactNodeViewRenderer(RunOutputView); } });
 export const DocRawBlock = LegacyRawBlock;
+
+// ------------------------------------------------------------ P2 组件：提示卡片、多图并排
+export const CALLOUT_TONES = [
+  { value: "brand", label: "品牌色" }, { value: "info", label: "说明" }, { value: "tip", label: "提示" }, { value: "warn", label: "注意" },
+] as const;
+
+function CalloutView({ node, updateAttributes, editor }: NodeViewProps) {
+  const attrs = node.attrs as { tone: string; title: string };
+  const editable = editor.isEditable;
+  return (
+    <NodeViewWrapper className={"ice-doc-callout is-" + attrs.tone} data-drag-handle>
+      <div className="ice-doc-callout__head" contentEditable={false}>
+        <input className="ice-doc-callout__title" value={attrs.title} placeholder={editable ? "卡片标题（可选）" : ""} maxLength={60}
+               readOnly={!editable} aria-label="卡片标题" onChange={event => updateAttributes({ title: event.target.value })}
+               onKeyDown={event => event.stopPropagation()} />
+        {editable && <select aria-label="卡片颜色" value={attrs.tone} onChange={event => updateAttributes({ tone: event.target.value })}>
+          {CALLOUT_TONES.map(tone => <option key={tone.value} value={tone.value}>{tone.label}</option>)}
+        </select>}
+      </div>
+      <NodeViewContent className="ice-doc-callout__body" />
+    </NodeViewWrapper>
+  );
+}
+
+export const Callout = Node.create({
+  name: "callout",
+  group: "block",
+  content: "(paragraph|bulletList|orderedList)+",
+  defining: true,
+  draggable: true,
+  addAttributes() { return { tone: { default: "brand" }, title: { default: "" } }; },
+  parseHTML() { return [{ tag: "aside[data-callout]", getAttrs: (el: HTMLElement) => ({ tone: el.dataset.callout || "brand", title: el.dataset.title ?? "" }) }]; },
+  renderHTML({ node }: { node: { attrs: Record<string, unknown> } }) {
+    return ["aside", mergeAttributes({ "data-callout": node.attrs.tone, "data-title": node.attrs.title }), 0];
+  },
+  addNodeView() { return ReactNodeViewRenderer(CalloutView); },
+});
+
+type GroupImage = { resourceId: string; caption: string };
+
+function GroupCell({ item, editable, onCaption, onRemove, onMove, first, last }: {
+  item: GroupImage; editable: boolean; onCaption: (value: string) => void; onRemove: () => void;
+  onMove: (delta: number) => void; first: boolean; last: boolean;
+}) {
+  const view = useImageView(item.resourceId);
+  return (
+    <figure className="ice-doc-group__cell">
+      {view.data?.ok ? <img src={view.data.preview} alt={item.caption} draggable={false} />
+        : <div className="ice-doc-image__placeholder is-missing">{view.isLoading ? "载入中…" : "图片缺失"}</div>}
+      <input value={item.caption} placeholder={editable ? "说明（可选）" : ""} maxLength={100} readOnly={!editable} aria-label="单图说明"
+             onChange={event => onCaption(event.target.value)} onKeyDown={event => event.stopPropagation()} />
+      {editable && <div className="ice-doc-group__tools">
+        <button type="button" className="ice-link-btn" disabled={first} onClick={() => onMove(-1)} aria-label="左移">←</button>
+        <button type="button" className="ice-link-btn" disabled={last} onClick={() => onMove(1)} aria-label="右移">→</button>
+        <button type="button" className="ice-link-btn" onClick={onRemove}>移除</button>
+      </div>}
+    </figure>
+  );
+}
+
+function ImageGroupView({ node, updateAttributes, deleteNode, selected, editor }: NodeViewProps) {
+  const attrs = node.attrs as { columns: number; images: GroupImage[]; caption: string };
+  const images = Array.isArray(attrs.images) ? attrs.images : [];
+  const editable = editor.isEditable;
+  const [busy, setBusy] = React.useState(false);
+  const set = (next: GroupImage[]) => {
+    if (next.length < 2) { toast.info("多图至少需要 2 张；只剩一张时请改用普通图片"); return; }
+    updateAttributes({ images: next });
+  };
+  const add = async () => {
+    if (!imageActions.current || busy || images.length >= 9) return;
+    setBusy(true);
+    try { const picked = await imageActions.current.pickImage(); if (picked) updateAttributes({ images: [...images, { resourceId: picked.resource_id, caption: "" }] }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <NodeViewWrapper className={"ice-doc-group" + (selected ? " is-selected" : "")} data-drag-handle>
+      <div contentEditable={false}>
+        <div className="ice-doc-group__grid" style={{ gridTemplateColumns: `repeat(${attrs.columns === 3 ? 3 : 2}, minmax(0, 1fr))` }}>
+          {images.map((item, index) => <GroupCell key={index + ":" + item.resourceId} item={item} editable={editable}
+            first={index === 0} last={index === images.length - 1}
+            onCaption={value => updateAttributes({ images: images.map((cell, i) => i === index ? { ...cell, caption: value } : cell) })}
+            onRemove={() => set(images.filter((_, i) => i !== index))}
+            onMove={delta => { const next = [...images]; const [cell] = next.splice(index, 1); next.splice(index + delta, 0, cell); updateAttributes({ images: next }); }} />)}
+        </div>
+        {editable && <div className="ice-doc-image__bar">
+          <div className="ice-doc-seg" role="group" aria-label="列数">
+            {[2, 3].map(columns => <button key={columns} type="button" aria-pressed={attrs.columns === columns}
+              onClick={() => updateAttributes({ columns })}>{columns} 列</button>)}
+          </div>
+          <button type="button" className="ice-link-btn" disabled={busy || images.length >= 9} onClick={() => void add()}>
+            {busy ? "选择中…" : images.length >= 9 ? "最多 9 张" : "添加图片"}</button>
+          <button type="button" className="ice-link-btn" onClick={() => deleteNode()}>删除</button>
+          <span className="ice-doc-muted">{images.length} 张 · 手机上按 {attrs.columns} 列并排</span>
+        </div>}
+        <input className="ice-doc-image__caption" value={attrs.caption} placeholder={editable ? "整组图注（可选）" : ""}
+               readOnly={!editable} maxLength={300} aria-label="整组图注"
+               onChange={event => updateAttributes({ caption: event.target.value })} onKeyDown={event => event.stopPropagation()} />
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+export const ImageGroup = Node.create({
+  name: "imageGroup",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() { return { columns: { default: 2 }, images: { default: [] }, caption: { default: "" } }; },
+  parseHTML() { return [{ tag: "div[data-image-group]", getAttrs: (el: HTMLElement) => {
+    try { return { columns: Number(el.dataset.columns) === 3 ? 3 : 2, images: JSON.parse(el.dataset.imageGroup || "[]"), caption: el.dataset.caption ?? "" }; }
+    catch { return false; }
+  } }]; },
+  renderHTML({ node }: { node: { attrs: Record<string, unknown> } }) {
+    return ["div", mergeAttributes({ "data-image-group": JSON.stringify(node.attrs.images ?? []), "data-columns": String(node.attrs.columns),
+      "data-caption": node.attrs.caption })];
+  },
+  addNodeView() { return ReactNodeViewRenderer(ImageGroupView); },
+});

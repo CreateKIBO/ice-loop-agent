@@ -25,7 +25,50 @@ def _lighten(hex_color: str, amount: float) -> str:
     return f'#{mix(r):02x}{mix(g):02x}{mix(b):02x}'
 
 
+CALLOUT_COLORS = {'info': ('#eff6ff', '#2563eb'), 'tip': ('#ecfdf5', '#059669'), 'warn': ('#fffbeb', '#d97706')}
+
+
 def theme_styles(style: dict) -> dict[str, str]:
+    """各主题的内联样式。clean 与 v3.0 输出逐字一致；其他主题只覆盖少数元素。"""
+    css = _clean_styles(style)
+    brand, size, gap = style['brandColor'], style['fontSize'], style['paragraphSpacing']
+    soft = _lighten(brand, 0.9)
+    theme = style.get('theme', 'clean')
+    if theme == 'magazine':
+        css.update(
+            h1=f'margin:{gap + 12}px 0 {gap}px 0;font-size:{size + 8}px;line-height:1.4;font-weight:bold;color:#111827;text-align:center;',
+            h2=f'margin:{gap + 12}px 0 {gap}px 0;font-size:{size + 3}px;line-height:1.5;font-weight:bold;color:#111827;'
+               f'text-align:center;border-bottom:1px solid {brand};padding-bottom:8px;',
+            h3=f'margin:{gap + 6}px 0 {max(8, gap - 4)}px 0;font-size:{size + 1}px;line-height:1.5;font-weight:bold;color:{brand};',
+            blockquote=f'margin:0 0 {gap}px 0;padding:12px 18px;border-left:0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;'
+                       f'color:#4b5563;font-style:italic;text-align:center;',
+            hr=f'margin:{gap + 12}px auto;width:30%;border:0;border-top:2px solid {brand};')
+    elif theme == 'tech':
+        css.update(
+            h1=f'margin:{gap + 8}px 0 {gap}px 0;font-size:{size + 7}px;line-height:1.4;font-weight:bold;color:#0f172a;',
+            h2=f'margin:{gap + 10}px 0 {gap}px 0;font-size:{size + 3}px;line-height:1.5;font-weight:bold;color:#ffffff;'
+               f'background-color:{brand};padding:4px 12px;border-radius:4px;display:inline-block;',
+            h3=f'margin:{gap + 4}px 0 {max(8, gap - 4)}px 0;font-size:{size + 1}px;line-height:1.5;font-weight:bold;color:{brand};'
+               f'border-bottom:2px solid {soft};padding-bottom:4px;',
+            blockquote=f'margin:0 0 {gap}px 0;padding:10px 14px;border-left:4px solid {brand};background-color:#f1f5f9;color:#334155;',
+            pre=f'margin:0 0 {gap}px 0;padding:14px 16px;background-color:#0f172a;border-radius:8px;font-size:13px;'
+                'line-height:1.65;white-space:pre-wrap;word-break:break-all;font-family:Menlo,Consolas,monospace;color:#e2e8f0;',
+            code=f'padding:1px 5px;background-color:#f1f5f9;border-radius:4px;font-size:0.9em;font-family:Menlo,Consolas,monospace;color:#be185d;')
+    elif theme == 'warm':
+        warm = _lighten(brand, 0.94)
+        css.update(
+            root=css['root'].replace('color:#333333;', 'color:#3f3a36;'),
+            h1=f'margin:{gap + 8}px 0 {gap}px 0;font-size:{size + 7}px;line-height:1.45;font-weight:bold;color:#3f3a36;',
+            h2=f'margin:{gap + 10}px 0 {gap}px 0;font-size:{size + 3}px;line-height:1.5;font-weight:bold;color:{brand};'
+               f'background-color:{warm};padding:6px 12px;border-radius:12px;',
+            h3=f'margin:{gap + 4}px 0 {max(8, gap - 4)}px 0;font-size:{size + 1}px;line-height:1.5;font-weight:bold;color:#3f3a36;',
+            blockquote=f'margin:0 0 {gap}px 0;padding:12px 16px;border-left:0;border-radius:12px;background-color:#faf6f0;color:#5b524b;',
+            figure=f'margin:0 0 {gap}px 0;text-align:center;',
+            img='display:block;margin:0 auto;max-width:100%;height:auto;border-radius:8px;')
+    return css
+
+
+def _clean_styles(style: dict) -> dict[str, str]:
     brand = style['brandColor']
     size = style['fontSize']
     line = style['lineHeight']
@@ -150,6 +193,10 @@ class Renderer:
         if kind == 'runOutput':
             self.issue('warning', 'legacy_run', f"旧运行输出引用 {attrs.get('runRef')} 属于只读历史证据，交付时已省略", bid)
             return '', ''
+        if kind == 'callout':
+            return self.callout(node)
+        if kind == 'imageGroup':
+            return self.image_group(attrs)
         if kind == 'rawHtml':
             deliver = attrs.get('deliver', 'text')
             reason = attrs.get('reason') or '未支持模块'
@@ -178,17 +225,57 @@ class Renderer:
                            for p in paragraphs), source
         return '', plain_text_of(node)
 
+    def callout(self, node: dict) -> tuple[str, str]:
+        attrs = node.get('attrs', {})
+        tone = attrs.get('tone', 'brand')
+        background, accent = CALLOUT_COLORS.get(tone, (_lighten(self.style['brandColor'], 0.92), self.style['brandColor']))
+        gap = self.style['paragraphSpacing']
+        parts = [self.block(child, in_list=True) for child in node.get('content') or []]
+        title = attrs.get('title', '')
+        head = (f'<p style="margin:0 0 6px 0;font-weight:bold;color:{accent};">{htmllib.escape(title, quote=False)}</p>' if title else '')
+        body = ''.join(p[0] for p in parts)
+        html = (f'<section style="margin:0 0 {gap}px 0;padding:12px 16px;background-color:{background};'
+                f'border-left:4px solid {accent};border-radius:6px;">{head}{body}</section>')
+        text = '\n'.join(([f'【{title}】'] if title else []) + [p[1] for p in parts if p[1]])
+        return html, text
+
+    def image_group(self, attrs: dict) -> tuple[str, str]:
+        columns = attrs.get('columns', 2)
+        width = {2: 49, 3: 32}[columns] if columns in (2, 3) else 49
+        cells, labels = [], []
+        for item in attrs.get('images') or []:
+            body, order, _ = self._image_body({'id': attrs.get('id', ''), 'resourceId': item['resourceId'], 'caption': item.get('caption', ''),
+                                           'width': 100, 'align': 'center'})
+            labels.append(f'图{order}')
+            cap = (f'<p style="{self.css["caption"]}">{htmllib.escape(item["caption"], quote=False)}</p>' if item.get('caption') else '')
+            cells.append(f'<section style="display:inline-block;width:{width}%;vertical-align:top;margin:0 0.5% 6px 0.5%;'
+                         f'font-size:{self.style["fontSize"]}px;">{body}{cap}</section>')
+        caption = attrs.get('caption', '')
+        cap = f'<p style="{self.css["caption"]}">{htmllib.escape(caption, quote=False)}</p>' if caption else ''
+        html = (f'<section style="margin:0 0 {self.style["paragraphSpacing"]}px 0;text-align:center;font-size:0;">'
+                + ''.join(cells) + '</section>' + cap)
+        return html, f'【{"、".join(labels)}{"：" + caption if caption else ""}】'
+
     def image(self, attrs: dict) -> tuple[str, str]:
+        caption = attrs.get('caption', '')
+        body, order, missing = self._image_body(attrs)
+        text = f'【图{order}{"：" + caption if caption else ""}】'
+        if missing:
+            return body, text
+        cap = f'<p style="{self.css["caption"]}">{htmllib.escape(caption, quote=False)}</p>' if caption else ''
+        return f'<section style="{self.css["figure"]}">{body}{cap}</section>', text
+
+    def _image_body(self, attrs: dict) -> tuple[str, int, bool]:
+        """登记一张图片（序号、清单、问题），返回其 <img> 或缺图占位；单图与多图共用。"""
         order = len(self.images) + 1
         caption = attrs.get('caption', '')
         resolved = self.resolve_image(attrs)
         bid = attrs.get('id', '')
-        text = f'【图{order}{"：" + caption if caption else ""}】'
         if not resolved:
             self.issue('error', 'image_missing', f'图{order}{"「" + caption + "」" if caption else ""} 的图片文件缺失或已改变，请重新插入', bid)
             self.images.append({'order': order, 'resource_id': attrs.get('resourceId'), 'caption': caption,
                                 'missing': True, 'block_id': bid})
-            return f'<p style="{self.css["slot"]}">【图片缺失】{htmllib.escape(caption, quote=False)}</p>', text
+            return f'<p style="{self.css["slot"]}">【图片缺失】{htmllib.escape(caption, quote=False)}</p>', order, True
         self.images.append({'order': order, 'resource_id': attrs['resourceId'], 'caption': caption, 'missing': False,
                             'block_id': bid, 'mime': resolved['mime'], 'size': resolved['size'],
                             'width': resolved['width'], 'height': resolved['height'], 'sha256': resolved['sha256'],
@@ -203,8 +290,7 @@ class Renderer:
             alt = htmllib.escape(attrs.get('alt') or caption, quote=True)
             body = (f'<img src="{src}" alt="{alt}" data-ice-order="{order}" '
                     f'style="{self.css["img"]}width:{width}%;{margin}">')
-        cap = f'<p style="{self.css["caption"]}">{htmllib.escape(caption, quote=False)}</p>' if caption else ''
-        return f'<section style="{self.css["figure"]}">{body}{cap}</section>', text
+        return body, order, False
 
     def run(self) -> dict:
         html_parts, text_parts = [], []

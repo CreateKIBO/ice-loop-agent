@@ -50,7 +50,9 @@ test('new workbench calls are explicitly allowed while internal and unfinished w
 test('v3: document methods are public, main-only document calls and retired execution calls are not', () => {
   const methods = new Set(require('../workbench-methods.cjs'));
   for (const method of ['documents.list', 'documents.save_working', 'documents.import_paste', 'documents.render_delivery',
-    'documents.export_bundle', 'bookmarks.list', 'publications.register']) assert.ok(methods.has(method), method);
+    'documents.export_bundle', 'bookmarks.list', 'publications.register',
+    // P1-01 文章内助手：提案链对渲染层开放，采纳仍由服务端按块校验。
+    'documents.assist_start', 'documents.assist_list', 'documents.assist_apply', 'documents.assist_revert']) assert.ok(methods.has(method), method);
   // 剪贴板载荷、交付登记与按路径导入图片只能由主进程发起。
   for (const method of ['documents.copy_payload', 'documents.delivery_record', 'documents.image_import']) assert.ok(!methods.has(method), method);
   const main = fs.readFileSync(path.join(desktop, 'main.cjs'), 'utf8');

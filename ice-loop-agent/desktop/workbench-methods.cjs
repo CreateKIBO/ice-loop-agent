@@ -22,7 +22,15 @@ module.exports = Object.freeze([
   'documents.untrash', 'documents.duplicate', 'documents.markdown', 'documents.open_legacy',
   'documents.convert_paste', 'documents.import_paste', 'documents.import_original', 'documents.reconvert',
   'documents.image_import_data', 'documents.image_view', 'documents.images_library',
+  'documents.image_edit', 'documents.image_source_update', 'documents.import_docx',
+  // P2 运营增强：批量整理、发布日历、建议管理、素材标签
+  'documents.batch', 'documents.plan', 'documents.calendar', 'documents.suggestions', 'documents.suggestions_dismiss',
+  'documents.library', 'documents.image_tags',
   'documents.render_delivery', 'documents.export_bundle', 'documents.from_candidate', 'documents.ai_draft_start',
+  'documents.ai_guided_start', 'documents.variants',
+  // v3 P1-01 文章内助手提案链：只产出提案，采纳在服务端按块校验后落为新版本。
+  'documents.assist_start', 'documents.assist_list', 'documents.assist_get', 'documents.assist_cancel',
+  'documents.assist_apply', 'documents.assist_dismiss', 'documents.assist_revert', 'documents.assist_search',
   'publications.register', 'publications.list', 'publications.withdraw',
   'bookmarks.list', 'bookmarks.save', 'bookmarks.remove', 'bookmarks.reorder', 'bookmarks.restore_defaults',
 ]);

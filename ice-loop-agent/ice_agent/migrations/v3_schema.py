@@ -81,3 +81,20 @@ def _documents(conn: sqlite3.Connection) -> None:
         " registered_at TEXT NOT NULL)"
     )
     conn.execute("CREATE INDEX idx_publication_records ON publication_records(account_id, document_id)")
+
+
+@migration(24, "v3 文章内助手：局部改写/扩写/压缩/改语气/图位建议的提案链")
+def _document_proposals(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE document_proposals ("
+        " proposal_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, document_id TEXT NOT NULL,"
+        " base_revision INTEGER NOT NULL, base_content_hash TEXT NOT NULL,"
+        " action TEXT NOT NULL CHECK(action IN ('rewrite','expand','compress','tone','image_slots','custom')),"
+        " instruction TEXT NOT NULL DEFAULT '', target_block_ids TEXT NOT NULL DEFAULT '[]',"
+        " context_json TEXT NOT NULL DEFAULT '{}', ops_json TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '',"
+        " status TEXT NOT NULL CHECK(status IN ('generating','ready','failed','cancelled','applied','partially_applied','rejected')),"
+        " error TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', usage_json TEXT NOT NULL DEFAULT '{}',"
+        " decision_json TEXT NOT NULL DEFAULT '{}', applied_version_id TEXT,"
+        " created_at TEXT NOT NULL, finished_at TEXT, decided_at TEXT)"
+    )
+    conn.execute("CREATE INDEX idx_document_proposals ON document_proposals(account_id, document_id, created_at)")

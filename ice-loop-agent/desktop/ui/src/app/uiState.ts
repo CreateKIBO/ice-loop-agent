@@ -34,6 +34,10 @@ export function openPublicationSetup(entry: "identity" | "new" | "history") {
 export const draftFlashStore = createValueStore<{ id: string; at: number } | null>(null);
 export function flashDraft(id: string) { draftFlashStore.set({ id, at: Date.now() }); }
 export const engineStore = createValueStore<"ready" | "exited">("ready");
+/** v3.8：左栏“正在编辑”卡片读取编辑器状态；左栏点“历史版本”等入口时请求编辑器打开对应侧栏。 */
+export type DocumentEditingState = { documentId: string; title: string; saveState: string; savedAt: string; unversioned: boolean; words: number };
+export const documentEditingStore = createValueStore<DocumentEditingState | null>(null);
+export const documentPanelStore = createValueStore<{ panel: "assist" | "versions" | "style" | "delivery"; at: number } | null>(null);
 
 /** v3（C-01）：主区三入口。默认进入“文章”；“网页”以浮层打开，不占用此状态。 */
 export type Workspace = "articles" | "assistant";

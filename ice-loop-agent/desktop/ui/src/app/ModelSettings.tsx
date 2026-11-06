@@ -17,6 +17,8 @@ export type { BootstrapSettings, ModelProfile } from './modelBootstrap';
 export { useBootstrap, useModelReadiness } from './modelBootstrap';
 import { TextModelRoutes } from './TextModelRoutes';
 import { ModelGenerationLimits } from './ModelGenerationLimits';
+import { QuickModelSetup } from './QuickModelSetup';
+import { writingReadiness } from './modelRoutes';
 
 const PROVIDERS: Record<string, { mark: string; name: string; service: string }> = {
   qwen: { mark: "Q", name: "通义千问", service: "阿里云百炼" },
@@ -56,10 +58,14 @@ export function ModelSettings() {
   const boot = useAccountQuery<BootstrapSettings>("bootstrap", {}, { enabled: open, staleTime: 0 });
   const profiles = boot.data?.settings?.profiles ?? [];
   const writer = boot.data?.settings?.routes?.writer?.primary;
+  // P1：新用户先看到“快速设置”；多供应商/分工/预算收进“高级设置”，已配置多个供应商 Key 时默认展开。
+  const configured = writingReadiness(boot.data?.settings) !== "missing";
+  const [advanced, setAdvanced] = React.useState<boolean | null>(null);
+  const advancedOpen = advanced ?? (boot.data ? configured && profiles.filter(p => p.has_key).length > 1 : false);
 
   return (
     <SettingsDraftContext.Provider value={drafts}>
-    <Dialog open={open} onOpenChange={next=>{if(!next)close('close');}} title="模型与 Key" width={800} initialFocus="[data-budget-heading]"
+    <Dialog open={open} onOpenChange={next=>{if(!next)close('close');}} title="模型与 Key" width={800} initialFocus="[data-quick-heading], [data-budget-heading]"
             description="全局调用预算、国内模型与 Key 均在此设置。保存 Key 后可手动测试连接；测试会发送真实请求。Key 由系统加密保存。"
             footer={pending?<>
               <span role="status" style={{flex:1,fontSize:'var(--ice-font-size-sm)'}}>模型或预算有未保存修改。</span>
@@ -75,6 +81,11 @@ export function ModelSettings() {
               <Button variant="primary" onClick={() => close('close')}>完成</Button>
             </>}>
       {closeError&&<div role="alert" className="ice-error-text">{closeError}</div>}
+      <QuickModelSetup key={'quick:'+account} snapshot={boot.data} providers={PROVIDERS} onDone={() => boot.refetch()} />
+      <details className="ice-advanced-settings" open={advancedOpen}
+               onToggle={event => setAdvanced((event.currentTarget as HTMLDetailsElement).open)}>
+        <summary>高级设置：调用预算、多个供应商与文字分工</summary>
+        <div className="ice-advanced-settings__body">
       <DefaultBudgetPanel key={'budget:'+account} />
       <TextModelRoutes key={'routes:'+account} snapshot={boot.data} onRefresh={() => boot.refetch()} />
       <h3 style={{margin:'0 0 12px',fontSize:'var(--ice-font-size-md)'}}>供应商与模型</h3>
@@ -91,6 +102,8 @@ export function ModelSettings() {
           </motion.div>
         ))}
       </div>
+        </div>
+      </details>
     </Dialog>
     </SettingsDraftContext.Provider>
   );

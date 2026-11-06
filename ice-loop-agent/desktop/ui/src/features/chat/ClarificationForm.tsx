@@ -17,12 +17,14 @@ export function ClarificationForm({row,active}:{row:ChatMessage;account:string;c
   const answered=row.metadata?.clarification_status==='answered'||Boolean(row.metadata?.answered_at);
   const answers=(row.metadata?.answers??{}) as Record<string,unknown>;
   return <motion.section className="ice-clarification" aria-label={answered?'已确认的信息':'助手的问题'} initial={reduced?false:{opacity:0}} animate={{opacity:1}} transition={{duration:reduced?0:0.16}}>
-    <h3>{answered?'已确认的信息':`助手有 ${questions.length} 个问题`}</h3>
+    {(answered||!active)&&<h3>{answered?'已确认的信息':`助手有 ${questions.length} 个问题`}</h3>}
     {answered?<dl>{questions.map(question=><div key={question.id}><dt>{question.question}</dt>
       <dd>{typeof answers[question.id]==='string'?String(answers[question.id]):'已通过自由回答补充，请查看后续消息'}</dd></div>)}</dl>
-    :<>
-      <ol className="ice-clarification__list">{questions.map(question=><li key={question.id}>{question.question}</li>)}</ol>
-      <p className="ice-clarification__hint">{active?'请在下方的提问框中逐题选择或填写；也可以直接在输入框自由回复。':'这是此前的问题，请在最新回复中继续，或直接在输入框补充要求。'}</p>
-    </>}
+    :active
+      // 待答且是最新回复：问题只在下方提问框中出现一次，这里给一条可点击的提示。
+      ?<button type="button" className="ice-clarification__jump" onClick={()=>document.querySelector<HTMLElement>('.ice-qbox [data-autofocus], .ice-qbox button')?.focus()}>
+        <span className="ice-qbox__badge">{questions.length}</span>请在下方提问框中逐题回答（可选择选项或自己填写）</button>
+      :<><ol className="ice-clarification__list">{questions.map(question=><li key={question.id}>{question.question}</li>)}</ol>
+        <p className="ice-clarification__hint">这是此前的问题，请在最新回复中继续，或直接在输入框补充要求。</p></>}
   </motion.section>;
 }

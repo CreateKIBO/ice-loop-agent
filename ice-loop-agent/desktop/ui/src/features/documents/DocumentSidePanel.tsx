@@ -1,4 +1,4 @@
-// 文章侧栏：排版（B-02）、版本（A-03）、交付与人工发布登记（B-04/C-05）。
+// 文章侧栏：AI 助手（P1-01）、排版（B-02）、版本（A-03）、交付与人工发布登记（B-04/C-05）。
 import * as React from "react";
 import DOMPurify from "dompurify";
 
@@ -7,27 +7,32 @@ import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { accountStore, useAccountQuery, queryClient, useCurrentAccount } from "../../data/client";
 import {
-  FONT_SIZES, LETTER_SPACINGS, LINE_HEIGHTS, PARAGRAPH_SPACINGS, PRODUCER_LABEL, docRpc, formatBytes, formatTime, invalidateDocuments,
+  FONT_SIZES, LETTER_SPACINGS, THEMES, LINE_HEIGHTS, PARAGRAPH_SPACINGS, PRODUCER_LABEL, docRpc, formatBytes, formatTime, invalidateDocuments,
   type Delivery, type DocStyle, type DocumentDetail, type PublicationRecord, type VersionSummary,
 } from "./documentsApi";
+import { DocumentAssistPanel, type AssistBridge } from "./DocumentAssistPanel";
+import { DocumentVariants } from "./DocumentVariants";
 
-type Panel = "style" | "versions" | "delivery";
+type Panel = "assist" | "compare" | "style" | "versions" | "delivery";
 type Props = {
   panel: Panel; onPanel: (panel: Panel | null) => void; documentId: string; style: DocStyle; onStyle: (patch: Partial<DocStyle>) => void;
   revision: () => number; flush: () => Promise<void>; commitVersion: (note: string) => Promise<{ version_id: string; created: boolean }>;
-  unversioned: boolean; onRestored: () => void; detail: DocumentDetail;
+  unversioned: boolean; onRestored: () => void; detail: DocumentDetail; assist: AssistBridge;
 };
 
 export function DocumentSidePanel(props: Props) {
   return (
     <div className="ice-doc-side__inner">
       <div className="ice-doc-side__tabs" role="tablist" aria-label="文章侧栏">
-        {([["style", "排版"], ["versions", "版本"], ["delivery", "交付与发布"]] as const).map(([value, label]) =>
+        {([["assist", "AI 助手"], ...(props.detail.meta.variant_group ? [["compare", "两版对照"] as const] : []),
+           ["style", "排版"], ["versions", "版本"], ["delivery", "交付与发布"]] as const).map(([value, label]) =>
           <button key={value} type="button" role="tab" aria-selected={props.panel === value} onClick={() => props.onPanel(value)}>{label}</button>)}
         <span style={{ flex: 1 }} />
         <button type="button" className="ice-link-btn" onClick={() => props.onPanel(null)} aria-label="收起侧栏">收起</button>
       </div>
       <div className="ice-doc-side__body">
+        {props.panel === "assist" && <DocumentAssistPanel documentId={props.documentId} bridge={props.assist} flush={props.flush} revision={props.revision} series={props.detail.series ?? null} />}
+        {props.panel === "compare" && <DocumentVariants documentId={props.documentId} />}
         {props.panel === "style" && <StylePanel {...props} />}
         {props.panel === "versions" && <VersionsPanel {...props} />}
         {props.panel === "delivery" && <DeliveryPanel {...props} />}
@@ -41,7 +46,14 @@ const BRAND_PRESETS = ["#2563eb", "#0f766e", "#b91c1c", "#7c3aed", "#c2410c", "#
 function StylePanel({ style, onStyle }: Props) {
   return (
     <div className="ice-doc-form">
-      <p className="ice-doc-muted">一键排版：主题“简洁”（首期唯一主题）。设置作用于全文，随文章保存，并用于复制和导出。</p>
+      <p className="ice-doc-muted">一键排版：设置作用于全文，随文章保存，并用于复制和导出。</p>
+      <div className="ice-doc-themes" role="radiogroup" aria-label="排版主题">
+        {THEMES.map(theme => <button key={theme.value} type="button" role="radio" aria-checked={(style.theme ?? "clean") === theme.value}
+          className={"ice-doc-theme is-" + theme.value + ((style.theme ?? "clean") === theme.value ? " is-on" : "")}
+          onClick={() => onStyle({ theme: theme.value })} style={{ ["--doc-brand" as string]: style.brandColor }}>
+          <span className="ice-doc-theme__sample" aria-hidden><i>小标题</i><b /></span>
+          <strong>{theme.label}</strong><span>{theme.hint}</span></button>)}
+      </div>
       <label>品牌色
         <span className="ice-doc-row">
           <input type="color" value={style.brandColor} aria-label="品牌色" onChange={event => onStyle({ brandColor: event.target.value.toLowerCase() })} />
@@ -276,6 +288,7 @@ function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
           <Button size="sm" loading={busy === "copy-text"} onClick={() => void copy("text")}>复制纯文本</Button>
           <Button size="sm" loading={busy === "export"} onClick={() => void exportBundle()}>导出图文包</Button>
         </div>
+        <LongImageExport documentId={documentId} versionId={delivery.version_id} />
         {exported && <div className="ice-doc-muted">已导出到 {exported.destination}
           {window.ice?.openExportFolder && <> · <button type="button" className="ice-link-btn" onClick={() => void window.ice?.openExportFolder?.(exported.destination)}>打开文件夹</button></>}</div>}
         {delivery.images.length > 0 && <details className="ice-doc-images">
@@ -344,5 +357,52 @@ function PublicationForm({ documentId, delivery, delivered, records, onChanged }
         </div>}
       {!delivered && <p className="ice-doc-muted">这个文章还没有复制或导出过；登记需要先交付一个版本。</p>}
     </section>
+  );
+}
+
+/** P2 长图与切片：按当前交付版本渲染手机版心长图，并在空白行处切成多张，写入新的导出目录。 */
+function LongImageExport({ documentId, versionId }: { documentId: string; versionId: string }) {
+  const [open, setOpen] = React.useState(false);
+  const [width, setWidth] = React.useState(375);
+  const [slice, setSlice] = React.useState(1200);
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<{ destination: string; pixel_width: number; pixel_height: number; slices: number; can_open?: boolean } | null>(null);
+  const run = async () => {
+    const bridge = window.ice;
+    const capture = bridge?.documentLongImage as undefined | ((params: Record<string, unknown>) => Promise<{ destination: string; pixel_width: number; pixel_height: number; slices: number; can_open?: boolean }>);
+    if (!bridge?.chooseExportDir || typeof capture !== "function") { toast.warning({ title: "请在桌面应用中导出长图" }); return; }
+    setBusy(true);
+    let destination: string | null = null, done = false;
+    try {
+      destination = await bridge.chooseExportDir();
+      if (!destination) return;
+      const value = await capture({ document_id: documentId, version_id: versionId, account_id: accountStore.get(), destination, width, slice_height: slice });
+      done = true; setResult(value);
+      toast.success({ title: "长图已导出", detail: `${value.pixel_width}×${value.pixel_height} 像素，切成 ${value.slices} 张；导出不等于已发布。` });
+    } catch (problem) { toast.error({ title: "长图没有导出", detail: (problem as Error).message }); }
+    finally {
+      if (destination && !done) try { await bridge.cancelExportDir?.(destination); } catch { /* 已失效的批准无需处理 */ }
+      setBusy(false);
+    }
+  };
+  return (
+    <details className="ice-doc-longimg" open={open} onToggle={event => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+      <summary>长图与切片</summary>
+      <p className="ice-doc-muted">把当前交付版本渲染成一张手机宽度的长图，并在段落之间的空白处切成多张，适合朋友圈、社群或其他平台分享。</p>
+      <div className="ice-doc-row">
+        <label>宽度
+          <select value={width} onChange={event => setWidth(Number(event.target.value))} aria-label="长图宽度">
+            <option value={375}>375（标准手机）</option><option value={414}>414（大屏手机）</option><option value={750}>750（高清）</option>
+          </select></label>
+        <label>每张约
+          <select value={slice} onChange={event => setSlice(Number(event.target.value))} aria-label="切片高度">
+            {[800, 1200, 1600, 2400].map(value => <option key={value} value={value}>{value}px</option>)}
+          </select></label>
+        <span style={{ flex: 1 }} />
+        <Button size="sm" loading={busy} onClick={() => void run()}>导出长图</Button>
+      </div>
+      {result && <div className="ice-doc-muted">已导出到 {result.destination}（长图.png + 切片/ {result.slices} 张）
+        {result.can_open && window.ice?.openExportFolder && <> · <button type="button" className="ice-link-btn" onClick={() => void window.ice?.openExportFolder?.(result.destination)}>打开文件夹</button></>}</div>}
+    </details>
   );
 }

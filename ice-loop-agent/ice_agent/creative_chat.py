@@ -599,7 +599,10 @@ class CreativeChat:
                 '历史拟题必须依据本栏目前五篇正文和全部标题，并优先采用对应期的预设大纲标题。'
                 'confirmed_editorial是用户已确认的本期需求，期号固定；title_selection.locked为真时，初稿必须保留用户确认的标题，不重新拟题。'
                 '未知事实、引用和运行输出不要编造；保留待核验标记与待配图占位符。'
-                '讨论模式只回复观点。生成初稿模式根据本轮要求、前文讨论、栏目历史与资料组织完整Markdown初稿；'
+                '讨论模式只回复观点；如需用户确认会改变方向、读者定位或关键结论的信息，先用一两句说明原因，'
+                '再在回复最后附一个```ice-questions代码块，内容为JSON数组，每项为{"id":"英文id","question":"中文问题","header":"短标签",'
+                '"options":[{"label":"选项","description":"一句话影响"}],"multiple":false}，最多4项；问题不要在正文里重复列出，无需追问时不要附加。'
+                '生成初稿模式根据本轮要求、前文讨论、栏目历史与资料组织完整Markdown初稿；'
                 '改稿模式输出完整Markdown候选正文（唯一一级标题），不要省略未改段落。'
                 '配图模式保留当前正文，prompts按图位输出可编辑英文生图提示词，严格遵循image_prompt_contract。'
                 '有封面模板时以Edit image开头，仅修改匹配栏目的已有模板标题和期号，品牌标志形状原样保留。'
@@ -735,6 +738,86 @@ class CreativeChat:
         return {'message_id': message_id, 'mode': metadata.get('mode', 'draft'), 'questions': questions,
                 'answers': answers, 'metadata': metadata}
 
+    def _pause_for_questions(self, metadata: dict, questions: list[dict], req: Any, base: dict, reply: str) -> tuple[str, str]:
+        """把澄清问题写入消息元数据并暂停等待作答；正文保留问题清单，供下一轮对话上下文使用。"""
+        metadata.update(questions=questions, clarification_status='pending')
+        original = req.context.get('clarification') or {}
+        previous_answers = list(original.get('previous_answers', []))
+        for question in original.get('questions', []):
+            if question['id'] in original.get('answers', {}):
+                previous_answers.append({'question': question['question'], 'answer': original['answers'][question['id']]})
+        if original.get('freeform_answer'):
+            previous_answers.append({'question': '此前澄清问题的自由回答', 'answer': original['freeform_answer']})
+        metadata['context_snapshot'] = {
+            'original_request': original.get('original_request') or req.prompt,
+            'references': [r['id'] for r in req.context.get('references', [])],
+            'reference_hashes': {r['id']: r['content_hash'] for r in req.context.get('references', [])},
+            'documents': req.context.get('documents', []),
+            'selected_text': req.context.get('selected_text', ''),
+            'candidate_id': metadata.get('prior_candidate_id'),
+            'answers_so_far': previous_answers[-30:],
+            'target_content_hash': base['content_hash']}
+        intro = reply.strip()
+        # 界面用 reply_intro 显示说明文字，问题本身只在提问框中出现一次。
+        metadata['reply_intro'] = intro
+        listed = '\n'.join(f"{index}. {q['question']}" for index, q in enumerate(questions, 1))
+        return (intro + '\n\n' + listed).strip(), 'awaiting_input'
+
+    QUESTION_BLOCK = re.compile(r'```ice-questions[ \t]*\n(.*?)(?:```|\Z)', re.S)
+    ASK_CUE = re.compile(r'(请(你)?(先)?(确认|告诉我|回答|选择|补充|明确)|想(先)?(确认|了解|问)|需要(你|您)(确认|补充|回答)|几个问题|以下问题|下面.{0,6}问题|请问)')
+    NUMBERED_QUESTION = re.compile(r'^\s*(?:\d{1,2}[.、)）]|[（(]\d{1,2}[)）]|[-*•])\s*(?:\*\*)?(.{2,200}?[？?])(?:\*\*)?\s*(.*)$')
+
+    @classmethod
+    def _discussion_questions(cls, reply: str) -> tuple[str, list[dict], str]:
+        """讨论模式提问的两种来源：1) 模型按约定输出的 ```ice-questions JSON 块；
+        2) 兜底：回复末尾、带明确提问用语的编号问题清单（每项以问号结尾，可在括号/冒号后给出“A/B/C”选项）。"""
+        matches = list(cls.QUESTION_BLOCK.finditer(reply or ''))
+        if matches:
+            block = matches[-1]
+            stripped = (reply[:block.start()] + reply[block.end():]).strip()
+            try:
+                value = json.loads(block.group(1).strip())
+                questions = cls._questions({'questions': value['questions'] if isinstance(value, dict) else value})
+                if questions:
+                    return stripped, questions, 'block'
+            except (ValueError, KeyError, TypeError):
+                pass
+            reply = stripped  # 块无效：不把原始 JSON 显示给用户，改走兜底识别
+        lines = (reply or '').rstrip().split('\n')
+        tail: list[tuple[str, str]] = []
+        index = len(lines) - 1
+        while index >= 0 and not lines[index].strip():
+            index -= 1
+        while index >= 0:
+            match = cls.NUMBERED_QUESTION.match(lines[index])
+            if not match:
+                break
+            tail.insert(0, (match.group(1).strip(), match.group(2).strip()))
+            index -= 1
+            while index >= 0 and not lines[index].strip():
+                index -= 1
+        intro = '\n'.join(lines[:index + 1]).strip()
+        if not 2 <= len(tail) <= 4 or not cls.ASK_CUE.search(intro[-200:] if intro else ''):
+            return reply, [], ''
+        questions = []
+        for number, (question, rest) in enumerate(tail, 1):
+            options: list[str] = []
+            hint = re.search(r'[（(]([^（）()]{2,120})[）)]\s*$', question) or (re.match(r'^[（(:：]?\s*([^。（）()]{2,120})[）)]?\s*$', rest) if rest else None)
+            if hint:
+                parts = [p.strip(' ，,。') for p in re.split(r'[/／|｜、]|还是|或者', hint.group(1)) if p.strip(' ，,。')]
+                if 2 <= len(parts) <= 4 and all(len(p) <= 40 for p in parts) and len(set(parts)) == len(parts):
+                    options = parts
+                    if hint.re.pattern.startswith('[（(]([^'):
+                        question = question[:hint.start()].rstrip() + question[hint.end():]
+            question = re.sub(r'\*\*', '', question).strip()
+            if not question.endswith(('？', '?')):
+                question += '？'
+            questions.append({'id': f'q{number}', 'question': question[:500], 'options': options})
+        try:
+            return intro, cls._questions({'questions': questions}), 'list'
+        except ValueError:
+            return reply, [], ''
+
     @staticmethod
     def _questions(data: dict) -> list[dict]:
         questions = data.get('questions', [])
@@ -844,25 +927,7 @@ class CreativeChat:
                         raise ValueError('配图提示词超出数量或长度上限')
                     reply = bounded(data.get('reply'), 12000, '回复', empty=True)
                     if questions:
-                        metadata.update(questions=questions, clarification_status='pending')
-                        original = req.context.get('clarification') or {}
-                        previous_answers = list(original.get('previous_answers', []))
-                        for question in original.get('questions', []):
-                            if question['id'] in original.get('answers', {}):
-                                previous_answers.append({'question': question['question'], 'answer': original['answers'][question['id']]})
-                        if original.get('freeform_answer'):
-                            previous_answers.append({'question': '此前澄清问题的自由回答', 'answer': original['freeform_answer']})
-                        metadata['context_snapshot'] = {
-                            'original_request': original.get('original_request') or req.prompt,
-                            'references': [r['id'] for r in req.context.get('references', [])],
-                            'reference_hashes': {r['id']: r['content_hash'] for r in req.context.get('references', [])},
-                            'documents': req.context.get('documents', []),
-                            'selected_text': req.context.get('selected_text', ''),
-                            'candidate_id': metadata.get('prior_candidate_id'),
-                            'answers_so_far': previous_answers[-30:],
-                            'target_content_hash': base['content_hash']}
-                        phase = 'awaiting_input'
-                        reply = (reply + '\n\n' + '\n'.join(f"{index}. {q['question']}" for index, q in enumerate(questions, 1))).strip()
+                        reply, phase = self._pause_for_questions(metadata, questions, req, base, reply)
                     else:
                         title = bounded(data['title'], 300, '候选标题')
                         body = bounded(data['body'], 100000, '候选正文')
@@ -882,6 +947,13 @@ class CreativeChat:
                             self._event(account['id'], cid, mid, 'turn.phase', phase='saving_candidate')
                         candidate_id = self._insert_candidate(store, account['id'], cid, title, body, base, prompts, parent)
                         metadata['candidate_id'] = candidate_id
+                else:
+                    # v3.3：讨论模式也能结构化提问——回复末尾的 ```ice-questions 块（或明确的编号提问清单）
+                    # 转为提问框；块本身从正文中移除。
+                    reply, questions, source = self._discussion_questions(reply)
+                    if questions:
+                        metadata['questions_source'] = source
+                        reply, phase = self._pause_for_questions(metadata, questions, req, base, reply)
                 clarification = req.context.get('clarification') or {}
                 if clarification.get('freeform_answer'):
                     old = store.conn.execute('SELECT metadata_json FROM creative_messages WHERE id=? AND conversation_id=?', (clarification['message_id'], cid)).fetchone()

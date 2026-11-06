@@ -8,22 +8,25 @@ import { AnimatePresence, motion } from "motion/react";
 import { Banner, Button, ErrorPanel, Input, Spinner } from "../../components/ui";
 import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
-import { accountStore, dirtyStore, flushAllDirty, registerDirtyFlush, useCurrentAccount } from "../../data/client";
+import { accountStore, dirtyStore, flushAllDirty, queryClient, registerDirtyFlush, useCurrentAccount } from "../../data/client";
 import { conversationStore } from "../../data/client";
-import { documentStore, setWorkspace } from "../../app/uiState";
+import { documentEditingStore, documentPanelStore, documentStore, setWorkspace } from "../../app/uiState";
 import {
   AUTHOR_LIMIT, DEFAULT_STYLE, HIGHLIGHTS, INLINE_FONT_SIZES, LETTER_SPACINGS, LINE_HEIGHTS, PARAGRAPH_SPACINGS, SUMMARY_LIMIT, TITLE_LIMIT,
   docRpc, formatTime, invalidateDocuments, pendingCache,
-  type DocContent, type DocInfo, type DocStyle, type DocumentDetail, type ImageView, type ImportReport, type SaveResult,
+  type AssistApplied, type DocContent, type DocInfo, type DocStyle, type DocumentDetail, type ImageView, type ImportReport, type SaveResult,
 } from "./documentsApi";
-import { ArticleImage, BlockId, DocImageSlot, DocRawBlock, DocRunOutput, RawHtml, TextAlign, TextStyle, imageActions } from "./docExtensions";
+import { ArticleImage, BlockId, Callout, DocImageSlot, DocRawBlock, DocRunOutput, ImageGroup, RawHtml, TextAlign, TextStyle, imageActions } from "./docExtensions";
 import { DocumentSidePanel } from "./DocumentSidePanel";
+import { MaterialLibrary } from "./MaterialLibrary";
+import type { AssistBridge } from "./DocumentAssistPanel";
 import "../../styles/documents.css";
 
 type SaveState = "saved" | "dirty" | "saving" | "error" | "conflict";
 type Conflict = Extract<SaveResult, { conflict: true }>;
 type PasteState = { html: string; mode: "adapt" | "text"; report: ImportReport; seq: number } | null;
 
+const ASSIST_EDITABLE = new Set(["paragraph", "heading", "bulletList", "orderedList", "blockquote"]);
 const COLORS = ["#111827", "#6b7280", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#2563eb", "#7c3aed", "#db2777"];
 
 export async function pickDocumentImage(): Promise<ImageView | null> {
@@ -95,7 +98,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const [savedAt, setSavedAt] = React.useState(initial.working_updated_at);
   const [conflict, setConflict] = React.useState<Conflict | null>(null);
   const [unversioned, setUnversioned] = React.useState(initial.unversioned_changes);
-  const [panel, setPanel] = React.useState<"style" | "versions" | "delivery" | null>(null);
+  const [panel, setPanel] = React.useState<"assist" | "compare" | "style" | "versions" | "delivery" | null>(null);
   const [paste, setPaste] = React.useState<PasteState>(null);
   const [pasting, setPasting] = React.useState(false);
   const [recovery, setRecovery] = React.useState(() => {
@@ -112,6 +115,8 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const [info, setInfo] = React.useState<DocInfo>(() => ({ ...(initial.content.info ?? {}) }));
   const infoRef = React.useRef(info);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [libraryOpen, setLibraryOpen] = React.useState(false);
+  const svgInput = React.useRef<HTMLInputElement | null>(null);
   const [words, setWords] = React.useState(0);
   const editorRef = React.useRef<Editor | null>(null);
   const mounted = React.useRef(true);
@@ -219,7 +224,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] },
         link: { openOnClick: false, autolink: true, defaultProtocol: "https", protocols: ["https", "http", "mailto"] } }),
-      BlockId, TextAlign, TextStyle, ArticleImage, RawHtml, DocImageSlot, DocRunOutput, DocRawBlock,
+      BlockId, TextAlign, TextStyle, ArticleImage, RawHtml, DocImageSlot, DocRunOutput, DocRawBlock, Callout, ImageGroup,
     ],
     content: initial.content.doc,
     editorProps: {
@@ -275,6 +280,36 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     let count = 0;
     editor?.state.doc.descendants(node => { if (node.type.name === "imageSlot" || node.type.name === "articleImage") count += 1; return true; });
     editor?.chain().focus().insertContent({ type: "imageSlot", attrs: { figureNo: count + 1, caption: "待配图", kind: "生图", obtain: "见配图方案表" } }).run();
+  };
+  // P2 组件：提示卡片包住当前段落（空段落时插入新卡片）；多图先选两张。
+  const insertCallout = () => {
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const parent = $from.depth >= 1 ? $from.node(1) : null;
+    if (parent && parent.type.name === "paragraph" && parent.textContent.trim()) {
+      editor.chain().focus().wrapIn("callout", { tone: "brand", title: "" }).run();
+    } else {
+      editor.chain().focus().insertContent({ type: "callout", attrs: { tone: "brand", title: "" }, content: [{ type: "paragraph" }] }).run();
+    }
+  };
+  // P2 SVG：在桌面主进程里以 <img> 渲染为 PNG（不执行 SVG 内脚本），正文插入位图，原 SVG 另存。
+  const insertSvg = async (file: File) => {
+    const render = window.ice?.documentSvgImage as undefined | ((params: Record<string, unknown>) => Promise<ImageView>);
+    if (typeof render !== "function") { toast.warning({ title: "请在桌面应用中插入 SVG" }); return; }
+    if (file.size > 2 * 1024 * 1024) { toast.warning({ title: "SVG 文件需小于 2MB" }); return; }
+    try {
+      const image = await render({ account_id: accountStore.get(), svg: await file.text(), name: file.name.replace(/\.svg$/i, ""), width: 1080 });
+      editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
+      toast.success({ title: "SVG 已转为图片插入", detail: `${image.width}×${image.height}；动画与交互不会保留。` });
+    } catch (error) { toast.error({ title: "SVG 没有插入", detail: (error as Error).message }); }
+  };
+  const insertGroup = async () => {
+    const first = await pickDocumentImage();
+    if (!first) return;
+    const second = await pickDocumentImage();
+    if (!second) { toast.info({ title: "多图需要至少 2 张", detail: "已取消；单张图片请用“图片”。" }); return; }
+    editor?.chain().focus().insertContent({ type: "imageGroup", attrs: { columns: 2, caption: "",
+      images: [{ resourceId: first.resource_id, caption: "" }, { resourceId: second.resource_id, caption: "" }] } }).run();
   };
   const saveVersion = async () => {
     try {
@@ -337,10 +372,83 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     void flushAllDirty().then(() => documentStore.set(null))
       .catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message }));
   };
-  const togglePanel = (value: "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
+  const togglePanel = (value: "assist" | "compare" | "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
+  // v3.8：把保存状态告诉左栏“正在编辑”卡片；左栏请求打开侧栏时响应。
+  React.useEffect(() => {
+    documentEditingStore.set({ documentId, title, saveState, savedAt, unversioned, words });
+  }, [documentId, title, saveState, savedAt, unversioned, words]);
+  React.useEffect(() => () => { if (documentEditingStore.get()?.documentId === documentId) documentEditingStore.set(null); }, [documentId]);
+  React.useEffect(() => {
+    // 请求可能早于编辑器载入（从列表“去处理”打开文章时），挂载时也检查一次。
+    const take = () => {
+      const request = documentPanelStore.get();
+      if (request && Date.now() - request.at < 10_000) { setPanel(request.panel); documentPanelStore.set(null); }
+    };
+    take();
+    return documentPanelStore.subscribe(take);
+  }, []);
+
+  // P1-01：给助手的编辑器接口。采纳结果整体替换正文为“一个事务”，Ctrl+Z 一步撤销。
+  const assistBridge = React.useMemo<AssistBridge>(() => ({
+    selection: () => {
+      const ed = editorRef.current;
+      if (!ed) return [];
+      const { from, to } = ed.state.selection;
+      const ids: string[] = [];
+      ed.state.doc.forEach((node: any, offset: number) => {
+        const end = offset + node.nodeSize;
+        const hit = from === to ? from > offset && from < end : end > from && offset < to;
+        if (hit && ASSIST_EDITABLE.has(node.type.name) && node.attrs.id && node.textContent.trim()) ids.push(node.attrs.id);
+      });
+      return ids;
+    },
+    blockText: id => {
+      const ed = editorRef.current;
+      let found: string | null = null;
+      ed?.state.doc.forEach((node: any) => { if (node.attrs.id === id) found = node.textContent; });
+      return found;
+    },
+    focusBlock: id => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      let at = -1, inner = -1;
+      ed.state.doc.forEach((node: any, offset: number) => {
+        if (node.attrs.id !== id) return;
+        at = offset;
+        if (node.isTextblock) inner = offset + 1;
+        // 列表/引用：光标放进第一个文字块，避免落在容器节点之间。
+        else node.descendants((child: any, pos: number) => {
+          if (inner >= 0) return false;
+          if (child.isTextblock) { inner = offset + 1 + pos + 1; return false; }
+          return true;
+        });
+      });
+      if (at < 0) { toast.info({ title: "这一段已经不在正文里了" }); return; }
+      const chain = ed.chain().focus();
+      (inner >= 0 ? chain.setTextSelection(inner) : chain.setNodeSelection(at)).scrollIntoView().run();
+    },
+    apply: (result: AssistApplied) => {
+      const ed = editorRef.current;
+      if (!ed) return;
+      // 先更新修订号：随后的自动保存以服务端结果为基准（内容相同 → unchanged）。
+      revision.current = result.revision;
+      const next = ed.schema.nodeFromJSON(result.content.doc);
+      ed.view.dispatch(ed.state.tr.replaceWith(0, ed.state.doc.content.size, next.content).setMeta("ice-assist", true));
+      if (mounted.current) { setSavedAt(result.saved_at); setUnversioned(false); }
+      void invalidateDocuments(account);
+      void queryClient.invalidateQueries({ queryKey: ["ice", account, "documents.versions"] });
+    },
+    lock: locked => { editorRef.current?.setEditable(!locked, false); },
+    subscribe: listener => {
+      const ed = editorRef.current;
+      if (!ed) return () => undefined;
+      ed.on("selectionUpdate", listener); ed.on("update", listener);
+      return () => { ed.off("selectionUpdate", listener); ed.off("update", listener); };
+    },
+  }), [account, editor]);
 
   return (
-    <div className="ice-doc-layout" style={{
+    <div className="ice-doc-layout" data-theme={style.theme ?? "clean"} style={{
       ["--doc-font-size" as string]: style.fontSize + "px", ["--doc-line-height" as string]: String(style.lineHeight),
       ["--doc-gap" as string]: style.paragraphSpacing + "px", ["--doc-brand" as string]: style.brandColor,
       ["--doc-letter" as string]: (style.letterSpacing ?? 0.5) + "px" }}>
@@ -351,11 +459,17 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <span style={{ flex: 1 }} />
           <div className="ice-doc-insertgrp">
             <button type="button" onClick={() => void insertImage()} title="插入本地图片（也可直接粘贴或拖入）">图片</button>
+            <button type="button" onClick={() => setLibraryOpen(true)} title="从当前公众号导入过的图片中选择，可按标签筛选">素材库</button>
+            <button type="button" onClick={() => svgInput.current?.click()} title="把 SVG 文件渲染成图片插入（公众号兼容；原 SVG 留存）">SVG</button>
+            <input ref={svgInput} type="file" accept=".svg,image/svg+xml" hidden aria-label="选择 SVG 文件"
+                   onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void insertSvg(file); }} />
             <button type="button" onClick={() => document.dispatchEvent(new CustomEvent("ice-doc-link"))} title="给选中文字添加链接">超链接</button>
             <button type="button" onClick={() => editor?.chain().focus().toggleBlockquote().run()}>引用</button>
             <button type="button" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>分隔线</button>
             <button type="button" onClick={() => editor?.chain().focus().toggleCodeBlock().run()}>代码块</button>
             <button type="button" onClick={insertSlot} title="先占位，稍后插入实际图片；交付前必须补齐">待配图位</button>
+            <button type="button" onClick={insertCallout} title="带底色的提示卡片，可写标题、段落和列表">提示卡片</button>
+            <button type="button" onClick={() => void insertGroup()} title="2–9 张图片按 2 列或 3 列并排">多图</button>
           </div>
           <span style={{ flex: 1 }} />
           {initial.series ? <span className="ice-doc-chip">{initial.series}{initial.episode ? ` · 第${initial.episode}期` : ""}</span> : <span style={{ width: 64 }} />}
@@ -366,6 +480,9 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <Button size="sm" onClick={() => setPanel("versions")}>查看导入报告与原件</Button>}>
           可查看缺图、未支持模块和原始内容；按原件重新转换前会保留当前版本。
         </Banner>}
+        {initial.meta.variant_group && initial.meta.variant && <Banner tone="info" title={`AI 初稿 · 版本 ${String(initial.meta.variant)}`} actions={
+          <Button size="sm" onClick={() => setPanel("compare")}>对照另一版</Button>}>
+          同一需求生成了两个不同角度的版本，各自是独立文章。可以并排对照，保留一版后把另一版移入回收站。</Banner>}
         {initial.generation_state === "failed" && <Banner tone="warning" title="AI 初稿没有完成">
           {String(initial.meta.error ?? "生成失败")}。这篇文章仍是空白稿，可以手动写，或回到首页重新起草。</Banner>}
         {recovery && <Banner tone="warning" title="发现尚未保存的本地修改" actions={<>
@@ -403,6 +520,8 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
             transition={{ duration: 0.16 }}>
             <ArticleSettings info={info} onChange={updateInfo} onClose={() => setSettingsOpen(false)} editor={editor} />
           </motion.div>}</AnimatePresence>
+          <button type="button" className={"ice-doc-pill ice-doc-pill--ai" + (panel === "assist" ? " is-on" : "")} onClick={() => togglePanel("assist")}
+                  title="选中段落后改写、扩写、压缩、改语气，或让助手建议配图位置；结果先作为提案，勾选后才改正文">✎ AI 助手</button>
           <button type="button" className={"ice-doc-pill" + (panel === "style" ? " is-on" : "")} onClick={() => togglePanel("style")}>✦ 一键排版</button>
           <button type="button" className={"ice-doc-pill" + (settingsOpen ? " is-on" : "")} aria-expanded={settingsOpen}
                   onClick={() => setSettingsOpen(value => !value)}>⚙ 文章设置</button>
@@ -417,11 +536,13 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <Button size="sm" onClick={() => togglePanel("delivery")} aria-pressed={panel === "delivery"}>手机预览与交付</Button>
         </div>
       </div>
+      {libraryOpen && <MaterialLibrary open onClose={() => setLibraryOpen(false)} onInsert={resourceId =>
+        editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId, caption: "", width: 100, align: "center" } }).run()} />}
       <AnimatePresence>{panel && <motion.aside className="ice-doc-side" key="side"
         initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
         <DocumentSidePanel panel={panel} onPanel={setPanel} documentId={documentId} style={style} onStyle={updateStyle}
           revision={getRevision} flush={flush}
-          commitVersion={commitVersion} unversioned={unversioned} onRestored={onReload} detail={initial} />
+          commitVersion={commitVersion} unversioned={unversioned} onRestored={onReload} detail={initial} assist={assistBridge} />
       </motion.aside>}</AnimatePresence>
     </div>
   );

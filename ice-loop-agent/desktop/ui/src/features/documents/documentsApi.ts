@@ -2,7 +2,8 @@
 // 规范值是结构化文档 JSON（ADR-018）；Markdown 只是只读投影。
 import { accountStore, queryClient, rpc } from "../../data/client";
 
-export type DocStyle = { theme: "clean"; brandColor: string; fontSize: number; lineHeight: number; paragraphSpacing: number; letterSpacing?: number };
+export type DocTheme = "clean" | "magazine" | "tech" | "warm";
+export type DocStyle = { theme: DocTheme; brandColor: string; fontSize: number; lineHeight: number; paragraphSpacing: number; letterSpacing?: number };
 /** v3.2 文章设置：随版本冻结，随复制/导出交付。 */
 export type DocInfo = { author?: string; summary?: string; sourceUrl?: string; coverResourceId?: string };
 export type DocJSON = { type: "doc"; content?: Array<Record<string, unknown>> };
@@ -10,6 +11,13 @@ export type DocContent = { schema: 1; doc: DocJSON; style: DocStyle; info?: DocI
 
 export const DEFAULT_STYLE: DocStyle = { theme: "clean", brandColor: "#2563eb", fontSize: 17, lineHeight: 1.75, paragraphSpacing: 16 };
 export const LETTER_SPACINGS = [0, 0.5, 1, 1.5, 2];
+/** P2 排版主题：作用于标题、引用、代码块等；“简洁”与 v3.0 输出完全一致。 */
+export const THEMES: Array<{ value: DocTheme; label: string; hint: string }> = [
+  { value: "clean", label: "简洁", hint: "左边线小标题，通用" },
+  { value: "magazine", label: "杂志", hint: "居中标题、细线分隔，适合长文与随笔" },
+  { value: "tech", label: "科技", hint: "色块小标题、深色代码块，适合技术文" },
+  { value: "warm", label: "温暖", hint: "圆角色块与暖色引用，适合生活类" },
+];
 export const TITLE_LIMIT = 64, AUTHOR_LIMIT = 8, SUMMARY_LIMIT = 120;
 export const HIGHLIGHTS = ["#fff3a3", "#ffe4c4", "#dcfce7", "#dbeafe", "#fce7f3", "#e5e7eb"];
 export const FONT_SIZES = [14, 15, 16, 17, 18];
@@ -25,6 +33,7 @@ export type DocumentSummary = {
   series: string | null; episode: number | null; lifecycle: "active" | "trashed"; generation_state: GenerationState;
   updated_at: string; created_at: string; trashed_at: string | null; summary: string; word_count: number;
   images: number; published: boolean; source_label: string;
+  variant?: "A" | "B" | null; variant_group?: string | null; cover_resource_id?: string | null; planned_date?: string | null;
 };
 export type LegacyItem = {
   id: string; kind: "legacy_draft" | "legacy_job"; origin: "legacy_draft" | "legacy_job"; origin_ref: string;
@@ -69,7 +78,11 @@ export type Delivery = {
   info?: DocInfo;
   cover?: { resource_id: string; source: "explicit" | "first_image"; mime: string; width: number; height: number; file_name: string } | null;
 };
-export type ImageView = { resource_id: string; title: string; width: number; height: number; mime: string; size: number; preview: string; ok: boolean };
+export type ImageSource = { kind: string; label: string; original_name: string; source_url: string; rights_note: string;
+  derived_from: string; operation: { crop: unknown; max_width: number | null; format: string; quality: number | null; width: number; height: number } | null;
+  imported_at: string; original_bytes: number | null; converted_from: string };
+export type ImageView = { resource_id: string; title: string; width: number; height: number; mime: string; size: number; preview: string; ok: boolean;
+  source?: ImageSource };
 export type Bookmark = { bookmark_id: string; url: string; title: string; position: number; is_default: boolean };
 
 export function docRpc<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
@@ -82,7 +95,7 @@ export function invalidateDocuments(account = accountStore.get()) {
 
 export const PRODUCER_LABEL: Record<VersionSummary["producer"], string> = {
   user: "手动保存", autosave: "自动保存", checkpoint: "自动检查点", restore: "恢复", import: "导入",
-  legacy: "旧稿接入", ai: "AI 初稿", delivery: "交付前保存", convert: "格式转换",
+  legacy: "旧稿接入", ai: "AI 生成/修改", delivery: "交付前保存", convert: "格式转换",
 };
 export const ORIGIN_LABEL: Record<Origin, string> = {
   blank: "新建", paste: "粘贴导入", import: "导入", ai: "AI 初稿", copy: "副本", legacy_draft: "旧草稿", legacy_job: "旧任务",
@@ -128,3 +141,34 @@ export function formatBytes(size: number | undefined): string {
   if (size < 1024 * 1024) return Math.max(1, Math.round(size / 1024)) + " KB";
   return (size / 1024 / 1024).toFixed(1) + " MB";
 }
+
+// ---------------------------------------------------------------- P1-01 文章内助手提案链
+export type AssistAction = "rewrite" | "expand" | "compress" | "tone" | "image_slots" | "custom";
+export const ASSIST_ACTIONS: Array<{ value: AssistAction; label: string; hint: string }> = [
+  { value: "rewrite", label: "改写", hint: "保持原意，表达更清楚、更有节奏" },
+  { value: "expand", label: "扩写", hint: "补充解释、例子或过渡，不编造事实" },
+  { value: "compress", label: "压缩", hint: "约缩到一半，保留核心观点" },
+  { value: "tone", label: "改语气", hint: "按选定语气调整措辞" },
+  { value: "image_slots", label: "图位建议", hint: "通读全文，建议在哪里插入待配图位" },
+  { value: "custom", label: "按我的要求", hint: "写下你希望怎样改" },
+];
+export const ASSIST_TONES = ["更口语", "更正式", "更犀利", "更温和", "更有趣"];
+export type ProposalOp = {
+  op_id: string; kind: "replace" | "delete" | "insert_after"; block_id: string;
+  before_text: string; after_text: string; after: Array<Record<string, unknown>>; reason: string; state: "ok" | "stale";
+};
+export type ProposalStatus = "generating" | "ready" | "failed" | "cancelled" | "applied" | "partially_applied" | "rejected";
+export type Proposal = {
+  proposal_id: string; document_id: string; action: AssistAction; action_label: string; instruction: string;
+  target_block_ids: string[]; status: ProposalStatus; notes: string; error: string; model_id: string;
+  ops: ProposalOp[]; stale_count: number; created_at: string; finished_at: string | null; decided_at: string | null;
+  context: { targets: number; chars: number; neighbors: boolean; outline: number; writing_skill: boolean; house_rules: boolean; tone: string | null;
+    references?: string[]; series?: number };
+  decision: { accepted?: string[]; rejected?: string[]; stale?: string[]; before_version_id?: string; history?: unknown[] };
+};
+export type AssistApplied = { proposal: Proposal; content: DocContent; revision: number; content_hash: string; version_id: string;
+  applied?: string[]; stale?: string[]; saved_at: string };
+
+// P1 两版对照
+export type VariantInfo = { document_id: string; title: string; variant: "A" | "B" | null; generation_state: GenerationState;
+  lifecycle: "active" | "trashed"; word_count: number; current: boolean; error: string };

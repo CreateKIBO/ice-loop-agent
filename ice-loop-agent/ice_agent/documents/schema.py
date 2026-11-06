@@ -20,7 +20,9 @@ MAX_CONTENT_BYTES = 4_000_000
 MAX_BLOCKS = 6000
 MAX_TEXT = 400_000
 
-THEMES = ('clean',)
+# P2：排版主题。clean 输出与 v3.0 完全一致（旧文章交付不变）。
+THEMES = ('clean', 'magazine', 'tech', 'warm')
+CALLOUT_TONES = ('brand', 'info', 'tip', 'warn')
 FONT_SIZES = (14, 15, 16, 17, 18)
 LINE_HEIGHTS = (1.5, 1.6, 1.75, 1.8, 2.0)
 PARAGRAPH_SPACINGS = (0, 8, 12, 16, 20, 24)
@@ -44,7 +46,7 @@ _SAFE_URL = re.compile(r'^(https?://|mailto:)', re.I)
 
 BLOCK_TYPES = frozenset({'paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote',
                          'horizontalRule', 'codeBlock', 'articleImage', 'rawHtml', 'rawBlock',
-                         'imageSlot', 'runOutput'})
+                         'imageSlot', 'runOutput', 'callout', 'imageGroup'})
 INLINE_TYPES = frozenset({'text', 'hardBreak'})
 MARK_TYPES = frozenset({'bold', 'italic', 'underline', 'strike', 'code', 'link', 'textStyle'})
 
@@ -282,6 +284,37 @@ class _Normalizer:
                 source = ''
             out['attrs'].update(resourceId=resource, caption=caption.strip(), alt=alt.strip(),
                                 width=width, align=align, sourceUrl=source)
+        elif kind == 'callout':
+            # P2 提示卡片：只容纳段落与列表，交付为带底色的卡片。
+            tone = attrs.get('tone', 'brand')
+            out['attrs']['tone'] = tone if tone in CALLOUT_TONES else 'brand'
+            title = attrs.get('title', '')
+            if isinstance(title, str) and title.strip():
+                if len(title.strip()) > 60:
+                    raise DocumentError('卡片标题最多 60 字')
+                out['attrs']['title'] = title.strip()
+            inner = [b for b in (self.block(child) for child in node.get('content') or []) if b
+                     and b['type'] in ('paragraph', 'bulletList', 'orderedList')]
+            out['content'] = inner or [{'type': 'paragraph', 'attrs': {'id': self._id({})}}]
+        elif kind == 'imageGroup':
+            # P2 多图并排：2–9 张，2 或 3 列。
+            images = attrs.get('images')
+            if not isinstance(images, list) or not 2 <= len(images) <= 9:
+                raise DocumentError('多图组件需要 2–9 张图片')
+            clean = []
+            for item in images:
+                resource = item.get('resourceId') if isinstance(item, dict) else None
+                if not isinstance(resource, str) or not resource.startswith('resource-') or len(resource) > 80:
+                    raise DocumentError('多图组件里有图片缺少有效资源引用')
+                caption = item.get('caption', '')
+                if not isinstance(caption, str) or len(caption) > 100:
+                    raise DocumentError('多图的单图说明最多 100 字')
+                clean.append({'resourceId': resource, 'caption': caption.strip()})
+            columns = attrs.get('columns', 2)
+            caption = attrs.get('caption', '')
+            if not isinstance(caption, str) or len(caption) > 300:
+                raise DocumentError('图注最多 300 字')
+            out['attrs'].update(columns=columns if columns in (2, 3) else 2, images=clean, caption=caption.strip())
         elif kind == 'rawHtml':
             from .sanitize import sanitize_island
             html = attrs.get('html', '')
@@ -344,6 +377,12 @@ def plain_text_of(node: Any) -> str:
     attrs = node.get('attrs') or {}
     if node.get('type') == 'rawBlock':
         return str(attrs.get('source', ''))
+    if node.get('type') == 'callout':
+        title = attrs.get('title') or ''
+        body = '\n'.join(plain_text_of(child) for child in node.get('content') or [])
+        return (title + '\n' + body) if title else body
+    if node.get('type') == 'imageGroup':
+        return ''
     if node.get('type') == 'rawHtml':
         from .sanitize import html_text
         return html_text(str(attrs.get('html', '')))
@@ -356,12 +395,19 @@ def iter_blocks(content: dict):
     while stack:
         node = stack.pop()
         yield node
-        if node.get('type') in ('bulletList', 'orderedList', 'listItem', 'blockquote'):
+        if node.get('type') in ('bulletList', 'orderedList', 'listItem', 'blockquote', 'callout'):
             stack.extend(reversed(node.get('content') or []))
 
 
 def image_refs(content: dict) -> list[dict]:
-    return [dict(node['attrs']) for node in iter_blocks(content) if node.get('type') == 'articleImage']
+    out = []
+    for node in iter_blocks(content):
+        if node.get('type') == 'articleImage':
+            out.append(dict(node['attrs']))
+        elif node.get('type') == 'imageGroup':
+            out.extend({'resourceId': item['resourceId'], 'caption': item.get('caption', ''), 'group': node['attrs'].get('id')}
+                       for item in node['attrs'].get('images') or [])
+    return out
 
 
 def word_count(content: dict) -> int:

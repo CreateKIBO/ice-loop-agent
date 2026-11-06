@@ -239,3 +239,44 @@
   padding: 0 var(--ice-space-2); border: 1px solid var(--ice-border);
   border-radius: var(--ice-radius-md); background: var(--ice-surface); color: var(--ice-text);
 }
+
+/* P1 模型初次配置简单路径 */
+.ice-quick-model { display: grid; gap: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid var(--ice-signal-blue);
+  border-radius: var(--ice-radius-md); background: var(--ice-surface); }
+.ice-quick-model h3 { margin: 0 0 4px; font-size: 15px; }
+.ice-quick-model h3:focus { outline: none; }
+.ice-quick-model p { margin: 0; color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); line-height: 1.6; }
+.ice-quick-model__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.ice-quick-model__fields label { display: grid; gap: 4px; font-size: var(--ice-font-size-sm); min-width: 0; }
+.ice-quick-model__fields select { min-height: 32px; font: inherit; }
+.ice-quick-model__key { grid-column: 1 / -1; }
+.ice-quick-model__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ice-quick-model__steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; }
+.ice-quick-model__steps li { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--ice-surface-muted); color: var(--ice-text-secondary); }
+.ice-quick-model__steps li.is-active { background: var(--ice-info-bg, #e8edfc); color: var(--ice-signal-blue); }
+.ice-quick-model__steps li.is-done { background: var(--ice-success-bg); color: var(--ice-success); }
+.ice-quick-model__note { color: var(--ice-text-secondary); line-height: 1.6; }
+.ice-advanced-settings { margin-bottom: 8px; }
+.ice-advanced-settings > summary { cursor: pointer; padding: 8px 0; font-weight: 600; font-size: var(--ice-font-size-md); }
+.ice-advanced-settings > summary:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); border-radius: var(--ice-radius-sm); }
+.ice-advanced-settings__body { padding-top: 8px; }
+
+/* v3.8 左栏“正在编辑”卡片（布局稿遗留） */
+.ice-nav-editing { margin: 0 var(--ice-space-3) var(--ice-space-3); padding: 10px; border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); border: 1px solid var(--ice-border-subtle); display: grid; gap: 8px; }
+.ice-nav-editing__label { font-size: 11px; color: var(--ice-text-secondary); letter-spacing: 0.04em; }
+.ice-nav-editing__card { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.ice-nav-editing__cover { width: 52px; height: 52px; flex: 0 0 52px; border-radius: var(--ice-radius-sm); overflow: hidden;
+  background: var(--ice-surface-sunken); display: grid; place-items: center; color: var(--ice-text-secondary); font-weight: 700; }
+.ice-nav-editing__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ice-nav-editing__text { display: grid; gap: 2px; min-width: 0; }
+.ice-nav-editing__text strong { font-size: var(--ice-font-size-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ice-nav-editing__status { font-size: 12px; color: var(--ice-text-secondary); }
+.ice-nav-editing__status.is-bad { color: var(--ice-danger); }
+.ice-nav-editing__hint { font-size: 11px; color: var(--ice-warning); }
+.ice-nav-editing__actions { display: flex; gap: 12px; }
+.ice-nav-editing__versions ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.ice-nav-editing__versions li button { width: 100%; display: flex; justify-content: space-between; gap: 6px; border: 0; background: transparent;
+  padding: 3px 4px; border-radius: var(--ice-radius-sm); font: inherit; font-size: 12px; color: var(--ice-text); cursor: pointer; text-align: left; }
+.ice-nav-editing__versions li button:hover { background: var(--ice-surface-sunken); }
+.ice-nav-editing__versions li button:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }

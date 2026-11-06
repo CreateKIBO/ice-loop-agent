@@ -73,3 +73,12 @@
   .ice-qbox__option, .ice-qbox__tab { transition: none; }
   .ice-qbox__option:active:not(:disabled) { transform: none; }
 }
+
+/* v3.3：对话流中的待答提示（问题本身只在提问框中出现） */
+.ice-clarification:has(> .ice-clarification__jump) { padding: 0; border: 0; background: transparent; }
+.ice-clarification__jump { display: inline-flex; align-items: center; gap: 8px; justify-self: start; padding: 6px 12px; border-radius: 16px;
+  border: 1px solid var(--ice-signal-blue); background: var(--ice-info-bg); color: var(--ice-signal-blue); font: inherit;
+  font-size: var(--ice-font-size-md); cursor: pointer; }
+.ice-clarification__jump:hover { filter: brightness(0.98); }
+.ice-clarification__jump:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+.ice-qbox:not(.ice-qbox--collapsed) { border-top: 2px solid var(--ice-signal-blue); }

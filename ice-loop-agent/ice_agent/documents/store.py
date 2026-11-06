@@ -19,6 +19,17 @@ CHECKPOINT_AFTER = timedelta(minutes=15)
 ORIGINS = ('blank', 'paste', 'import', 'ai', 'copy', 'legacy_draft', 'legacy_job')
 
 
+def _cover_of(content: dict | None) -> str | None:
+    """左栏卡片与列表缩略图：文章设置里指定的封面，否则正文第一张图。"""
+    if not content:
+        return None
+    cover = (content.get('info') or {}).get('coverResourceId')
+    if cover:
+        return cover
+    refs = image_refs(content)
+    return refs[0].get('resourceId') if refs else None
+
+
 class WorkingConflict(DocumentError):
     def __init__(self, server: dict):
         super().__init__('文章已在其他窗口或更早的保存中更新；你的修改仍保留在编辑器里')
@@ -86,7 +97,10 @@ class DocumentStore:
                 'summary': summary(content) if content else '', 'word_count': word_count(content) if content else 0,
                 'images': len(image_refs(content)) if content else 0,
                 'published': bool(row.get('published')), 'readonly': False,
-                'source_label': meta.get('source_label', '')}
+                'source_label': meta.get('source_label', ''), 'variant': meta.get('variant'),
+                'cover_resource_id': _cover_of(content),
+                'planned_date': meta.get('planned_date'),
+                'variant_group': meta.get('variant_group')}
 
     def list(self, *, lifecycle: str = 'active', query: str = '') -> list[dict]:
         rows = self.conn.execute(

@@ -1885,8 +1885,9 @@ HEAVY_METHODS = frozenset({
     'accounts.import', 'articles.finalize', 'planning.propose',
     'outlines.preview', 'brief.suggest',
     'documents.export_bundle', 'documents.import_paste', 'documents.convert_paste', 'documents.reconvert',
-    'documents.render_delivery', 'documents.copy_payload', 'documents.open_legacy', 'documents.ai_draft_start',
-    'documents.image_import', 'documents.image_import_data',
+    'documents.render_delivery', 'documents.copy_payload', 'documents.open_legacy', 'documents.ai_draft_start', 'documents.ai_guided_start',
+    'documents.image_import', 'documents.image_import_data', 'documents.image_edit', 'documents.import_docx',
+    'documents.long_image_page', 'documents.long_image_compose', 'documents.svg_import',
 })
 
 

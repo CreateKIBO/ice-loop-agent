@@ -231,6 +231,13 @@ def _block_md(node: dict, indent: str = '') -> str:
         return f"{fence}{attrs.get('language', '')}\n{text}\n{fence}"
     if kind == 'articleImage':
         return f"![{attrs.get('caption', '')}](resource:{attrs['resourceId']})"
+    if kind == 'callout':
+        inner = '\n\n'.join(_block_md(child) for child in node.get('content') or [])
+        if attrs.get('title'):
+            inner = f"**{_escape(attrs['title'])}**\n\n" + inner
+        return '\n'.join('> ' + line if line else '>' for line in inner.split('\n'))
+    if kind == 'imageGroup':
+        return '\n'.join(f"![{item.get('caption', '')}](resource:{item['resourceId']})" for item in attrs.get('images') or [])
     if kind == 'imageSlot':
         return f"![图{attrs['figureNo']}：{attrs['caption']}](待配图：{attrs['kind']}｜{attrs['obtain']})"
     if kind == 'runOutput':
