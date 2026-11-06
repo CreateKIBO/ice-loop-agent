@@ -16,6 +16,7 @@ import {
 export type AssistBridge = {
   selection: () => string[];
   blockText: (id: string) => string | null;
+  matchesBlock: (id: string, before: Record<string, unknown>) => boolean;
   focusBlock: (id: string) => void;
   apply: (result: AssistApplied) => void;
   lock: (locked: boolean) => void;
@@ -194,7 +195,7 @@ function References({ documentId, series, pins, onPins, withSeries, onSeries }: 
 function liveState(op: ProposalOp, bridge: AssistBridge): "ok" | "stale" {
   const live = bridge.blockText(op.block_id);
   if (live === null) return "stale";
-  if (op.kind === "insert_after") return "ok";
+  if (op.before) return bridge.matchesBlock(op.block_id, op.before) ? "ok" : "stale";
   return squash(live) === squash(op.before_text) ? "ok" : "stale";
 }
 

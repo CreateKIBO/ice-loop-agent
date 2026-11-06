@@ -155,6 +155,7 @@ export const ASSIST_ACTIONS: Array<{ value: AssistAction; label: string; hint: s
 export const ASSIST_TONES = ["更口语", "更正式", "更犀利", "更温和", "更有趣"];
 export type ProposalOp = {
   op_id: string; kind: "replace" | "delete" | "insert_after"; block_id: string;
+  before?: Record<string, unknown> | null;
   before_text: string; after_text: string; after: Array<Record<string, unknown>>; reason: string; state: "ok" | "stale";
 };
 export type ProposalStatus = "generating" | "ready" | "failed" | "cancelled" | "applied" | "partially_applied" | "rejected";

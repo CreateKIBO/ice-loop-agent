@@ -54,6 +54,7 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
   const signature = JSON.stringify(questions);
   const boxRef = React.useRef<HTMLDivElement>(null);
   const advanceTimer = React.useRef<number | undefined>(undefined);
+  const focusStep = React.useRef<number | null>(null);
   React.useEffect(() => () => window.clearTimeout(advanceTimer.current), []);
 
   React.useEffect(() => {
@@ -63,19 +64,23 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
 
   const answers = Object.fromEntries(questions.map(q => [q.id, draftAnswer(q, drafts[q.id])]));
   const answeredCount = questions.filter(q => answers[q.id]).length;
-  const allAnswered = answeredCount === questions.length;
+  const overlong = questions.filter(q => answers[q.id].length > 2000);
+  const allAnswered = answeredCount === questions.length && !overlong.length;
   const reviewing = step >= questions.length;
   const locked = disabled || delivery.busy || Boolean(delivery.pending);
   const citationReady = citationChoice !== "selected" || citations.length > 0;
 
   const update = (id: string, next: (draft: Draft) => Draft) => {
+    window.clearTimeout(advanceTimer.current);
     setError(null);
     setDrafts(current => ({ ...current, [id]: next(current[id] ?? emptyDraft()) }));
   };
   const go = (index: number) => {
     window.clearTimeout(advanceTimer.current);
-    setStep(Math.max(0, Math.min(questions.length, index)));
-    window.requestAnimationFrame(() => boxRef.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus());
+    const next = Math.max(0, Math.min(questions.length, index));
+    focusStep.current = next;
+    if (next === step) boxRef.current?.querySelector<HTMLElement>(".ice-qbox__body [data-autofocus]")?.focus();
+    setStep(next);
   };
   /** 单选题选中后自动进入下一题（未答的优先），像常见 Agent 的问答框一样连贯。 */
   const advanceFrom = (index: number, nextDrafts: Record<string, Draft>) => {
@@ -88,6 +93,7 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
   };
   const pick = (question: Question, index: number, option: string) => {
     if (locked) return;
+    window.clearTimeout(advanceTimer.current);
     const current = drafts[question.id] ?? emptyDraft();
     let next: Draft;
     if (question.multiple) {
@@ -102,6 +108,7 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
   };
   const delegate = (question: Question, index: number) => {
     if (locked) return;
+    window.clearTimeout(advanceTimer.current);
     const nextDrafts = { ...drafts, [question.id]: { selected: [], other: "", delegate: !drafts[question.id]?.delegate } };
     setDrafts(nextDrafts);
     if (nextDrafts[question.id].delegate) advanceFrom(index, nextDrafts);
@@ -109,6 +116,7 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
 
   const submit = async () => {
     if (locked) return;
+    if (overlong.length) { setError("回答含所选选项最多 2000 字，请缩短补充内容；原输入已保留"); go(questions.indexOf(overlong[0])); return; }
     if (!allAnswered) { setError("还有问题没有回答"); go(questions.findIndex(q => !answers[q.id])); return; }
     if (!citationReady) { setError("请先在知识检索中选择需要引用的资料，或改用其他引用方式"); return; }
     try {
@@ -118,7 +126,9 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     const target = event.target as HTMLElement;
+    if (["SELECT", "SUMMARY", "A"].includes(target.tagName)) return;
     const typing = target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && (target as HTMLInputElement).type === "text");
     if (event.key === "Escape") { event.preventDefault(); setCollapsed(true); return; }
     if (typing) {
@@ -126,7 +136,6 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
       return;
     }
     if (reviewing) {
-      if (event.key === "Enter" && target.tagName !== "BUTTON" && target.tagName !== "SELECT") { event.preventDefault(); void submit(); }
       if (event.key === "ArrowLeft") { event.preventDefault(); go(step - 1); }
       return;
     }
@@ -174,6 +183,12 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
 
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={reviewing ? "review" : question!.id} className="ice-qbox__body"
+                    ref={element => {
+                      if (!element || focusStep.current !== step) return;
+                      focusStep.current = null;
+                      const active = document.activeElement;
+                      if (active === document.body || boxRef.current?.contains(active)) element.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true });
+                    }}
                     initial={reduced ? false : { opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={reduced ? undefined : { opacity: 0, x: -10 }}
                     transition={{ duration: reduced ? 0 : 0.14 }}>
           {question && draft ? (
@@ -204,6 +219,7 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
                             onChange={event => { const value = event.target.value; update(question.id, d => ({ selected: question.multiple ? d.selected : (value.trim() ? [] : d.selected), other: value, delegate: false })); }} />
                 </div>
               </div>
+              {answers[question.id].length > 2000 && <p className="ice-error-text" role="alert">回答含所选选项共 {answers[question.id].length} 字，最多 2000 字。请缩短补充内容，原输入已保留。</p>}
               <div className="ice-qbox__foot">
                 <button type="button" className={"ice-link-btn" + (draft.delegate ? " is-on" : "")} aria-pressed={Boolean(draft.delegate)}
                         onClick={() => delegate(question, step)} title={DELEGATE_ANSWER}>
@@ -235,7 +251,8 @@ function Dock({ row, account, conversation, delivery, disabled, questions }: {
                 <p className="ice-qbox__hint">继续使用原来选择的模型；这项选择不会自动发送。</p>
               </details>
               <div className="ice-qbox__foot">
-                <span className="ice-qbox__hint">{allAnswered ? "确认无误后提交，助手会据此继续生成。" : `还有 ${questions.length - answeredCount} 个问题没有回答`}</span>
+                <span className="ice-qbox__hint">{overlong.length ? `有 ${overlong.length} 个回答超过 2000 字，请返回缩短。`
+                  : allAnswered ? "确认无误后提交，助手会据此继续生成。" : `还有 ${questions.length - answeredCount} 个问题没有回答`}</span>
                 <span style={{ flex: 1 }} />
                 <Button size="sm" variant="ghost" onClick={() => go(questions.length - 1)}>返回修改</Button>
                 <Button size="sm" variant="primary" data-autofocus="" disabled={locked || !allAnswered || !citationReady} loading={delivery.busy}

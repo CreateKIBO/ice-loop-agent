@@ -112,10 +112,11 @@
 .ice-doc-toolbar select { max-width: 96px; }
 
 /* v3.2 参照公众号编辑页：插入行 / 格式行 / 标题+作者 / 右下浮动 / 底栏 */
-.ice-doc-insertbar { display: flex; align-items: center; gap: var(--ice-space-2); padding: 8px var(--ice-space-4) 4px; background: var(--ice-surface); }
-.ice-doc-insertgrp { display: flex; gap: 2px; padding: 3px; background: var(--ice-surface-muted); border-radius: var(--ice-radius-md); }
+.ice-doc-insertbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ice-space-2); padding: 8px var(--ice-space-4) 4px; background: var(--ice-surface); }
+.ice-doc-insertgrp { display: flex; flex-wrap: wrap; min-width: 0; max-width: 100%; gap: 2px; padding: 3px; box-sizing: border-box; background: var(--ice-surface-muted); border-radius: var(--ice-radius-md); }
 .ice-doc-insertgrp button { border: 0; background: transparent; padding: 5px 12px; border-radius: var(--ice-radius-sm); font: inherit;
   font-size: var(--ice-font-size-md); color: var(--ice-text); cursor: pointer; }
+.ice-doc-insertgrp button { white-space: nowrap; }
 .ice-doc-insertgrp button:hover { background: var(--ice-surface); }
 .ice-doc-insertgrp button:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
 .ice-doc-hl { padding: 0 3px; border-radius: 2px; color: #374151; }

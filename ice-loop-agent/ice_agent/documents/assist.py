@@ -70,6 +70,17 @@ def _text(node: dict) -> str:
     return plain_text_of(node).strip()
 
 
+def _op_matches(op: dict, target: dict | None) -> bool:
+    if target is None:
+        return False
+    before = op.get('before')
+    if isinstance(before, dict):
+        # 块格式、链接、子块和文字都属于用户编辑，不能只比较纯文本。
+        return target == before
+    # 兼容早期仅保存锚点短文字的提案；长锚点不能据前80字宣称仍匹配。
+    return _text(target) == op.get('before_text')
+
+
 def _clip(text: str, limit: int) -> str:
     text = re.sub(r'[ \t]+', ' ', text).strip()
     return text if len(text) <= limit else text[:limit] + '…'
@@ -120,10 +131,7 @@ class DocumentAssist:
         by_id = {b.get('attrs', {}).get('id'): b for b in blocks}
         for op in proposal['ops']:
             target = by_id.get(op['block_id'])
-            if op['kind'] == 'insert_after':
-                op['state'] = 'ok' if target is not None else 'stale'
-            else:
-                op['state'] = 'ok' if target is not None and _text(target) == op['before_text'] else 'stale'
+            op['state'] = 'ok' if _op_matches(op, target) else 'stale'
         proposal['stale_count'] = sum(op['state'] == 'stale' for op in proposal['ops'])
         return proposal
 
@@ -385,7 +393,7 @@ class DocumentAssist:
                                                        'kind': kind, 'obtain': '见配图方案表'}}
                 figure += 1
                 ops.append({'op_id': f'op{len(ops) + 1}', 'kind': 'insert_after', 'block_id': anchor['attrs']['id'],
-                            'before': None, 'before_text': _clip(_text(anchor), 80), 'after': [slot],
+                            'before': anchor, 'before_text': _text(anchor), 'after': [slot],
                             'after_text': f'【待配图·{kind}】{caption}', 'reason': _clip(str(item.get('reason') or ''), 200)})
             return ops, _clip(notes, 600), problems
         seen: set[str] = set()
@@ -517,7 +525,8 @@ class DocumentAssist:
                     continue
                 if op['kind'] == 'insert_after':
                     at = index_of(last_insert.get(op['block_id'], op['block_id']))
-                    if at is None:
+                    anchor_at = index_of(op['block_id'])
+                    if at is None or anchor_at is None or not _op_matches(op, blocks[anchor_at]):
                         stale.append(op['op_id'])
                         continue
                     inserted = copy.deepcopy(op['after'])
@@ -525,7 +534,7 @@ class DocumentAssist:
                     last_insert[op['block_id']] = inserted[-1]['attrs']['id']
                 else:
                     at = index_of(op['block_id'])
-                    if at is None or _text(blocks[at]) != op['before_text']:
+                    if at is None or not _op_matches(op, blocks[at]):
                         stale.append(op['op_id'])
                         continue
                     blocks[at:at + 1] = copy.deepcopy(op['after'])

@@ -408,6 +408,16 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
       ed?.state.doc.forEach((node: any) => { if (node.attrs.id === id) found = node.textContent; });
       return found;
     },
+    matchesBlock: (id, before) => {
+      const ed = editorRef.current;
+      if (!ed) return false;
+      try {
+        const expected = ed.schema.nodeFromJSON(before);
+        let matches = false;
+        ed.state.doc.forEach(node => { if (node.attrs.id === id) matches = node.eq(expected); });
+        return matches;
+      } catch { return false; }
+    },
     focusBlock: id => {
       const ed = editorRef.current;
       if (!ed) return;
@@ -480,7 +490,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <Button size="sm" onClick={() => setPanel("versions")}>查看导入报告与原件</Button>}>
           可查看缺图、未支持模块和原始内容；按原件重新转换前会保留当前版本。
         </Banner>}
-        {initial.meta.variant_group && initial.meta.variant && <Banner tone="info" title={`AI 初稿 · 版本 ${String(initial.meta.variant)}`} actions={
+        {Boolean(initial.meta.variant_group && initial.meta.variant) && <Banner tone="info" title={`AI 初稿 · 版本 ${String(initial.meta.variant)}`} actions={
           <Button size="sm" onClick={() => setPanel("compare")}>对照另一版</Button>}>
           同一需求生成了两个不同角度的版本，各自是独立文章。可以并排对照，保留一版后把另一版移入回收站。</Banner>}
         {initial.generation_state === "failed" && <Banner tone="warning" title="AI 初稿没有完成">
@@ -503,7 +513,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <div className="ice-doc-paper">
             <div className="ice-doc-titlerow">
               <textarea className="ice-doc-title" value={title} placeholder="请在这里输入标题" maxLength={300} aria-label="文章标题" rows={1}
-                        onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); editor?.commands.focus("start"); } }}
+                        onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); editor?.commands.focus("start"); } }}
                         onChange={event => { const value = event.target.value.replace(/\n/g, ""); titleRef.current = value; setTitle(value); schedule(); }} />
               <span className={"ice-doc-counter" + (title.length > TITLE_LIMIT ? " is-over" : "")} title={`公众号标题上限 ${TITLE_LIMIT} 字`}>{title.length}/{TITLE_LIMIT}</span>
             </div>

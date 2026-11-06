@@ -27,8 +27,8 @@ export function draftAnswer(question:Question,draft:Draft|undefined):string{
   if(draft.delegate)return DELEGATE_ANSWER;
   const picked=draft.selected.filter(option=>question.options.includes(option));
   const other=draft.other.trim();
-  if(question.multiple)return [picked.join('、'),other].filter(Boolean).join('；').slice(0,2000);
-  return (other||picked[0]||'').slice(0,2000);
+  if(question.multiple)return [picked.join('、'),other].filter(Boolean).join('；');
+  return other||picked[0]||'';
 }
 export function encodeDraft(draft:Draft):string{return JSON.stringify({v:2,s:draft.selected,o:draft.other,d:draft.delegate?1:0});}
 export function decodeDraft(question:Question,raw:string|undefined):Draft{
@@ -42,23 +42,28 @@ export function decodeDraft(question:Question,raw:string|undefined):Draft{
   return question.options.includes(raw)?{selected:[raw],other:''}:{selected:[],other:raw.slice(0,2000)};
 }
 export const answersReady=(questions:Question[],answers:Record<string,string>)=>questions.length>0&&questions.every(row=>typeof answers[row.id]==='string'&&answers[row.id].trim().length>0&&answers[row.id].length<=2000);
+// UI 草稿包含选项、自由输入和 JSON 转义，容量与最终提交答案的 2000 字上限分开。
+const MAX_STORED_ANSWER=20000,MAX_STORED_RECORD=200000;
 const PREFIX='ice.clarification.v1:',INDEX=PREFIX+'index';
 export const answerKey=(account:string,conversation:string,message:string)=>PREFIX+JSON.stringify([account,conversation,message]);
 export function readAnswers(storage:DeliveryStorage|null,account:string,conversation:string,message:string,questions:Question[]):Record<string,string>{
   try{
-    const raw=storage?.getItem(answerKey(account,conversation,message));if(!raw||raw.length>30000)return {};
+    const raw=storage?.getItem(answerKey(account,conversation,message));if(!raw||raw.length>MAX_STORED_RECORD)return {};
     const row=JSON.parse(raw);
     if(row.account!==account||row.conversation!==conversation||row.message!==message||row.questions!==JSON.stringify(questions)||!row.answers||typeof row.answers!=='object'||Array.isArray(row.answers))return {};
-    return Object.fromEntries(questions.filter(q=>typeof row.answers[q.id]==='string'&&row.answers[q.id].length<=2000).map(q=>[q.id,row.answers[q.id]]));
+    return Object.fromEntries(questions.filter(q=>typeof row.answers[q.id]==='string'&&row.answers[q.id].length<=MAX_STORED_ANSWER).map(q=>[q.id,row.answers[q.id]]));
   }catch{return {};}
 }
 export function saveAnswers(storage:DeliveryStorage|null,account:string,conversation:string,message:string,questions:Question[],answers:Record<string,string>):boolean{
   try{
     if(!storage)return false;
     const key=answerKey(account,conversation,message),now=Date.now();
-    const values=Object.fromEntries(questions.map(q=>[q.id,typeof answers[q.id]==='string'?answers[q.id].slice(0,2000):'']));
+    if(questions.some(q=>typeof answers[q.id]==='string'&&answers[q.id].length>MAX_STORED_ANSWER))return false;
+    const values=Object.fromEntries(questions.map(q=>[q.id,typeof answers[q.id]==='string'?answers[q.id]:'']));
+    const record=JSON.stringify({account,conversation,message,questions:JSON.stringify(questions),answers:values});
+    if(record.length>MAX_STORED_RECORD)return false;
     if(Object.values(values).every(value=>!value))storage.removeItem(key);
-    else storage.setItem(key,JSON.stringify({account,conversation,message,questions:JSON.stringify(questions),answers:values}));
+    else storage.setItem(key,record);
     const raw=storage.getItem(INDEX);const parsed=raw&&raw.length<30000?JSON.parse(raw):[];
     let rows:Array<{key:string;at:number}>=Array.isArray(parsed)?parsed.filter(row=>row&&typeof row.key==='string'&&row.key.startsWith(PREFIX+'[')&&Number.isFinite(row.at)&&row.key!==key):[];
     if(Object.values(values).some(Boolean))rows.push({key,at:now});rows.sort((a,b)=>b.at-a.at);

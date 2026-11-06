@@ -32,6 +32,13 @@ async function run() {
         runs:{old:{run_id:'old',filename:'example.py',stdout:'历史输出',stderr:'',exit_code:0,verdict:'ok',duration_ms:1}}};
       if(method==='articles.editor_draft_get')return{draft:{content:'旧编辑器尚未成版的内容'}};
       if(method==='documents.get')return structuredClone(row);
+      if(method==='documents.assist_list'){
+        window.proposal??={proposal_id:'prop-owned',document_id:p.document_id,status:'ready',action:'rewrite',action_label:'改写',
+          context:{targets:1,references:[],series:0},decision:{},created_at:row.working_updated_at,
+          ops:[{op_id:'op1',kind:'replace',block_id:'block-one',before:structuredClone(row.content.doc.content[0]),
+            before_text:'原始正文',after_text:'改写正文',after:[],reason:'测试',state:'ok'}]};
+        return[structuredClone(window.proposal)];
+      }
       if(method==='documents.save_working'){
         if(window.holdSave)await new Promise(resolve=>window.releaseSave=resolve);
         if(window.failSave)throw Error('owned save failed');
@@ -67,7 +74,7 @@ async function run() {
   browser=await chromium.launch({executablePath:process.env.ICE_TEST_CHROME||'/opt/google/chrome/chrome',headless:true,args:['--no-sandbox','--disable-background-networking']});
   page=await browser.newPage({viewport:{width:1200,height:820}});page.setDefaultTimeout(5000);
   page.on('pageerror',e=>report.errors.push(e.message));
-  const fresh=async()=>{await page.goto('http://127.0.0.1:'+server.address().port);await page.evaluate(()=>localStorage.clear());await page.reload();await page.getByLabel('文章标题',{exact:true}).waitFor();};
+  const fresh=async()=>{await page.setViewportSize({width:1200,height:820});await page.goto('http://127.0.0.1:'+server.address().port);await page.evaluate(()=>localStorage.clear());await page.reload();await page.getByLabel('文章标题',{exact:true}).waitFor();};
   await check('strict_mode_save_settles',async()=>{
     await fresh();await page.getByLabel('文章标题',{exact:true}).fill('StrictMode 保存');
     await page.waitForFunction(()=>window.rows['doc-one'].title==='StrictMode 保存');
@@ -85,7 +92,7 @@ async function run() {
     assert.equal(await page.getByLabel('文章标题',{exact:true}).inputValue(),'失败时留在这里');
   });
   await check('delivery_preview_bounded',async()=>{
-    await fresh();await page.getByRole('button',{name:'交付与发布',exact:true}).click();
+    await fresh();await page.getByRole('button',{name:'手机预览与交付',exact:true}).click();
     await page.getByLabel('公众号排版预览').waitFor();await page.waitForTimeout(500);
     assert.ok(await page.evaluate(()=>window.renderCalls<=2),'preview should not rebuild on its own state updates');
   });
@@ -110,15 +117,15 @@ async function run() {
   await check('conflict_blocks_delivery',async()=>{
     await fresh();await page.evaluate(()=>window.conflictSave=true);
     await page.getByLabel('文章标题',{exact:true}).fill('冲突中的修改');
-    await page.getByRole('button',{name:'交付与发布',exact:true}).click();
+    await page.getByRole('button',{name:'手机预览与交付',exact:true}).click();
     await page.getByText('版本冲突：这篇文章在别处被保存过',{exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>window.renderCalls),0);
   });
   await check('image_style_and_caption_survive_reopen',async()=>{
-    await fresh();await page.getByRole('button',{name:'插入图片',exact:true}).click();
+    await fresh();await page.getByRole('button',{name:'图片',exact:true}).click();
     await page.getByLabel('图注',{exact:true}).fill('真实图片图注');
     await page.getByLabel('图片宽度',{exact:true}).selectOption('60');
-    await page.getByRole('button',{name:'排版',exact:true}).click();
+    await page.getByRole('button',{name:/一键排版$/}).click();
     await page.getByLabel('正文字号',{exact:true}).selectOption('18');
     await page.getByRole('button',{name:'收起侧栏',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.flush()),true);
@@ -132,7 +139,7 @@ async function run() {
   await check('latest_version_can_restore_working_edits',async()=>{
     await fresh();await page.getByLabel('文章标题',{exact:true}).fill('尚未成版');
     assert.equal(await page.evaluate(()=>window.flush()),true);
-    await page.getByRole('button',{name:'版本',exact:true}).click();
+    await page.getByRole('button',{name:'历史版本',exact:true}).click();
     await page.getByRole('button',{name:'恢复到此版本',exact:true}).waitFor();
   });
   await check('original_import_visible_as_text',async()=>{
@@ -150,7 +157,7 @@ async function run() {
   });
   await check('narrow_controls_reachable',async()=>{
     await fresh();await page.setViewportSize({width:420,height:480});
-    await page.getByRole('button',{name:'排版',exact:true}).click();
+    await page.getByRole('button',{name:/一键排版$/}).click();
     await page.getByLabel('行距',{exact:true}).selectOption('1.8');
     await page.getByRole('button',{name:'收起侧栏',exact:true}).click();
     await page.locator('.ice-doc-side').waitFor({state:'detached'});
@@ -168,6 +175,19 @@ async function run() {
     assert.equal(await page.locator('[contenteditable=true]').count(),0);
     assert.equal(await page.getByRole('button',{name:'保存新版本',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>window.calls.some(c=>c.method==='articles.save'||c.method==='articles.editor_draft_save')),false);
+  });
+  await check('title_ime_confirmation_keeps_focus',async()=>{
+    await fresh();const field=page.getByLabel('文章标题',{exact:true});await field.fill('中文标题');
+    await field.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true,keyCode:229});
+    assert.equal(await field.evaluate(el=>document.activeElement===el),true);
+  });
+  await check('proposal_format_change_stales_without_waiting_for_save',async()=>{
+    await fresh();await page.getByRole('button',{name:/AI 助手$/}).click();
+    await page.getByRole('button',{name:'采纳所选（1）',exact:true}).waitFor();
+    await page.locator('.ice-doc-prose').click();await page.keyboard.press('Control+Home');await page.keyboard.press('Control+Shift+End');
+    await page.getByRole('button',{name:'加粗 (Ctrl+B)',exact:true}).click();
+    await page.getByText('已过期',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'采纳所选（0）',exact:true}).isDisabled(),true);
   });
   assert.deepEqual(report.errors,[]);
 }

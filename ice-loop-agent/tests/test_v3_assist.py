@@ -77,6 +77,29 @@ class AssistFixture(unittest.TestCase):
 
 
 class TestAssistProposals(AssistFixture):
+    def test_style_change_after_proposal_is_stale_and_never_overwritten(self):
+        self.reply = {'edits': [{'block_id': 'b0000000001', 'markdown': 'AI 改写的第一段。'}]}
+        proposal = self.start()
+        current = self.docs.get({'document_id': self.document_id})
+        block = current['content']['doc']['content'][0]
+        block['content'][0]['marks'] = [{'type': 'textStyle', 'attrs': {'color': '#dc2626'}}]
+        saved = self.docs.save_working({'document_id': self.document_id, 'base_revision': self.revision, 'content': current['content']})
+        annotated = self.assist.get({'proposal_id': proposal['proposal_id']})
+        self.assertEqual(annotated['ops'][0]['state'], 'stale')
+        with self.assertRaisesRegex(DocumentError, '原文已经变化'):
+            self.assist.apply({'proposal_id': proposal['proposal_id'], 'op_ids': ['op1'], 'base_revision': saved['revision']})
+        self.assertEqual(self.blocks()[0]['content'][0]['marks'][0]['attrs']['color'], '#dc2626')
+
+    def test_image_suggestion_anchor_changed_is_stale(self):
+        self.reply = {'image_slots': [{'after_block_id': 'b0000000001', 'caption': '第一段的配图'}]}
+        proposal = self.start('image_slots')
+        current = self.docs.get({'document_id': self.document_id})
+        current['content']['doc']['content'][0]['content'][0]['text'] = '第一段改成了完全不同的内容。'
+        saved = self.docs.save_working({'document_id': self.document_id, 'base_revision': self.revision, 'content': current['content']})
+        self.assertEqual(self.assist.get({'proposal_id': proposal['proposal_id']})['ops'][0]['state'], 'stale')
+        with self.assertRaisesRegex(DocumentError, '原文已经变化'):
+            self.assist.apply({'proposal_id': proposal['proposal_id'], 'op_ids': ['op1'], 'base_revision': saved['revision']})
+
     def test_partial_accept_keeps_ids_and_versions(self):
         self.reply = {'notes': '让表达更紧凑', 'edits': [
             {'block_id': 'b0000000001', 'markdown': '第一段**改写后**。', 'reason': '更紧凑'},
@@ -113,7 +136,7 @@ class TestAssistProposals(AssistFixture):
     def test_stale_ops_are_kept_visible_and_skipped(self):
         self.reply = {'edits': [{'block_id': 'b0000000001', 'markdown': '一改'}, {'block_id': 'b0000000002', 'markdown': '二改'}]}
         proposal = self.start()
-        content = doc(paragraph('第一段原文。', id='b0000000001'), paragraph('用户又改了第二段。', id='b0000000002'),
+        content = doc(paragraph('第一段原文。', id='b0000000001', textAlign='center'), paragraph('用户又改了第二段。', id='b0000000002'),
                       paragraph('第三段原文。', id='b0000000003'))
         saved = self.docs.save_working({'document_id': self.document_id, 'base_revision': self.revision, 'content': content})
         listed = self.assist.list({'document_id': self.document_id})[0]
