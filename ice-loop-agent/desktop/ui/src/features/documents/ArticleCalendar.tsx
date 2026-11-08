@@ -7,7 +7,7 @@ import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { queryClient, useAccountQuery, useCurrentAccount } from "../../data/client";
 import { docRpc, invalidateDocuments, type DocumentSummary } from "./documentsApi";
-import { openDocument } from "./ArticleHome";
+import { openDocument } from "./documentNav";
 
 type CalendarItem = { kind: "planned" | "published"; date: string; document_id: string; title: string;
   published?: boolean; url?: string; series?: string | null; episode?: number | null };

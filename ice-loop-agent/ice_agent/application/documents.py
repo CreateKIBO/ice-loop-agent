@@ -19,6 +19,9 @@ PUBLIC = frozenset({
     'documents.image_edit', 'documents.image_source_update', 'documents.import_docx',
     'documents.batch', 'documents.plan', 'documents.calendar', 'documents.suggestions', 'documents.suggestions_dismiss',
     'documents.library', 'documents.image_tags',
+    'documents.compat_create', 'documents.compat_get', 'documents.compat_record', 'documents.compat_report',
+    'documents.perf_sample',
+    'documents.trial_start', 'documents.trial_stop', 'documents.trial_note', 'documents.trial_status', 'documents.trial_report',
     'documents.render_delivery', 'documents.export_bundle',
     'documents.from_candidate', 'documents.ai_draft_start', 'documents.ai_guided_start', 'documents.variants',
     'documents.assist_start', 'documents.assist_list', 'documents.assist_get', 'documents.assist_cancel',
@@ -47,6 +50,8 @@ _ROUTES = {
     'documents.image_source_update': 'image_source_update', 'documents.import_docx': 'import_docx', 'documents.render_delivery': 'render_delivery',
     'documents.copy_payload': 'copy_payload', 'documents.delivery_record': 'delivery_record',
     'documents.long_image_page': 'long_image_page', 'documents.long_image_compose': 'long_image_compose',
+    'documents.compat_create': 'compat_create', 'documents.compat_get': 'compat_get',
+    'documents.compat_record': 'compat_record', 'documents.compat_report': 'compat_report', 'documents.perf_sample': 'perf_sample',
     'documents.svg_import': 'svg_import',
     'documents.export_bundle': 'export_bundle', 'documents.from_candidate': 'from_candidate', 'documents.variants': 'variants',
     'publications.register': 'register_publication', 'publications.list': 'publications',
@@ -59,6 +64,39 @@ _OPS = {
     'documents.batch': 'batch', 'documents.plan': 'plan', 'documents.calendar': 'calendar',
     'documents.suggestions': 'suggestions', 'documents.suggestions_dismiss': 'dismiss_suggestions',
     'documents.library': 'library', 'documents.image_tags': 'tag',
+}
+# v3.13 作者试用记录（ice_agent/documents/trial.py）
+_TRIAL = {'documents.trial_start': 'start', 'documents.trial_stop': 'stop', 'documents.trial_note': 'note',
+          'documents.trial_status': 'status', 'documents.trial_report': 'report'}
+
+
+def _assist_apply(params: dict, result: dict) -> dict:
+    proposal = result.get('proposal') or {}
+    return {'document_id': proposal.get('document_id'), 'accepted': len(result.get('applied') or []),
+            'total': len(proposal.get('ops') or []), 'stale': len(result.get('stale') or [])}
+
+
+def _proposal_doc(params: dict, result: dict) -> dict:
+    proposal = result.get('proposal') if 'proposal' in result else result
+    return {'document_id': (proposal or {}).get('document_id'), 'action': str((proposal or {}).get('action', ''))[:20]}
+
+
+_TRIAL_EVENTS: dict = {
+    'documents.create': ('doc_created', lambda p, r: {'kind': str(p.get('kind', 'blank'))[:20]}),
+    'documents.import_paste': ('paste', lambda p, r: {'mode': str(p.get('mode', 'adapt'))[:10]}),
+    'documents.import_docx': ('import_docx', lambda p, r: {'images': int(((r.get('report') or {}).get('images') or {}).get('imported', 0))}),
+    'documents.ai_draft_start': ('ai_draft', lambda p, r: {'variants': int(p.get('variants', 1)) if p.get('variants') in (1, 2) else 1}),
+    'documents.ai_guided_start': ('ai_guided', lambda p, r: {}),
+    'documents.assist_start': ('assist_start', lambda p, r: {'document_id': r.get('document_id'), 'action': str(r.get('action', ''))[:20]}),
+    'documents.assist_apply': ('assist_apply', _assist_apply),
+    'documents.assist_dismiss': ('assist_dismiss', _proposal_doc),
+    'documents.assist_revert': ('assist_revert', _proposal_doc),
+    'documents.delivery_record': ('delivery', lambda p, r: {'kind': str(p.get('kind', ''))[:20]}),
+    'documents.export_bundle': ('export', lambda p, r: {'images': int(r.get('images', 0) or 0)}),
+    'publications.register': ('publication', lambda p, r: {}),
+    'documents.commit_version': ('version', lambda p, r: {'created': bool(r.get('created'))}),
+    'documents.restore': ('restore', lambda p, r: {}),
+    'documents.convert_paste': ('paste', lambda p, r: {'mode': str(p.get('mode', 'adapt'))[:10], 'in_editor': True}),
 }
 _ASSIST = {
     'documents.assist_start': 'start', 'documents.assist_list': 'list', 'documents.assist_get': 'get',
@@ -75,6 +113,41 @@ class DocumentsHandler(Handler):
         account = self.service._account()
         if params.get('account_id') not in (None, account['id']):
             raise ValueError('公众号已切换，请刷新文章列表')
+        if method in _TRIAL:
+            from ..documents.trial import TrialLog
+            from ..domain.store import Store
+            store = Store(self.service.runtime / 'app.db')
+            try:
+                return getattr(TrialLog(store, account), _TRIAL[method])(params)
+            finally:
+                store.close()
+        result = self._dispatch(account, method, params)
+        if method in _TRIAL_EVENTS:
+            self._trial_event(account, method, params, result)
+        return result
+
+    def _trial_event(self, account: dict, method: str, params: dict, result: Any) -> None:
+        """作者试用记录：只在用户开启试用时记录操作类型与数量；记录失败不影响正常操作。"""
+        try:
+            from ..documents.trial import TrialLog
+            from ..domain.store import Store
+            kind, extract = _TRIAL_EVENTS[method]
+            if kind == 'doc_created' and isinstance(params.get('kind'), str) and params.get('kind') not in ('blank', 'markdown'):
+                return
+            payload = extract(params, result if isinstance(result, dict) else {}) if extract else {}
+            if payload is None:
+                return
+            document_id = payload.pop('document_id', None) or (result.get('document_id') if isinstance(result, dict) else None) \
+                or params.get('document_id')
+            store = Store(self.service.runtime / 'app.db')
+            try:
+                TrialLog(store, account).record(kind, document_id if isinstance(document_id, str) else None, **payload)
+            finally:
+                store.close()
+        except Exception:  # noqa: BLE001 - 试用记录是旁路，不能让主操作失败
+            pass
+
+    def _dispatch(self, account: dict, method: str, params: dict) -> Any:
         if method == 'documents.ai_draft_start':
             return self._ai_draft(account, params)
         if method == 'documents.ai_guided_start':

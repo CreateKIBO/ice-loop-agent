@@ -315,19 +315,59 @@ def delivery_hash(version: dict, images: list[dict]) -> str:
                         'images': [(i['order'], i.get('sha256'), i.get('missing')) for i in images]})
 
 
-def image_data_url(path, mime: str, *, preview: bool) -> str:
-    """复制用：原图字节内嵌（不改格式/不重压缩）；预览用：缩略图以节省内存。"""
-    data = path.read_bytes()
-    if preview:
-        from PIL import Image
-        with Image.open(io.BytesIO(data)) as image:
-            image.thumbnail((1080, 1080 * 4))
-            buffer = io.BytesIO()
-            if image.mode in ('RGBA', 'LA', 'P'):
-                image.save(buffer, 'PNG', optimize=True)
-                mime = 'image/png'
-            else:
-                image.convert('RGB').save(buffer, 'JPEG', quality=85)
-                mime = 'image/jpeg'
-            data = buffer.getvalue()
-    return f'data:{mime};base64,' + base64.b64encode(data).decode('ascii')
+PREVIEW_CACHE_LIMIT = 2000
+
+
+def _preview_bytes(path, mime: str, fast: bool) -> tuple[bytes, str]:
+    from PIL import Image
+    with Image.open(path) as image:
+        if fast and image.format == 'JPEG':
+            # 大 JPEG 先按目标尺寸降采样解码，避免为生成缩略图完整解码原图（预览专用，不影响复制/导出原图）。
+            image.draft('RGB', (1080, 1080 * 4))
+        image.thumbnail((1080, 1080 * 4))
+        buffer = io.BytesIO()
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image.save(buffer, 'PNG', optimize=True)
+            return buffer.getvalue(), 'image/png'
+        image.convert('RGB').save(buffer, 'JPEG', quality=85)
+        return buffer.getvalue(), 'image/jpeg'
+
+
+def image_data_url(path, mime: str, *, preview: bool, cache_dir=None, sha256: str = '') -> str:
+    """cache_dir 为空时（复制到公众号用的缩略图）保持 v3.0 的完整解码路径，输出不变。"""
+    return _image_data_url(path, mime, preview=preview, cache_dir=cache_dir, sha256=sha256)
+
+
+def _image_data_url(path, mime: str, *, preview: bool, cache_dir=None, sha256: str = '') -> str:
+    """复制用：原图字节内嵌（不改格式/不重压缩）；预览用：缩略图以节省内存。
+
+    v3.12：预览缩略图按原图 sha256 缓存在运行目录（只缓存派生的预览，原图与交付 hash 不受影响），
+    长文多图反复刷新预览、导出长图时不再逐张重新解码。
+    """
+    if not preview:
+        return f'data:{mime};base64,' + base64.b64encode(path.read_bytes()).decode('ascii')
+    import re as _re
+    cached = None
+    if cache_dir is not None and _re.fullmatch(r'[0-9a-f]{64}', sha256 or ''):
+        for suffix, kind in (('.jpg', 'image/jpeg'), ('.png', 'image/png')):
+            candidate = cache_dir / f'{sha256}-1080{suffix}'
+            if candidate.is_file():
+                try:
+                    return f'data:{kind};base64,' + base64.b64encode(candidate.read_bytes()).decode('ascii')
+                except OSError:
+                    break
+        cached = cache_dir
+    data, out_mime = _preview_bytes(path, mime, fast=cache_dir is not None)
+    if cached is not None:
+        try:
+            cached.mkdir(parents=True, exist_ok=True)
+            target = cached / f'{sha256}-1080{".png" if out_mime == "image/png" else ".jpg"}'
+            temp = target.with_suffix(target.suffix + '.tmp')
+            temp.write_bytes(data)
+            temp.replace(target)
+            entries = sorted(cached.glob('*-1080.*'), key=lambda item: item.stat().st_mtime)
+            for stale in entries[:max(0, len(entries) - PREVIEW_CACHE_LIMIT)]:
+                stale.unlink(missing_ok=True)
+        except OSError:
+            pass  # 缓存写失败不影响预览
+    return f'data:{out_mime};base64,' + base64.b64encode(data).decode('ascii')

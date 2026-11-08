@@ -7,7 +7,7 @@ import { MarkdownContent } from "../../components/MarkdownContent";
 import { toast } from "../../components/toast";
 import { queryClient, useAccountQuery, useCurrentAccount } from "../../data/client";
 import { docRpc, invalidateDocuments, type VariantInfo } from "./documentsApi";
-import { openDocument } from "./ArticleHome";
+import { openDocument } from "./documentNav";
 
 export function DocumentVariants({ documentId }: { documentId: string }) {
   const account = useCurrentAccount();

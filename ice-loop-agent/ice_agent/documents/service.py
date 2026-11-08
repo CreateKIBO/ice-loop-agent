@@ -564,7 +564,8 @@ class DocumentService:
             def data_url(preview: bool) -> str:
                 if variant == 'clipboard' and resource['size'] <= 2 * 1024 * 1024 and resource['width'] <= 1920:
                     return image_data_url(path, mime, preview=False)
-                return image_data_url(path, mime, preview=True)
+                return image_data_url(path, mime, preview=True, cache_dir=self.service.runtime / 'cache' / 'delivery-previews',
+                                      sha256=resource.get('sha256', ''))
             return {'file_path': str(path), 'mime': mime, 'size': resource['size'], 'width': resource['width'],
                     'height': resource['height'], 'sha256': resource['sha256'], 'data_url': data_url}
         return resolve
@@ -705,6 +706,30 @@ class DocumentService:
         (folder / (digest + '.svg')).write_text(svg, encoding='utf-8')
         resource = self.import_image_bytes(data, name, {'kind': 'svg', 'original_name': name[:200], 'svg_sha256': digest})
         return self._image_view(resource)
+
+    # ------------------------------------------------ v3.12 微信兼容测试稿与记录
+    def perf_sample(self, params: dict) -> dict:
+        """v3.12 在当前公众号生成长文多图性能固定样本（默认约 1 万字 / 30 张测试图）。"""
+        from . import perfsample
+        result = perfsample.build(self, chars=params.get('chars', perfsample.DEFAULT_CHARS),
+                                  images=params.get('images', perfsample.DEFAULT_IMAGES), seed=params.get('seed', 1))
+        return {k: result[k] for k in ('document_id', 'chars', 'images', 'seed', 'image_bytes')}
+
+    def compat_create(self, params: dict) -> dict:
+        from .compat import CompatTesting
+        return CompatTesting(self).create(params)
+
+    def compat_get(self, params: dict) -> dict:
+        from .compat import CompatTesting
+        return CompatTesting(self).get(params)
+
+    def compat_record(self, params: dict) -> dict:
+        from .compat import CompatTesting
+        return CompatTesting(self).record(params)
+
+    def compat_report(self, params: dict) -> dict:
+        from .compat import CompatTesting
+        return CompatTesting(self).report(params)
 
     def export_bundle(self, params: dict) -> dict:
         from ..export.bundle import _assert_no_links, _cleanup_owned_staging, _file_sha256, _tree_hashes

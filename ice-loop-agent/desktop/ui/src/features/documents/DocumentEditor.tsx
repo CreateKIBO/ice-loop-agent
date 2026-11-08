@@ -19,6 +19,7 @@ import {
 import { ArticleImage, BlockId, Callout, DocImageSlot, DocRawBlock, DocRunOutput, ImageGroup, RawHtml, TextAlign, TextStyle, imageActions } from "./docExtensions";
 import { DocumentSidePanel } from "./DocumentSidePanel";
 import { MaterialLibrary } from "./MaterialLibrary";
+import { docPerf } from "./docPerf";
 import type { AssistBridge } from "./DocumentAssistPanel";
 import "../../styles/documents.css";
 
@@ -29,11 +30,12 @@ type PasteState = { html: string; mode: "adapt" | "text"; report: ImportReport; 
 const ASSIST_EDITABLE = new Set(["paragraph", "heading", "bulletList", "orderedList", "blockquote"]);
 const COLORS = ["#111827", "#6b7280", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#2563eb", "#7c3aed", "#db2777"];
 
-export async function pickDocumentImage(): Promise<ImageView | null> {
+/** 选图导入：显式带上发起时的公众号，选择框打开期间切号也不会导入到新公众号。 */
+export async function pickDocumentImage(accountId = accountStore.get()): Promise<ImageView | null> {
   const pick = window.ice?.pickDocumentImage as undefined | ((accountId: string) => Promise<ImageView | null>);
   if (typeof pick !== "function") { toast.warning({ title: "请在桌面应用中插入图片", detail: "也可以直接粘贴或拖入图片。" }); return null; }
-  try { return await pick(accountStore.get()); }
-  catch (error) { toast.error({ title: "图片没有导入", detail: (error as Error).message }); return null; }
+  try { return await pick(accountId); }
+  catch (error) { if (accountStore.get() === accountId) toast.error({ title: "图片没有导入", detail: (error as Error).message }); return null; }
 }
 
 function readAsDataURL(file: File): Promise<string> {
@@ -50,11 +52,13 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   const [data, setData] = React.useState<DocumentDetail | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [tick, setTick] = React.useState(0);
+  // v3.12 性能读数：每次打开（换文章/换号）重新计时；生成中轮询与重新载入不重置。
+  React.useEffect(() => { docPerf.open(documentId); }, [documentId, account]);
   React.useEffect(() => {
     let active = true;
     setLoadError(null);
     docRpc<DocumentDetail>("documents.get", { document_id: documentId })
-      .then(value => { if (active) setData(value); })
+      .then(value => { if (active) { docPerf.loaded(documentId); setData(value); } })
       .catch(error => { if (active) setLoadError((error as Error).message); });
     return () => { active = false; };
   }, [documentId, account, tick]);
@@ -98,7 +102,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const [savedAt, setSavedAt] = React.useState(initial.working_updated_at);
   const [conflict, setConflict] = React.useState<Conflict | null>(null);
   const [unversioned, setUnversioned] = React.useState(initial.unversioned_changes);
-  const [panel, setPanel] = React.useState<"assist" | "compare" | "style" | "versions" | "delivery" | null>(null);
+  const [panel, setPanel] = React.useState<"assist" | "compare" | "compat" | "perf" | "style" | "versions" | "delivery" | null>(null);
   const [paste, setPaste] = React.useState<PasteState>(null);
   const [pasting, setPasting] = React.useState(false);
   const [recovery, setRecovery] = React.useState(() => {
@@ -140,9 +144,11 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
       const seq = sequence.current;
       setSaveState("saving");
       try {
+        const started = performance.now();
         const result = await docRpc<SaveResult>("documents.save_working", {
           account_id: account, document_id: documentId, content: value, base_revision: revision.current, title: titleRef.current, force,
         });
+        docPerf.saved(documentId, performance.now() - started);
         if ("conflict" in result) {
           if (mounted.current) { setConflict(result); setSaveState("conflict"); }
           return;
@@ -197,6 +203,13 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     return () => { off(); window.clearTimeout(timer.current); };
   }, [dirtyKey, flush]);
 
+  // v3.11 异步边界：记下发起时的编辑器与公众号；等待（选文件、渲染、RPC）结束后仍是同一篇、同一号才写回正文。
+  // 已发出的请求不伪称取消：资源仍保存在原公众号素材库，只是不再插回已离开的正文。
+  const captureTarget = React.useCallback(() => {
+    const target = editorRef.current;
+    return { target, account, active: () => Boolean(target) && mounted.current && accountStore.get() === account
+      && !target!.isDestroyed && editorRef.current === target };
+  }, [account]);
   const insertImageFiles = React.useCallback(async (files: File[]) => {
     const target = editorRef.current;
     if (!target) return;
@@ -216,17 +229,17 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   }, [account]);
 
   const convertPaste = React.useCallback(async (html: string, mode: "adapt" | "text") => {
+    const { target, active } = captureTarget();
     setPasting(true);
     try {
       const result = await docRpc<{ content: DocContent; report: ImportReport }>("documents.convert_paste",
-        { html, mode, style: styleRef.current, document_id: documentId });
-      const editor = editorRef.current;
-      if (!editor || !mounted.current) return;
-      editor.chain().focus().insertContent(result.content.doc.content ?? []).run();
+        { account_id: account, html, mode, style: styleRef.current, document_id: documentId });
+      if (!active()) return;
+      target!.chain().focus().insertContent(result.content.doc.content ?? []).run();
       setPaste({ html, mode, report: result.report, seq: sequence.current });
-    } catch (error) { toast.error({ title: "粘贴内容没有转换", detail: (error as Error).message }); }
+    } catch (error) { if (active()) toast.error({ title: "粘贴内容没有转换", detail: (error as Error).message }); }
     finally { if (mounted.current) setPasting(false); }
-  }, [documentId]);
+  }, [account, captureTarget, documentId]);
 
   const editor = useEditor({
     extensions: [
@@ -267,6 +280,15 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     return () => { editor.off("update", count); };
   }, [editor]);
   React.useEffect(() => { editorRef.current = editor; }, [editor]);
+  // v3.12 性能读数：编辑器首次可输入、按键到下一帧的输入响应。
+  React.useEffect(() => {
+    if (!editor) return;
+    docPerf.editable(documentId);
+    const dom = editor.view.dom as HTMLElement;
+    const onKey = () => docPerf.keystroke(documentId);
+    dom.addEventListener("keydown", onKey);
+    return () => dom.removeEventListener("keydown", onKey);
+  }, [editor, documentId]);
   React.useEffect(() => {
     imageActions.current = { pickImage: pickDocumentImage };
     return () => { imageActions.current = null; };
@@ -281,8 +303,9 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     infoRef.current = next; setInfo(next); schedule();
   };
   const insertImage = async () => {
-    const image = await pickDocumentImage();
-    if (image) editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
+    const { target, account: owner, active } = captureTarget();
+    const image = await pickDocumentImage(owner);
+    if (image && active()) target!.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
   };
   const insertSlot = () => {
     let count = 0;
@@ -305,18 +328,22 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     const render = window.ice?.documentSvgImage as undefined | ((params: Record<string, unknown>) => Promise<ImageView>);
     if (typeof render !== "function") { toast.warning({ title: "请在桌面应用中插入 SVG" }); return; }
     if (file.size > 2 * 1024 * 1024) { toast.warning({ title: "SVG 文件需小于 2MB" }); return; }
+    const { target, account: owner, active } = captureTarget();
     try {
-      const image = await render({ account_id: accountStore.get(), svg: await file.text(), name: file.name.replace(/\.svg$/i, ""), width: 1080 });
-      editor?.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
+      const image = await render({ account_id: owner, svg: await file.text(), name: file.name.replace(/\.svg$/i, ""), width: 1080 });
+      if (!active()) return;
+      target!.chain().focus().insertContent({ type: "articleImage", attrs: { resourceId: image.resource_id, caption: "", width: 100, align: "center" } }).run();
       toast.success({ title: "SVG 已转为图片插入", detail: `${image.width}×${image.height}；动画与交互不会保留。` });
-    } catch (error) { toast.error({ title: "SVG 没有插入", detail: (error as Error).message }); }
+    } catch (error) { if (active()) toast.error({ title: "SVG 没有插入", detail: (error as Error).message }); }
   };
   const insertGroup = async () => {
-    const first = await pickDocumentImage();
-    if (!first) return;
-    const second = await pickDocumentImage();
+    const { target, account: owner, active } = captureTarget();
+    const first = await pickDocumentImage(owner);
+    if (!first || !active()) return;
+    const second = await pickDocumentImage(owner);
+    if (!active()) return;
     if (!second) { toast.info({ title: "多图需要至少 2 张", detail: "已取消；单张图片请用“图片”。" }); return; }
-    editor?.chain().focus().insertContent({ type: "imageGroup", attrs: { columns: 2, caption: "",
+    target!.chain().focus().insertContent({ type: "imageGroup", attrs: { columns: 2, caption: "",
       images: [{ resourceId: first.resource_id, caption: "" }, { resourceId: second.resource_id, caption: "" }] } }).run();
   };
   const saveVersion = async () => {
@@ -380,7 +407,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     void flushAllDirty().then(() => documentStore.set(null))
       .catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message }));
   };
-  const togglePanel = (value: "assist" | "compare" | "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
+  const togglePanel = (value: "assist" | "compare" | "compat" | "perf" | "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
   // v3.8：把保存状态告诉左栏“正在编辑”卡片；左栏请求打开侧栏时响应。
   React.useEffect(() => {
     documentEditingStore.set({ documentId, title, saveState, savedAt, unversioned, words });
@@ -447,7 +474,8 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     },
     apply: (result: AssistApplied) => {
       const ed = editorRef.current;
-      if (!ed) return;
+      // 采纳/撤销请求返回时已离开这篇文章：服务端已保存，重新打开即可看到，不写入其他正文。
+      if (!ed || ed.isDestroyed || !mounted.current || accountStore.get() !== account) return;
       // 先更新修订号：随后的自动保存以服务端结果为基准（内容相同 → unchanged）。
       revision.current = result.revision;
       const next = ed.schema.nodeFromJSON(result.content.doc);
@@ -456,7 +484,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
       void invalidateDocuments(account);
       void queryClient.invalidateQueries({ queryKey: ["ice", account, "documents.versions"] });
     },
-    lock: locked => { editorRef.current?.setEditable(!locked, false); },
+    lock: locked => { const ed = editorRef.current; if (ed && !ed.isDestroyed) ed.setEditable(!locked, false); },
     subscribe: listener => {
       const ed = editorRef.current;
       if (!ed) return () => undefined;
@@ -498,6 +526,9 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           <Button size="sm" onClick={() => setPanel("versions")}>查看导入报告与原件</Button>}>
           可查看缺图、未支持模块和原始内容；按原件重新转换前会保留当前版本。
         </Banner>}
+        {Boolean(initial.meta.compat_sample) && <Banner tone="info" title="微信兼容测试稿" actions={
+          <Button size="sm" onClick={() => setPanel("compat")}>打开兼容记录</Button>}>
+          复制到公众号后台后，按每组前的【编号】在“兼容记录”里分阶段记录：粘贴后、后台保存后、手机预览。</Banner>}
         {Boolean(initial.meta.variant_group && initial.meta.variant) && <Banner tone="info" title={`AI 初稿 · 版本 ${String(initial.meta.variant)}`} actions={
           <Button size="sm" onClick={() => setPanel("compare")}>对照另一版</Button>}>
           同一需求生成了两个不同角度的版本，各自是独立文章。可以并排对照，保留一版后把另一版移入回收站。</Banner>}
@@ -717,7 +748,12 @@ function ArticleSettings({ info, onChange, onClose, editor }: { info: DocInfo; o
         <div className="ice-doc-cover">
           {coverId ? <CoverThumb resourceId={coverId} /> : <div className="ice-doc-cover__empty">正文还没有图片</div>}
           <div className="ice-doc-cover__actions">
-            <Button size="sm" onClick={async () => { const image = await pickDocumentImage(); if (image) onChange({ coverResourceId: image.resource_id }); }}>另选封面</Button>
+            <Button size="sm" onClick={async () => {
+              const owner = accountStore.get(), target = editor;
+              const image = await pickDocumentImage(owner);
+              // 选择框打开期间离开文章或切号：不把封面写到别处。
+              if (image && accountStore.get() === owner && target && !target.isDestroyed) onChange({ coverResourceId: image.resource_id });
+            }}>另选封面</Button>
             {info.coverResourceId && <button type="button" className="ice-link-btn" onClick={() => onChange({ coverResourceId: "" })}>改回正文第一张图</button>}
           </div>
         </div>

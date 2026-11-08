@@ -6,22 +6,21 @@ import { AnimatePresence, motion } from "motion/react";
 import { Button, Dialog, EmptyState, Input, SkeletonRows, Spinner } from "../../components/ui";
 import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
-import { conversationStore, editorStore, flushAllDirty, queryClient, useAccountQuery, useCurrentAccount } from "../../data/client";
-import { articleCreateStore, documentStore, setWorkspace, settingsStore } from "../../app/uiState";
+import { accountStore, conversationStore, editorStore, flushAllDirty, queryClient, useAccountQuery, useCurrentAccount } from "../../data/client";
+import { articleCreateStore, documentStore, setWorkspace, settingsStore, trialDialogStore } from "../../app/uiState";
 import { useModelReadiness } from "../../app/modelBootstrap";
 import {
-  ORIGIN_LABEL, docRpc, formatTime, invalidateDocuments,
+  ORIGIN_LABEL, THEMES, docRpc, formatTime, invalidateDocuments,
   type DocumentDetail, type DocumentList, type DocumentSummary, type LegacyItem,
 } from "./documentsApi";
 import { ArticleCalendar } from "./ArticleCalendar";
 import { SuggestionsView } from "./SuggestionsView";
+import { createBlankDocument, openDocument } from "./documentNav";
 import "../../styles/documents.css";
 
-export async function openDocument(documentId: string) {
-  await flushAllDirty();
-  editorStore.set(null);
-  documentStore.set(documentId);
-}
+// 兼容旧引用：导航辅助函数已移到 documentNav.ts（避免左栏静态引用整个首页模块，破坏按需加载）。
+export { createBlankDocument, openDocument };
+
 
 /** P1：Word（.docx）文件导入。文件在本机读取后交给引擎本地转换，不上传任何服务。 */
 async function readBase64(file: File): Promise<string> {
@@ -31,13 +30,6 @@ async function readBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-export async function createBlankDocument() {
-  await flushAllDirty();
-  const created = await docRpc<DocumentDetail>("documents.create", { kind: "blank", title: "未命名文章" });
-  void invalidateDocuments();
-  editorStore.set(null);
-  documentStore.set(created.document_id);
-}
 
 export function ArticleHome() {
   const account = useCurrentAccount();
@@ -67,20 +59,57 @@ export function ArticleHome() {
     if (!/\.docx$/i.test(file.name)) { toast.warning({ title: "只支持 .docx 文件", detail: "旧版 .doc 请先在 Word 里“另存为” .docx。" }); return; }
     if (file.size > 20 * 1024 * 1024) { toast.warning({ title: "Word 文件需小于 20MB", detail: "可以先在 Word 里压缩图片后再导入。" }); return; }
     setImporting(true);
+    // v3.11 异步边界：导入归属发起时的公众号；读文件/转换期间切号或打开了别的文章，完成后不抢走当前页面。
+    const owner = accountStore.get(), openedBefore = documentStore.get();
     try {
       await flushAllDirty();
+      const data = await readBase64(file);
       const result = await docRpc<DocumentDetail & { report: { images: { total: number; imported: number; missing: unknown[] };
         islands: unknown[]; docx?: { unsupported: Record<string, number> } } }>("documents.import_docx",
-        { file_name: file.name, data_base64: await readBase64(file) });
-      void invalidateDocuments();
+        { account_id: owner, file_name: file.name, data_base64: data });
+      void invalidateDocuments(owner);
+      if (accountStore.get() !== owner) {
+        toast.info({ title: `「${file.name}」已导入到原公众号`, detail: "导入期间切换了公众号；切回原公众号后可在文章列表中打开。" });
+        return;
+      }
       const skipped = Object.entries(result.report.docx?.unsupported ?? {});
       const notes = [`图片 ${result.report.images.imported}/${result.report.images.total}`,
         result.report.islands.length ? `${result.report.islands.length} 个表格/复杂模块保留为只读原件` : "",
         skipped.length ? "未导入：" + skipped.map(([label, count]) => `${label}×${count}`).join("、") : ""].filter(Boolean);
-      toast.success({ title: `已导入「${file.name}」`, detail: notes.join("；") + "。导入报告与原件可在“版本”中查看。" });
-      editorStore.set(null); documentStore.set(result.document_id);
-    } catch (error) { toast.error({ title: "Word 文件没有导入", detail: (error as Error).message }); }
+      toast.success({ title: `已导入「${file.name}」`, detail: notes.join("；") + "。导入报告与原件可在“版本”中查看。",
+        action: documentStore.get() === openedBefore ? undefined : { label: "打开", run: () => void openDocument(result.document_id) } });
+      if (documentStore.get() === openedBefore) { editorStore.set(null); documentStore.set(result.document_id); }
+    } catch (error) { if (accountStore.get() === owner) toast.error({ title: "Word 文件没有导入", detail: (error as Error).message }); }
     finally { setImporting(false); }
+  };
+  // v3.12 长文多图性能固定样本（约 1 万字 / 30 图）。
+  const [perfBusy, setPerfBusy] = React.useState(false);
+  const createPerf = async () => {
+    const owner = accountStore.get();
+    setPerfBusy(true);
+    try {
+      const result = await docRpc<{ document_id: string; chars: number; images: number; image_bytes: number }>("documents.perf_sample", { account_id: owner });
+      void invalidateDocuments(owner);
+      toast.success({ title: "性能样本已生成", detail: `${result.chars} 字 / ${result.images} 张图（${(result.image_bytes / 1024 / 1024).toFixed(1)} MB）。打开后在侧栏“性能读数”查看。` });
+      if (accountStore.get() === owner) void openDocument(result.document_id);
+    } catch (error) { toast.error({ title: "性能样本没有生成", detail: (error as Error).message }); }
+    finally { setPerfBusy(false); }
+  };
+  // v3.12 微信兼容测试稿：可一次生成多个主题，各成一篇（系列“兼容测试”）。
+  const [compatOpen, setCompatOpen] = React.useState(false);
+  const [compatBusy, setCompatBusy] = React.useState(false);
+  const [compatThemes, setCompatThemes] = React.useState<string[]>(["clean"]);
+  const createCompat = async () => {
+    const owner = accountStore.get();
+    setCompatBusy(true);
+    try {
+      const result = await docRpc<{ document_ids: string[] }>("documents.compat_create", { account_id: owner, themes: compatThemes });
+      void invalidateDocuments(owner);
+      setCompatOpen(false);
+      toast.success({ title: `已生成 ${result.document_ids.length} 篇兼容测试稿`, detail: "打开后复制到公众号后台，在“兼容记录”里逐项填写。" });
+      if (accountStore.get() === owner && result.document_ids[0]) void openDocument(result.document_ids[0]);
+    } catch (error) { toast.error({ title: "测试稿没有生成", detail: (error as Error).message }); }
+    finally { setCompatBusy(false); }
   };
   const documents = list.data?.documents ?? [];
   const legacy = list.data?.legacy ?? [];
@@ -102,6 +131,12 @@ export function ArticleHome() {
           <strong>{importing ? "正在导入…" : "Word 导入"}</strong><span>选择 .docx 文件，本地转换，附导入报告</span></button>
         <button type="button" className="ice-doc-start" onClick={() => articleCreateStore.set("ai")}>
           <strong>AI 起草</strong><span>描述需求，后台生成独立初稿</span></button>
+        <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={compatBusy} onClick={() => setCompatOpen(true)}>
+          <strong>{compatBusy ? "正在生成…" : "微信兼容测试稿"}</strong><span>覆盖全部元素的测试稿，逐项记录真实微信结果</span></button>
+        <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={perfBusy} onClick={() => void createPerf()}>
+          <strong>{perfBusy ? "正在生成…" : "性能样本"}</strong><span>约 1 万字 / 30 张测试图的固定样本，侧栏看性能读数</span></button>
+        <button type="button" className="ice-doc-start ice-doc-start--tool" onClick={() => trialDialogStore.set("open")}>
+          <strong>作者试用记录</strong><span>邀请作者试用时记录用时、卡点与 AI 改稿量（本机、不含正文）</span></button>
         <input ref={wordInput} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                hidden aria-label="选择 Word 文件" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importWord(file); }} />
       </div>
@@ -142,6 +177,18 @@ export function ArticleHome() {
       </section>}
       </>}
       <PasteDialog open={dialog === "paste"} onClose={() => articleCreateStore.set(null)} />
+      <Dialog open={compatOpen} onOpenChange={setCompatOpen} title="生成微信兼容测试稿" width={480}
+              description="测试稿包含段落、标题、文字样式、颜色/字号/高亮、链接、列表、引用、代码、分隔线、图片与图注、多图、提示卡片和间距，共 18 组，每组带编号。图片是程序生成的测试图。"
+              footer={<><Button onClick={() => setCompatOpen(false)}>取消</Button>
+                <Button variant="primary" loading={compatBusy} disabled={!compatThemes.length} onClick={() => void createCompat()}>生成 {compatThemes.length} 篇</Button></>}>
+        <fieldset className="ice-doc-form" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="ice-doc-muted">要测试的主题（每个主题一篇）</legend>
+          {THEMES.map(theme => <label key={theme.value} className="ice-doc-check">
+            <input type="checkbox" checked={compatThemes.includes(theme.value)}
+                   onChange={event => setCompatThemes(previous => event.target.checked ? [...previous, theme.value] : previous.filter(value => value !== theme.value))} />
+            {theme.label} <span className="ice-doc-muted">· {theme.hint}</span></label>)}
+        </fieldset>
+      </Dialog>
       <AiDraftDialog open={dialog === "ai"} onClose={() => articleCreateStore.set(null)} />
     </div>
   );
@@ -330,24 +377,28 @@ function AiDraftDialog({ open, onClose }: { open: boolean; onClose: () => void }
     if (brief.trim().length < 4) return;
     setBusy(true);
     requestId.current ??= crypto.randomUUID().replace(/-/g, "");
+    const owner = accountStore.get();
     try {
       if (mode === "guided") {
         await flushAllDirty();
-        const started = await docRpc<{ conversation_id: string }>("documents.ai_guided_start", { brief: brief.trim(), request_id: requestId.current });
+        const started = await docRpc<{ conversation_id: string }>("documents.ai_guided_start", { account_id: owner, brief: brief.trim(), request_id: requestId.current });
         onClose(); setBrief("");
+        // 等待期间切了公众号：会话属于原公众号，不能在新公众号里打开它。
+        if (accountStore.get() !== owner) { toast.info({ title: "引导式起草已在原公众号开始", detail: "切回原公众号后，在助手的会话列表中继续。" }); return; }
         documentStore.set(null); setWorkspace("assistant"); conversationStore.set(started.conversation_id);
         toast.info({ title: "已在助手中开始引导式起草", detail: "先在提问框里回答几个问题，再生成初稿；满意后点「存为文章」。" });
         return;
       }
       const document = await docRpc<DocumentDetail & { variant_documents?: string[] }>("documents.ai_draft_start",
-        { brief: brief.trim(), request_id: requestId.current, variants: twoVersions ? 2 : 1 });
-      void invalidateDocuments();
+        { account_id: owner, brief: brief.trim(), request_id: requestId.current, variants: twoVersions ? 2 : 1 });
+      void invalidateDocuments(owner);
       onClose(); setBrief("");
       if (document.generation_state === "failed") toast.error({ title: "AI 起草没有启动", detail: String(document.meta.error ?? "请检查模型配置") });
       else toast.info({ title: twoVersions ? "已在后台开始生成两个版本" : "已在后台开始生成",
         detail: twoVersions ? "两版会分别保存为“版本 A / 版本 B”，打开任一版可以对照另一版。你可以继续当前工作。"
           : "完成后自动保存为独立的 AI 初稿，出现在文章列表；你可以继续当前工作。",
-        action: { label: "打开", run: () => openDocument(document.document_id) } });
+        action: { label: "打开", run: () => { if (accountStore.get() === owner) void openDocument(document.document_id);
+          else toast.info({ title: "这篇初稿属于另一个公众号", detail: "请先切回原公众号再打开。" }); } } });
     } catch (error) { toast.error({ title: "AI 起草没有启动", detail: (error as Error).message }); }
     finally { setBusy(false); }
   };

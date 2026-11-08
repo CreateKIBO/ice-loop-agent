@@ -12,8 +12,10 @@ import {
 } from "./documentsApi";
 import { DocumentAssistPanel, type AssistBridge } from "./DocumentAssistPanel";
 import { DocumentVariants } from "./DocumentVariants";
+import { CompatRecordPanel } from "./CompatRecordPanel";
+import { PerfReadout } from "./PerfReadout";
 
-type Panel = "assist" | "compare" | "style" | "versions" | "delivery";
+type Panel = "assist" | "compare" | "compat" | "perf" | "style" | "versions" | "delivery";
 type Props = {
   panel: Panel; onPanel: (panel: Panel | null) => void; documentId: string; style: DocStyle; onStyle: (patch: Partial<DocStyle>) => void;
   revision: () => number; flush: () => Promise<void>; commitVersion: (note: string) => Promise<{ version_id: string; created: boolean }>;
@@ -25,6 +27,8 @@ export function DocumentSidePanel(props: Props) {
     <div className="ice-doc-side__inner">
       <div className="ice-doc-side__tabs" role="tablist" aria-label="文章侧栏">
         {([["assist", "AI 助手"], ...(props.detail.meta.variant_group ? [["compare", "两版对照"] as const] : []),
+           ...(props.detail.meta.compat_sample ? [["compat", "兼容记录"] as const] : []),
+           ...(props.detail.meta.perf_sample ? [["perf", "性能读数"] as const] : []),
            ["style", "排版"], ["versions", "版本"], ["delivery", "交付与发布"]] as const).map(([value, label]) =>
           <button key={value} type="button" role="tab" aria-selected={props.panel === value} onClick={() => props.onPanel(value)}>{label}</button>)}
         <span style={{ flex: 1 }} />
@@ -33,6 +37,8 @@ export function DocumentSidePanel(props: Props) {
       <div className="ice-doc-side__body">
         {props.panel === "assist" && <DocumentAssistPanel documentId={props.documentId} bridge={props.assist} flush={props.flush} revision={props.revision} series={props.detail.series ?? null} />}
         {props.panel === "compare" && <DocumentVariants documentId={props.documentId} />}
+        {props.panel === "compat" && <CompatRecordPanel documentId={props.documentId} />}
+        {props.panel === "perf" && <PerfReadout meta={props.detail.meta} />}
         {props.panel === "style" && <StylePanel {...props} />}
         {props.panel === "versions" && <VersionsPanel {...props} />}
         {props.panel === "delivery" && <DeliveryPanel {...props} />}

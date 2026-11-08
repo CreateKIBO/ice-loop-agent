@@ -1888,6 +1888,7 @@ HEAVY_METHODS = frozenset({
     'documents.render_delivery', 'documents.copy_payload', 'documents.open_legacy', 'documents.ai_draft_start', 'documents.ai_guided_start',
     'documents.image_import', 'documents.image_import_data', 'documents.image_edit', 'documents.import_docx',
     'documents.long_image_page', 'documents.long_image_compose', 'documents.svg_import',
+    'documents.perf_sample', 'documents.compat_create',
 })
 
 

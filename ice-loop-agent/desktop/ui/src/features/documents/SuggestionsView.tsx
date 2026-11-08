@@ -7,7 +7,7 @@ import { toast } from "../../components/toast";
 import { queryClient, useAccountQuery, useCurrentAccount } from "../../data/client";
 import { documentPanelStore } from "../../app/uiState";
 import { docRpc, formatTime } from "./documentsApi";
-import { openDocument } from "./ArticleHome";
+import { openDocument } from "./documentNav";
 
 type Suggestion = { proposal_id: string; document_id: string; title: string; action_label: string; instruction: string;
   status: "generating" | "ready" | "failed"; ops: number; stale: number; notes: string; error: string; created_at: string };

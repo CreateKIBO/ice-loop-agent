@@ -26,6 +26,11 @@ module.exports = Object.freeze([
   // P2 运营增强：批量整理、发布日历、建议管理、素材标签
   'documents.batch', 'documents.plan', 'documents.calendar', 'documents.suggestions', 'documents.suggestions_dismiss',
   'documents.library', 'documents.image_tags',
+  // v3.12 微信兼容测试稿与逐项记录
+  'documents.compat_create', 'documents.compat_get', 'documents.compat_record', 'documents.compat_report',
+  'documents.perf_sample',
+  // v3.13 作者试用记录（本地、手动开启，不含正文）
+  'documents.trial_start', 'documents.trial_stop', 'documents.trial_note', 'documents.trial_status', 'documents.trial_report',
   'documents.render_delivery', 'documents.export_bundle', 'documents.from_candidate', 'documents.ai_draft_start',
   'documents.ai_guided_start', 'documents.variants',
   // v3 P1-01 文章内助手提案链：只产出提案，采纳在服务端按块校验后落为新版本。

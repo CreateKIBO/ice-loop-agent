@@ -17,7 +17,8 @@ import { switchToClassic } from "../../data/desktop";
 import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
 import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore,
   articleCreateStore, documentEditingStore, documentPanelStore, documentStore, setWorkspace, workspaceStore, type Workspace } from "../../app/uiState";
-import { createBlankDocument, openDocument } from "../documents/ArticleHome";
+import { createBlankDocument, openDocument } from "../documents/documentNav";
+import { TrialBar, TrialDialog } from "../trial/TrialPanel";
 import { PRODUCER_LABEL, type DocumentList, type DocumentSummary, type ImageView, type VersionSummary } from "../documents/documentsApi";
 import { flashSurface, motionReduced } from "../../components/flash";
 import { CopyButton } from "../../components/CopyButton";
@@ -65,7 +66,9 @@ export function LeftNav({ accounts, activeAccountId, version }: {
       <AccountSwitcher accounts={accounts} activeAccountId={activeAccountId} />
       <WorkspaceTabs workspace={workspace} />
       {workspace === "articles" ? <ArticleNav /> : <AssistantNav />}
+      <TrialBar />
       <NavFooter version={version} />
+      <TrialDialog />
     </div>
   );
 }

@@ -98,3 +98,20 @@ def _document_proposals(conn: sqlite3.Connection) -> None:
         " created_at TEXT NOT NULL, finished_at TEXT, decided_at TEXT)"
     )
     conn.execute("CREATE INDEX idx_document_proposals ON document_proposals(account_id, document_id, created_at)")
+
+
+@migration(25, "v3 作者试用记录：本地试用会话与关键步骤事件（需用户手动开启，不含正文）")
+def _trial_records(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE trial_sessions ("
+        " session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',"
+        " include_titles INTEGER NOT NULL DEFAULT 0, started_at TEXT NOT NULL, ended_at TEXT)"
+    )
+    conn.execute("CREATE INDEX idx_trial_sessions ON trial_sessions(account_id, started_at)")
+    conn.execute(
+        "CREATE TABLE trial_events ("
+        " event_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES trial_sessions(session_id),"
+        " account_id TEXT NOT NULL, kind TEXT NOT NULL, document_id TEXT, payload_json TEXT NOT NULL DEFAULT '{}',"
+        " created_at TEXT NOT NULL)"
+    )
+    conn.execute("CREATE INDEX idx_trial_events ON trial_events(session_id, created_at)")

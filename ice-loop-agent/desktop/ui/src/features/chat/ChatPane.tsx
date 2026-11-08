@@ -16,6 +16,8 @@ import { Composer } from "./Composer";
 import {ClarificationForm} from "./ClarificationForm";
 import {QuestionDock, pendingQuestionRow} from "./QuestionDock";
 import {useChatDelivery} from "./useChatDelivery";
+import {DraftFromDiscussion} from "./DraftFromDiscussion";
+import {canDraftFrom} from "./draftRequest";
 import { idleChatPollingInterval, isNearBottom, unreadAssistantUpdates } from "./readingState";
 import type { ChatResult } from "../../data/workbenchResponses";
 import { MESSAGE_WINDOW, CANDIDATE_WINDOW, messagePosition, estimateMessage, type HistoryPosition } from "./historyWindow";
@@ -244,6 +246,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
                 onRetry={()=>void delivery.send({retry_message_id:row.id},'retry').catch(()=>{})} />
               {row.role==='assistant'&&row.status==='completed'&&<ClarificationForm row={row} account={account} conversation={conversationId}
                 active={!streaming&&latestAssistantId===row.id} delivery={delivery} />}
+              {!position&&!streaming&&canDraftFrom(row,latestAssistantId,questionRow?.id)&&<DraftFromDiscussion delivery={delivery} disabled={streaming} />}
             </div>;
           })}
         </div>

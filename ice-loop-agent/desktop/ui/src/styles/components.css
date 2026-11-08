@@ -280,3 +280,16 @@
   padding: 3px 4px; border-radius: var(--ice-radius-sm); font: inherit; font-size: 12px; color: var(--ice-text); cursor: pointer; text-align: left; }
 .ice-nav-editing__versions li button:hover { background: var(--ice-surface-sunken); }
 .ice-nav-editing__versions li button:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+
+/* v3.13 作者试用记录 */
+.ice-trial-bar { display: flex; align-items: center; gap: 6px; margin: 0 var(--ice-space-3) 6px; padding: 6px 10px; border-radius: var(--ice-radius-md);
+  background: color-mix(in srgb, var(--ice-danger) 8%, var(--ice-surface)); font-size: 12px; }
+.ice-trial-bar__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ice-danger); flex: 0 0 8px; }
+.ice-trial-bar__main { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; font: inherit; text-align: left; cursor: pointer; color: var(--ice-text); }
+.ice-trial-bar__main:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); border-radius: var(--ice-radius-sm); }
+.ice-trial__facts { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--ice-font-size-md); color: var(--ice-text-secondary); line-height: 1.6; }
+.ice-trial__status { display: flex; align-items: center; gap: 8px; }
+.ice-trial__past > summary { cursor: pointer; font-size: var(--ice-font-size-md); }
+.ice-trial__past ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+@media (prefers-reduced-motion: no-preference) { .ice-trial-bar__dot { animation: ice-trial-pulse 2s ease-in-out infinite; } }
+@keyframes ice-trial-pulse { 50% { opacity: 0.35; } }

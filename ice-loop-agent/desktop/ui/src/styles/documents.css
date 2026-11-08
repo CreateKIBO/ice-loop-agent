@@ -479,3 +479,16 @@ button.ice-doc-chip { cursor: pointer; }
 .ice-doc-longimg > summary { cursor: pointer; font-weight: 600; font-size: var(--ice-font-size-md); }
 .ice-doc-longimg .ice-doc-row { flex-wrap: wrap; gap: 8px; }
 .ice-doc-longimg label { display: flex; align-items: center; gap: 4px; font-size: var(--ice-font-size-md); }
+/* v3.12 微信兼容测试稿与记录 */
+.ice-doc-start--tool { border-style: dashed; }
+.ice-compat__env { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 6px; }
+.ice-compat__table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ice-compat__table th, .ice-compat__table td { padding: 4px 3px; border-bottom: 1px solid var(--ice-border-subtle); text-align: left; vertical-align: middle; }
+.ice-compat__table thead th { color: var(--ice-text-secondary); font-weight: 600; }
+.ice-compat__table tbody th { font-weight: 600; white-space: nowrap; }
+.ice-compat__table tbody th span { display: block; font-weight: 400; color: var(--ice-text-secondary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.ice-compat__table select { font: inherit; font-size: 12px; max-width: 86px; }
+.ice-compat__table select.is-pass { color: var(--ice-success); }
+.ice-compat__table select.is-partial { color: var(--ice-warning); }
+.ice-compat__table select.is-fail { color: var(--ice-danger); }
+.ice-compat__note td { padding-top: 0; }

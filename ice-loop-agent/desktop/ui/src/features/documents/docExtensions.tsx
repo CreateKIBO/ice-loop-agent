@@ -144,7 +144,7 @@ function ArticleImageView({ node, updateAttributes, deleteNode, selected, editor
   const replace = async () => {
     if (!imageActions.current || busy) return;
     setBusy(true);
-    try { const picked = await imageActions.current.pickImage(); if (picked) updateAttributes({ resourceId: picked.resource_id }); }
+    try { const picked = await imageActions.current.pickImage(); if (picked && !editor.isDestroyed) updateAttributes({ resourceId: picked.resource_id }); }
     finally { setBusy(false); }
   };
   const missing = view.data && !view.data.ok;
@@ -174,7 +174,7 @@ function ArticleImageView({ node, updateAttributes, deleteNode, selected, editor
           {view.data.source?.label ? ` · ${view.data.source.label}` : ""}</span>}
       </div>}
       {tool === "edit" && view.data && <ImageEditDialog view={view.data} open onClose={() => setTool(null)}
-        onDone={next => updateAttributes({ resourceId: next.resource_id })} />}
+        onDone={next => { if (!editor.isDestroyed) updateAttributes({ resourceId: next.resource_id }); }} />}
       {tool === "source" && view.data && <ImageSourceDialog view={view.data} open onClose={() => setTool(null)} pastedFrom={attrs.sourceUrl} />}
       <input className="ice-doc-image__caption" value={attrs.caption} placeholder={editable ? "添加图注（可选）" : ""}
              readOnly={!editable} maxLength={300} aria-label="图注"
@@ -359,7 +359,11 @@ function ImageGroupView({ node, updateAttributes, deleteNode, selected, editor }
   const add = async () => {
     if (!imageActions.current || busy || images.length >= 9) return;
     setBusy(true);
-    try { const picked = await imageActions.current.pickImage(); if (picked) updateAttributes({ images: [...images, { resourceId: picked.resource_id, caption: "" }] }); }
+    try {
+      const picked = await imageActions.current.pickImage();
+      // 选择期间离开文章：编辑器已销毁，不再写回。
+      if (picked && !editor.isDestroyed) updateAttributes({ images: [...((node.attrs.images as GroupImage[]) ?? images), { resourceId: picked.resource_id, caption: "" }] });
+    }
     finally { setBusy(false); }
   };
   return (

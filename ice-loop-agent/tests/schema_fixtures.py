@@ -1,8 +1,11 @@
 """Explicit synthetic old stores for migration acceptance; never use on user data."""
 def downgrade_to_19(db):
     version=db.execute('PRAGMA user_version').fetchone()[0]
-    if version!=24:
+    if version!=25:
         raise AssertionError('Synthetic schema fixture must be reviewed when latest schema changes')
+    db.execute('DROP TABLE trial_events')
+    db.execute('DROP TABLE trial_sessions')
+    db.execute('DELETE FROM schema_migrations WHERE version=25')
     db.execute('DROP TABLE document_proposals')
     db.execute('DELETE FROM schema_migrations WHERE version=24')
     for table in ('publication_records','bookmark_seeds','bookmarks','document_deliveries','document_import_originals',
