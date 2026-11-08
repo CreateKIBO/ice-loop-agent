@@ -251,6 +251,36 @@ class DocumentService:
     def restore_trashed(self, params: dict) -> dict:
         return self.docs.set_lifecycle(self._id(params), 'active')
 
+    def delete_forever(self, params: dict) -> dict:
+        """v3.14 永久删除回收站里的文章（不可恢复）。
+
+        参数二选一：document_ids（≤200）或 all_trashed=true（清空回收站）。
+        能删的一个事务内删除；已登记发布、仍在生成的文章保留在回收站并说明原因。
+        """
+        if params.get('all_trashed') is True:
+            ids = [row['document_id'] for row in self.store.conn.execute(
+                "SELECT document_id FROM documents WHERE account_id=? AND lifecycle='trashed' ORDER BY trashed_at",
+                (self.account['id'],))]
+        else:
+            ids = params.get('document_ids')
+            if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+                raise DocumentError('请先选择要永久删除的文章')
+            ids = list(dict.fromkeys(ids))
+            if len(ids) > 200:
+                raise DocumentError('一次最多永久删除 200 篇')
+        deleted: list[str] = []
+        kept: list[dict] = []
+        with self.store.transaction():
+            for document_id in ids:
+                document = self.docs._row(document_id)  # 不属于当前公众号：整批拒绝
+                reason = self.docs.delete_blocker(document)
+                if reason:
+                    kept.append({'document_id': document_id, 'title': document['title'], 'reason': reason})
+                    continue
+                self.docs.delete_forever(document_id)
+                deleted.append(document_id)
+        return {'deleted': deleted, 'kept': kept}
+
     def duplicate(self, params: dict) -> dict:
         """复制为新文章：旧代码任务等不可继续执行的来源，以独立新稿继续写。"""
         source = self.docs.get(self._id(params))
@@ -981,6 +1011,12 @@ class DocumentService:
                                            (self.account['id'], 'ai', origin_ref)).fetchone()
         title = re.sub(r'\s+', ' ', brief.strip())[:40]
         meta = {'source_label': 'AI 初稿', 'brief': brief.strip(), 'started_at': now_iso(), 'request_id': request_id}
+        # v3.16：起草时可选本篇技能；校验后存为本篇绑定，生成与之后的 AI 助手都按它解析。
+        if params.get('skill_binding') is not None:
+            from ..skills import WritingSkills
+            binding = WritingSkills(self.store, self.account).validate_binding(params['skill_binding'])
+            if binding:
+                meta['skill_binding'] = binding
         # P1：一次生成两版对照时，两篇文章共享 variant_group，分别标“版本 A/B”。
         group, variant = params.get('variant_group'), params.get('variant')
         if group is not None or variant is not None:
@@ -1019,4 +1055,37 @@ class DocumentService:
             if error:
                 self.docs.set_generation(document_id, 'failed', {'conversation_id': conversation_id, 'error': error[:300]})
             else:
-                self.docs.set_generation(document_id, 'running', {'conversation_id': conversation_id, 'message_id': message_id})
+                extra = {'generated_skills': self._message_skills(message_id)} if message_id else {}
+                self.docs.set_generation(document_id, 'running', {'conversation_id': conversation_id, 'message_id': message_id, **extra})
+
+    def _message_skills(self, message_id: str) -> list[dict]:
+        """v3.16：生成这篇初稿时实际使用的技能（来自会话请求快照；只存名称与版本）。"""
+        from ..skills import skill_summary
+        if not self._has_table('creative_messages'):
+            return []
+        row = self.store.conn.execute('SELECT metadata_json FROM creative_messages WHERE id=?', (message_id,)).fetchone()
+        try:
+            snapshot = json.loads(row['metadata_json'] or '{}')['request_snapshot']['writing_profile']['writing_skill_snapshot']
+        except (TypeError, KeyError, ValueError):
+            return []
+        return skill_summary(snapshot)
+
+    # ============================================================ v3.16 本篇技能
+    def skill_binding(self, params: dict) -> dict:
+        """documents.skill_binding：设置或清除本篇技能（binding 为 null 表示沿用系列/公众号设置）。"""
+        from ..skills import WritingSkills
+        document_id = self._id(params)
+        if 'binding' not in params:
+            raise DocumentError('请提供本篇技能选择，或传 null 沿用默认')
+        skills = WritingSkills(self.store, self.account)
+        binding = skills.validate_binding(params['binding'])
+        with self.store.transaction():
+            row = self.docs._row(document_id)
+            meta = dict(row['meta'])
+            if binding:
+                meta['skill_binding'] = binding
+            else:
+                meta.pop('skill_binding', None)
+            self.store.conn.execute('UPDATE documents SET meta_json=?, updated_at=? WHERE document_id=? AND account_id=?',
+                                    (json.dumps(meta, ensure_ascii=False), now_iso(), document_id, self.account['id']))
+        return skills.resolve_preview({'document_id': document_id})

@@ -115,3 +115,14 @@ def _trial_records(conn: sqlite3.Connection) -> None:
         " created_at TEXT NOT NULL)"
     )
     conn.execute("CREATE INDEX idx_trial_events ON trial_events(session_id, created_at)")
+
+
+@migration(26, "v3.15 写作技能版本历史：每次保存改动留一版，可查看、导出、恢复；移除技能不删历史")
+def _writing_skill_versions(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE writing_skill_versions ("
+        " account_id TEXT NOT NULL, skill_id TEXT NOT NULL, version INTEGER NOT NULL,"
+        " name TEXT NOT NULL, instructions TEXT NOT NULL, rules_json TEXT NOT NULL DEFAULT '{}',"
+        " content_hash TEXT NOT NULL, source_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, skill_id, version))"
+    )

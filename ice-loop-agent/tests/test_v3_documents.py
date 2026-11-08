@@ -468,7 +468,7 @@ class TestMigration(unittest.TestCase):
             for table in ('documents', 'document_working', 'document_versions', 'document_import_originals',
                           'document_deliveries', 'bookmarks', 'publication_records'):
                 self.assertIn(table, tables)
-            self.assertEqual(store.conn.execute('PRAGMA user_version').fetchone()[0], 25)
+            self.assertEqual(store.conn.execute('PRAGMA user_version').fetchone()[0], 26)
         finally:
             store.close()
 

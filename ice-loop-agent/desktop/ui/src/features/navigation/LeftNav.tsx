@@ -18,6 +18,7 @@ import { useBootstrap,useModelReadiness } from "../../app/modelBootstrap";
 import { editorialStore,backupSettingsStore,publicationSettingsStore,settingsStore,skillSettingsStore,shortcutHelpStore,draftFlashStore,
   articleCreateStore, documentEditingStore, documentPanelStore, documentStore, setWorkspace, workspaceStore, type Workspace } from "../../app/uiState";
 import { createBlankDocument, openDocument } from "../documents/documentNav";
+import { trashDocument } from "../documents/documentDelete";
 import { TrialBar, TrialDialog } from "../trial/TrialPanel";
 import { PRODUCER_LABEL, type DocumentList, type DocumentSummary, type ImageView, type VersionSummary } from "../documents/documentsApi";
 import { flashSurface, motionReduced } from "../../components/flash";
@@ -119,19 +120,37 @@ function ArticleNav() {
         {!list.isLoading && !list.error && rows.length === 0 && <EmptyState title="还没有文章" hint="点击上方「新建文章」开始。" />}
         <ul className="ice-nav-list" aria-label="最近文章">
           {rows.map(row => (
-            <li key={row.document_id}>
-              <div className={"ice-nav-row" + (current === row.document_id ? " ice-nav-row--selected" : "")}>
-                <button type="button" className="ice-nav-row__main" aria-current={current === row.document_id ? "true" : undefined}
-                        title={row.title} onClick={() => { void openDocument(row.document_id).catch(error => toast.error({ title: "无法打开文章", detail: (error as Error).message })); }}>
-                  <span className="ice-nav-row__title">{row.generation_state === "running" ? "⏳ " : ""}{row.title || "未命名文章"}</span>
-                  <span className="ice-nav-row__meta">{shortTime(row.updated_at)}</span>
-                </button>
-              </div>
-            </li>
+            <li key={row.document_id}><ArticleNavRow row={row} selected={current === row.document_id} /></li>
           ))}
         </ul>
       </div>
     </>
+  );
+}
+
+/** 左栏文章行：悬停显示“删除”（移入回收站，提示里可撤销）。 */
+function ArticleNavRow({ row, selected }: { row: DocumentSummary; selected: boolean }) {
+  const [busy, setBusy] = React.useState(false);
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  const title = row.title || "未命名文章";
+  const trash = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await trashDocument(row.document_id, row.title); focusAfterRowRemoval(rowRef.current, ".ice-nav-row__main"); }
+    catch (error) { toast.error({ title: "没有移入回收站", detail: (error as Error).message }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div ref={rowRef} className={"ice-nav-row" + (selected ? " ice-nav-row--selected" : "") + (busy ? " ice-nav-row--busy" : "")}>
+      <button type="button" className="ice-nav-row__main" aria-current={selected ? "true" : undefined} disabled={busy}
+              title={row.title} onClick={() => { void openDocument(row.document_id).catch(error => toast.error({ title: "无法打开文章", detail: (error as Error).message })); }}>
+        <span className="ice-nav-row__title">{row.generation_state === "running" ? "⏳ " : ""}{title}</span>
+        <span className="ice-nav-row__meta">{shortTime(row.updated_at)}</span>
+      </button>
+      {row.generation_state !== "running" && <div className="ice-nav-row__actions">
+        {busy ? <Spinner size={12} /> : <RowAction label="删除" title={`把「${title}」移入回收站，可恢复`} onClick={() => void trash()} />}
+      </div>}
+    </div>
   );
 }
 

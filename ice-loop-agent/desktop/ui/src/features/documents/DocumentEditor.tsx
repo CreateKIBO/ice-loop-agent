@@ -19,6 +19,8 @@ import {
 import { ArticleImage, BlockId, Callout, DocImageSlot, DocRawBlock, DocRunOutput, ImageGroup, RawHtml, TextAlign, TextStyle, imageActions } from "./docExtensions";
 import { DocumentSidePanel } from "./DocumentSidePanel";
 import { MaterialLibrary } from "./MaterialLibrary";
+import { trashDocument } from "./documentDelete";
+import { DocumentSkillChip, type SkillBinding } from "./DocumentSkills";
 import { docPerf } from "./docPerf";
 import type { AssistBridge } from "./DocumentAssistPanel";
 import "../../styles/documents.css";
@@ -407,6 +409,13 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     void flushAllDirty().then(() => documentStore.set(null))
       .catch(error => toast.error({ title: "无法离开当前文章", detail: (error as Error).message }));
   };
+  const [trashing, setTrashing] = React.useState(false);
+  const trash = async () => {
+    setTrashing(true);
+    try { await trashDocument(documentId, titleRef.current); }
+    catch (error) { toast.error({ title: "没有移入回收站", detail: (error as Error).message }); }
+    finally { if (mounted.current) setTrashing(false); }
+  };
   const togglePanel = (value: "assist" | "compare" | "compat" | "perf" | "style" | "versions" | "delivery") => setPanel(panel === value ? null : value);
   // v3.8：把保存状态告诉左栏“正在编辑”卡片；左栏请求打开侧栏时响应。
   React.useEffect(() => {
@@ -518,7 +527,11 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
             <button type="button" onClick={() => void insertGroup()} title="2–9 张图片按 2 列或 3 列并排">多图</button>
           </div>
           <span style={{ flex: 1 }} />
-          {initial.series ? <span className="ice-doc-chip">{initial.series}{initial.episode ? ` · 第${initial.episode}期` : ""}</span> : <span style={{ width: 64 }} />}
+          {initial.series && <span className="ice-doc-chip">{initial.series}{initial.episode ? ` · 第${initial.episode}期` : ""}</span>}
+          <DocumentSkillChip documentId={documentId} binding={(initial.meta.skill_binding as SkillBinding | undefined) ?? null}
+                             generated={initial.meta.generated_skills as Array<{ name: string; version?: number | null; kind: string }> | undefined} />
+          <Button variant="ghost" size="sm" className="ice-doc-danger-text" loading={trashing} disabled={initial.generation_state === "running"}
+                  title="先保存，再把这篇文章移入回收站；可在提示里撤销，或到文章首页的回收站恢复" onClick={() => void trash()}>删除</Button>
         </div>
         {initial.origin === "legacy_job" && <Banner tone="info" title="从旧制作任务接入的独立文章">
           原任务、审批、运行记录保持只读；这里的修改只属于这篇文章。代码执行已在 v3 退场，历史运行输出在交付时省略。</Banner>}

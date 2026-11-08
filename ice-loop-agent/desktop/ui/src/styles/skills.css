@@ -15,3 +15,23 @@
 .ice-skills summary { cursor: pointer; }
 .ice-skills small { color: var(--ice-text-secondary); }
 @media (max-width: 720px) { .ice-skills { grid-template-columns: minmax(0, 1fr); } }
+/* v3.15 导入、导出、版本历史 */
+.ice-skills__row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ice-skills__row small { overflow-wrap: anywhere; min-width: 0; }
+.ice-skills__history { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); background: var(--ice-surface-muted); min-width: 0; }
+.ice-skills__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ice-skills__list small { overflow-wrap: anywhere; }
+.ice-skills__import { display: grid; gap: 10px; min-width: 0; }
+.ice-skills__import > label { display: grid; gap: 6px; }
+.ice-skills__preview { margin: 0; max-height: 260px; overflow: auto; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit;
+  font-size: var(--ice-font-size-sm); line-height: 1.65; background: var(--ice-surface); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); }
+/* v3.16 辅助技能与系列设置 */
+.ice-skills__sub { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--ice-border-subtle); min-width: 0; }
+.ice-skills__sub small { overflow-wrap: anywhere; }
+.ice-skills__editor select, .ice-skills__series select { min-width: 0; max-width: 100%; height: var(--ice-control-height); border: 1px solid var(--ice-border);
+  border-radius: var(--ice-radius-md); background: var(--ice-surface); color: var(--ice-text); font: inherit; padding: 0 8px; }
+.ice-skills__series { display: grid; gap: 10px; min-width: 0; }
+.ice-skills__series > .ice-btn { justify-self: start; }
+.ice-skills__series-body { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); min-width: 0; }
+.ice-skills__series-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; padding-bottom: 8px; border-bottom: 1px dashed var(--ice-border-subtle); }
+.ice-skills__series-row strong { overflow-wrap: anywhere; }

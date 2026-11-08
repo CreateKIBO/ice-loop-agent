@@ -125,7 +125,7 @@ class DesktopService:
         return copy.deepcopy(account)
 
     def _app(self, *, demo: bool = False, article_root: str | None = None,
-             account_id: str | None = None):
+             account_id: str | None = None, skill_selection: dict | None = None):
         # Background tasks keep their persisted owner even after the UI switches.
         account = self._account(account_id if account_id is not None else "ice-loop" if demo else None)
         retired = self.code_execution_retired
@@ -138,7 +138,8 @@ class DesktopService:
             from .workspace_assets import WorkspaceAssets
             cfg.profile['brand']['visual_references']=WorkspaceAssets(store,self.runtime,account['id']).style_context()
             from .skills import WritingSkills
-            cfg.profile = WritingSkills(store, account).apply(cfg.profile)
+            # v3.16：可带本篇/系列的技能选择；未带时按公众号设置。
+            cfg.profile = WritingSkills(store, account).apply(cfg.profile, skill_selection)
             from .rules.sources import RuleSources
             cfg.profile = RuleSources(store,account['id']).apply(cfg.profile)
         if not demo:

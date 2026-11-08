@@ -13,7 +13,7 @@ from . import Handler, register
 PUBLIC = frozenset({
     'documents.list', 'documents.create', 'documents.get', 'documents.save_working', 'documents.commit_version',
     'documents.versions', 'documents.version', 'documents.restore', 'documents.update_meta', 'documents.trash',
-    'documents.untrash', 'documents.duplicate', 'documents.markdown', 'documents.open_legacy',
+    'documents.untrash', 'documents.delete_forever', 'documents.skill_binding', 'documents.duplicate', 'documents.markdown', 'documents.open_legacy',
     'documents.convert_paste', 'documents.import_paste', 'documents.import_original', 'documents.reconvert',
     'documents.image_import_data', 'documents.image_view', 'documents.images_library',
     'documents.image_edit', 'documents.image_source_update', 'documents.import_docx',
@@ -42,6 +42,7 @@ _ROUTES = {
     'documents.save_working': 'save_working', 'documents.commit_version': 'commit_version',
     'documents.versions': 'versions', 'documents.version': 'version', 'documents.restore': 'restore',
     'documents.update_meta': 'update_meta', 'documents.trash': 'trash', 'documents.untrash': 'restore_trashed',
+    'documents.delete_forever': 'delete_forever', 'documents.skill_binding': 'skill_binding',
     'documents.duplicate': 'duplicate', 'documents.markdown': 'markdown', 'documents.open_legacy': 'open_legacy',
     'documents.convert_paste': 'convert_paste', 'documents.import_paste': 'import_paste', 'documents.import_original': 'import_original',
     'documents.reconvert': 'reconvert', 'documents.image_import_data': 'image_import_data',
@@ -213,9 +214,11 @@ class DocumentsHandler(Handler):
             conversation = chat.call('chat.create', {'title': document['title'].replace('（生成中）', '')[:120],
                                                      'request_id': 'doc-' + request_id})
             conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
-            sent = chat.call('chat.send', {'conversation_id': conversation_id,
-                                           'text': document['meta']['brief'] + QUICK_HINT + extra_hint,
-                                           'mode': 'draft', 'request_id': 'docsend-' + request_id})
+            send = {'conversation_id': conversation_id, 'text': document['meta']['brief'] + QUICK_HINT + extra_hint,
+                    'mode': 'draft', 'request_id': 'docsend-' + request_id}
+            if document['meta'].get('skill_binding'):  # v3.16：按本篇技能生成
+                send['skill_selection'] = {'binding': document['meta']['skill_binding']}
+            sent = chat.call('chat.send', send)
             if not sent.get('accepted') or sent.get('status') == 'failed':
                 raise ValueError('生成任务未能启动，请检查模型配置后重试')
             documents.ai_draft_bind(document['document_id'], conversation_id, sent['message_id'], None)
@@ -234,11 +237,23 @@ class DocumentsHandler(Handler):
         request_id = params.get('request_id')
         if not isinstance(request_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', request_id):
             raise DocumentError('起草请求标识无效')
+        binding = None
+        if params.get('skill_binding') is not None:  # v3.16：引导模式同样可选技能
+            from ..domain.store import Store
+            from ..skills import WritingSkills
+            store = Store(self.service.runtime / 'app.db')
+            try:
+                binding = WritingSkills(store, account).validate_binding(params['skill_binding'])
+            finally:
+                store.close()
         chat = CreativeChat(self.service)
         conversation = chat.call('chat.create', {'title': re.sub(r'\s+', ' ', brief.strip())[:40], 'request_id': 'guide-' + request_id})
         conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
-        sent = chat.call('chat.send', {'conversation_id': conversation_id, 'text': brief.strip() + GUIDED_HINT,
-                                       'mode': 'draft', 'request_id': 'guidesend-' + request_id})
+        send = {'conversation_id': conversation_id, 'text': brief.strip() + GUIDED_HINT,
+                'mode': 'draft', 'request_id': 'guidesend-' + request_id}
+        if binding:
+            send['skill_selection'] = {'binding': binding}
+        sent = chat.call('chat.send', send)
         if not sent.get('accepted') or sent.get('status') == 'failed':
             raise DocumentError('引导式起草未能启动，请检查模型配置后重试')
         return {'conversation_id': conversation_id, 'message_id': sent.get('message_id')}
@@ -260,7 +275,17 @@ class DocumentsHandler(Handler):
         from ..documents.assist import DocumentAssist, release
         from ..domain.store import Store
         try:
-            engine, cfg, store = self.service._app(account_id=account['id'])
+            # v3.16：助手按这篇文章的技能（本篇 → 系列 → 公众号）解析，而不是只看公众号默认。
+            from ..domain.store import Store
+            from ..skills import selection_for_document
+            probe = Store(self.service.runtime / 'app.db')
+            try:
+                row = probe.conn.execute('SELECT document_id FROM document_proposals WHERE proposal_id=? AND account_id=?',
+                                         (proposal_id, account['id'])).fetchone()
+                selection = selection_for_document(probe, account['id'], row['document_id']) if row else None
+            finally:
+                probe.close()
+            engine, cfg, store = self.service._app(account_id=account['id'], skill_selection=selection)
         except Exception as error:  # 模型/账号配置不可用：如实记在提案上
             release(proposal_id)
             store = Store(self.service.runtime / 'app.db')

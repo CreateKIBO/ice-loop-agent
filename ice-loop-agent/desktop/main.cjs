@@ -380,7 +380,9 @@ function registerIPC() {
     // v3 文章正文（含粘贴原件、剪贴板图片）可能大于旧接口的 500KB 上限。
     if (RETIRED_EXECUTION_METHODS.has(method)) throw new Error('[CODE_EXECUTION_RETIRED] 代码执行功能已在 v3 退场，不能再启动、批准或修改代码运行；历史运行记录仍可查看。旧任务如需继续写作，请在文章首页使用“复制为新文章”。');
     // P1 Word 导入：.docx 原文件（≤20MB）以 base64 传给引擎在本地转换。
-    const limit = method === 'documents.import_docx' ? 30000000 : method.startsWith('documents.') ? 6000000 : 500000;
+    // v3.15 技能导入：ZIP ≤1MB / Markdown ≤200K 字，以 base64 或文本传给引擎解析。
+    const limit = method === 'documents.import_docx' ? 30000000 : method.startsWith('documents.') ? 6000000
+      : method === 'skills.import_parse' ? 2000000 : 500000;
     if (!methods.has(method) || typeof params !== 'object' || params === null || JSON.stringify(params).length > limit) throw new Error('无效请求');
     const exporting = method === 'articles.export_bundle' || method === 'documents.export_bundle';
     if (exporting) exportApprovals.assert(params.destination);
@@ -550,6 +552,19 @@ function registerIPC() {
     const choice = await dialog.showSaveDialog(window, { title: '导出草稿', defaultPath: path.join(runtime, 'draft.md'), filters: [{ name: 'Markdown', extensions: ['md'] }] });
     if (choice.canceled) return null;
     fs.writeFileSync(choice.filePath, draft.body);
+    return { file: choice.filePath };
+  });
+  // v3.15：导出写作技能为 Markdown（引擎生成内容，主进程弹出保存对话框；渲染层不接触本地路径）。
+  ipcMain.handle('ice:export-skill', async (event, params) => {
+    assertSender(event);
+    if (!params || typeof params !== 'object' || typeof params.account_id !== 'string' || typeof params.skill_id !== 'string'
+      || (params.version !== undefined && !Number.isInteger(params.version))) throw Error('无效的导出请求');
+    const exported = await request('skills.export', { account_id: params.account_id, skill_id: params.skill_id,
+      ...(params.version !== undefined ? { version: params.version } : {}) });
+    const choice = await dialog.showSaveDialog(window, { title: '导出写作技能', defaultPath: path.join(app.getPath('documents'), exported.file_name),
+      filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (choice.canceled) return null;
+    fs.writeFileSync(choice.filePath, exported.markdown, 'utf8');
     return { file: choice.filePath };
   });
   ipcMain.handle('ice:save-key', async (event, provider, key) => {

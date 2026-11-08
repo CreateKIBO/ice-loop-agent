@@ -94,7 +94,12 @@ class CreativeChat:
 
     def call(self, method: str, params: dict) -> Any:
         account = self.service._account(params.get('account_id'))
-        engine, cfg, store = self.service._app()
+        # v3.16：起草时可带本篇/系列的技能选择（只影响写作与检查）；重试仍用原请求快照。
+        selection = None
+        if method == 'chat.send' and params.get('skill_selection') is not None:
+            from .skills import normalize_selection
+            selection = normalize_selection(params['skill_selection'])
+        engine, cfg, store = self.service._app(skill_selection=selection) if selection else self.service._app()
         try:
             with self.service.chat_guard:
                 if method in ('chat.review', 'chat.save_draft'):

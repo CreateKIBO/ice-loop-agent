@@ -53,5 +53,6 @@ contextBridge.exposeInMainWorld('ice', Object.freeze({
   importResource: () => ipcRenderer.invoke('ice:import-resource'),
   importDraft: () => ipcRenderer.invoke('ice:import-draft'),
   exportDraft: draftId => ipcRenderer.invoke('ice:export-draft', draftId),
+  exportSkill: params => ipcRenderer.invoke('ice:export-skill', params),
   onEngineExit: callback => { const listener = () => callback(); ipcRenderer.on('ice:engine-exit', listener); return () => ipcRenderer.removeListener('ice:engine-exit', listener); }
 }));

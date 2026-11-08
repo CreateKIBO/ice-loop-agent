@@ -16,6 +16,8 @@ import {
 import { ArticleCalendar } from "./ArticleCalendar";
 import { SuggestionsView } from "./SuggestionsView";
 import { createBlankDocument, openDocument } from "./documentNav";
+import { DeleteForeverDialog, trashDocument } from "./documentDelete";
+import { SkillPicker, type SkillBinding } from "./DocumentSkills";
 import "../../styles/documents.css";
 
 // 兼容旧引用：导航辅助函数已移到 documentNav.ts（避免左栏静态引用整个首页模块，破坏按需加载）。
@@ -200,6 +202,7 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
   const [busy, setBusy] = React.useState(false);
   const [series, setSeries] = React.useState("");
   const [date, setDate] = React.useState("");
+  const [forever, setForever] = React.useState<string[] | "all" | null>(null);
   const run = async (action: string, extra: Record<string, unknown> = {}, label = "已完成") => {
     if (!selected.size) return;
     setBusy(true);
@@ -218,9 +221,17 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
     <div className={"ice-doc-batch" + (selected.size ? " is-active" : "")} role="toolbar" aria-label="批量整理">
       <label className="ice-doc-check"><input type="checkbox" checked={allOn} onChange={() => onSelect(allOn ? new Set() : new Set(all.slice(0, 200)))} />
         {selected.size ? `已选 ${selected.size} 篇` : "全选"}</label>
-      {selected.size > 0 && (view === "trash"
-        ? <Button size="sm" loading={busy} onClick={() => void run("untrash", {}, "已恢复")}>恢复</Button>
-        : <>
+      {view === "trash" && <>
+        {selected.size > 0 && <>
+          <Button size="sm" loading={busy} onClick={() => void run("untrash", {}, "已恢复")}>恢复</Button>
+          <Button size="sm" variant="ghost" className="ice-doc-danger-text" disabled={busy} onClick={() => setForever([...selected])}>永久删除</Button>
+        </>}
+        <span style={{ flex: 1 }} />
+        <Button size="sm" variant="ghost" className="ice-doc-danger-text" disabled={busy} onClick={() => setForever("all")}>清空回收站</Button>
+        <DeleteForeverDialog target={forever} count={forever === "all" ? all.length : forever?.length ?? 0}
+          onClose={() => setForever(null)} onDone={() => onSelect(new Set())} />
+      </>}
+      {selected.size > 0 && view !== "trash" && <>
           <Button size="sm" variant="ghost" loading={busy} onClick={() => void run("trash", {}, "已移入回收站")}>移入回收站</Button>
           <span className="ice-doc-batch__grp">
             <Input value={series} maxLength={40} placeholder="系列名" aria-label="批量设置系列" onChange={event => setSeries(event.target.value)} style={{ width: 110 }} />
@@ -232,17 +243,24 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
             <Button size="sm" variant="ghost" disabled={!date || busy} onClick={() => void run("set_planned", { planned_date: date }, "已排期")}>排期</Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("clear_planned", {}, "已取消排期")}>取消排期</Button>
           </span>
-        </>)}
+        </>}
     </div>
   );
 }
 
 function DocumentRow({ item, trashed, selected, onSelect }: { item: DocumentSummary; trashed: boolean; selected: boolean; onSelect: () => void }) {
   const [busy, setBusy] = React.useState(false);
+  const [forever, setForever] = React.useState(false);
   const act = async (method: string, label: string) => {
     setBusy(true);
     try { await docRpc(method, { document_id: item.document_id }); await invalidateDocuments(); toast.success({ title: label }); }
     catch (error) { toast.error({ title: label + "失败", detail: (error as Error).message }); }
+    finally { setBusy(false); }
+  };
+  const trash = async () => {
+    setBusy(true);
+    try { await trashDocument(item.document_id, item.title); }
+    catch (error) { toast.error({ title: "没有移入回收站", detail: (error as Error).message }); }
     finally { setBusy(false); }
   };
   const state = item.generation_state;
@@ -259,16 +277,23 @@ function DocumentRow({ item, trashed, selected, onSelect }: { item: DocumentSumm
           {item.planned_date && !item.published && <span className="ice-doc-chip is-busy">计划 {item.planned_date.slice(5)}</span>}
           <span className="ice-doc-chip">{item.source_label || ORIGIN_LABEL[item.origin]}</span>
           {item.series && <span className="ice-doc-chip">{item.series}{item.episode ? `·${item.episode}` : ""}</span>}
-          <span>{item.word_count} 字 · {item.images} 图 · {formatTime(item.updated_at)}</span>
+          <span>{item.word_count} 字 · {item.images} 图 · {trashed && item.trashed_at ? `移入回收站于 ${formatTime(item.trashed_at)}` : formatTime(item.updated_at)}</span>
         </span>
       </button>
       <div className="ice-doc-row-card__actions">
         {busy ? <Spinner size={12} /> : trashed
-          ? <Button size="sm" variant="ghost" onClick={() => void act("documents.untrash", "已恢复文章")}>恢复</Button>
+          ? <>
+            <Button size="sm" variant="ghost" onClick={() => void act("documents.untrash", "已恢复文章")}>恢复</Button>
+            <Button size="sm" variant="ghost" className="ice-doc-danger-text" disabled={item.published || state === "running"}
+              title={item.published ? "已登记发布的文章保留发布记录；先在发布记录里撤回登记才能永久删除" : "永久删除，不能恢复"}
+              onClick={() => setForever(true)}>永久删除</Button>
+          </>
           : <>
             <Button size="sm" variant="ghost" disabled={state === "running"} onClick={() => void act("documents.duplicate", "已复制为新文章")}>复制</Button>
-            <Button size="sm" variant="ghost" onClick={() => void act("documents.trash", "已移入回收站")}>删除</Button>
+            <Button size="sm" variant="ghost" className="ice-doc-danger-text" disabled={state === "running"}
+              title={state === "running" ? "AI 初稿生成完成后才能删除" : "移入回收站，可以恢复"} onClick={() => void trash()}>删除</Button>
           </>}
+        <DeleteForeverDialog target={forever ? [item.document_id] : null} count={1} onClose={() => setForever(false)} />
       </div>
     </div>
   );
@@ -368,10 +393,13 @@ function AiDraftDialog({ open, onClose }: { open: boolean; onClose: () => void }
   // P1：快速（直接出稿，可两版对照）/ 引导（先在助手里回答几个问题）。
   const [mode, setMode] = React.useState<"quick" | "guided">("quick");
   const [twoVersions, setTwoVersions] = React.useState(false);
+  // v3.16：本次起草使用的写作技能；null 表示按公众号默认。
+  const [skills, setSkills] = React.useState<SkillBinding | null>(null);
+  const [pickSkills, setPickSkills] = React.useState(false);
   const requestId = React.useRef<string | null>(null);
   React.useEffect(() => { if (!open) { setBusy(false); requestId.current = null; } }, [open]);
-  // 换模式或版本数等于新请求：不能复用上一个请求标识。
-  React.useEffect(() => { requestId.current = null; }, [mode, twoVersions]);
+  // 换模式、版本数或技能等于新请求：不能复用上一个请求标识。
+  React.useEffect(() => { requestId.current = null; }, [mode, twoVersions, skills]);
   const ready = readiness === "ready" || readiness === "untested";
   const submit = async () => {
     if (brief.trim().length < 4) return;
@@ -381,7 +409,8 @@ function AiDraftDialog({ open, onClose }: { open: boolean; onClose: () => void }
     try {
       if (mode === "guided") {
         await flushAllDirty();
-        const started = await docRpc<{ conversation_id: string }>("documents.ai_guided_start", { account_id: owner, brief: brief.trim(), request_id: requestId.current });
+        const started = await docRpc<{ conversation_id: string }>("documents.ai_guided_start", { account_id: owner, brief: brief.trim(), request_id: requestId.current,
+          ...(skills ? { skill_binding: skills } : {}) });
         onClose(); setBrief("");
         // 等待期间切了公众号：会话属于原公众号，不能在新公众号里打开它。
         if (accountStore.get() !== owner) { toast.info({ title: "引导式起草已在原公众号开始", detail: "切回原公众号后，在助手的会话列表中继续。" }); return; }
@@ -390,7 +419,7 @@ function AiDraftDialog({ open, onClose }: { open: boolean; onClose: () => void }
         return;
       }
       const document = await docRpc<DocumentDetail & { variant_documents?: string[] }>("documents.ai_draft_start",
-        { account_id: owner, brief: brief.trim(), request_id: requestId.current, variants: twoVersions ? 2 : 1 });
+        { account_id: owner, brief: brief.trim(), request_id: requestId.current, variants: twoVersions ? 2 : 1, ...(skills ? { skill_binding: skills } : {}) });
       void invalidateDocuments(owner);
       onClose(); setBrief("");
       if (document.generation_state === "failed") toast.error({ title: "AI 起草没有启动", detail: String(document.meta.error ?? "请检查模型配置") });
@@ -422,6 +451,12 @@ function AiDraftDialog({ open, onClose }: { open: boolean; onClose: () => void }
         {mode === "quick" && <label className="ice-doc-check">
           <input type="checkbox" checked={twoVersions} onChange={event => setTwoVersions(event.target.checked)} />
           同时生成两个版本对照（不同切入角度，各存为一篇；模型调用次数加倍）</label>}
+        <div className="ice-doc-row">
+          <span className="ice-doc-muted">写作技能：{skills ? "本次自选" : "按公众号默认"}</span>
+          <button type="button" className="ice-link-btn" aria-expanded={pickSkills} onClick={() => setPickSkills(value => !value)}>
+            {pickSkills ? "收起" : "为这篇选择技能"}</button>
+        </div>
+        {pickSkills && <SkillPicker value={skills} onChange={setSkills} inheritLabel="按公众号默认" disabled={busy} />}
       </div>
     </Dialog>
   );

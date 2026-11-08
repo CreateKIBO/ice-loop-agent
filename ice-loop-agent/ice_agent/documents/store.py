@@ -289,6 +289,36 @@ class DocumentStore:
                               (lifecycle, now if lifecycle == 'trashed' else None, now, document_id))
         return self._row(document_id)
 
+    def delete_blocker(self, document: dict) -> str:
+        """v3.14 永久删除前的检查；返回不能删除的原因，空串表示可以删除。"""
+        if document['lifecycle'] != 'trashed':
+            return '只能永久删除回收站里的文章'
+        if document['generation_state'] == 'running':
+            return 'AI 初稿还在生成'
+        if self.conn.execute("SELECT 1 FROM publication_records WHERE document_id=? AND account_id=? AND state='active' LIMIT 1",
+                             (document['document_id'], self.account_id)).fetchone():
+            return '已登记发布，保留发布记录；如确需删除，请先在发布记录里撤回登记'
+        if self.conn.execute("SELECT 1 FROM document_proposals WHERE document_id=? AND account_id=? AND status='generating' LIMIT 1",
+                             (document['document_id'], self.account_id)).fetchone():
+            return 'AI 助手还在生成修改建议'
+        return ''
+
+    def delete_forever(self, document_id: str) -> None:
+        """v3.14 永久删除回收站里的一篇文章：正文、工作副本、版本、导入原件、交付与提案记录一起删除。
+
+        图片资源属于公众号素材库（可能被其他文章引用），不随文章删除；已撤回的发布登记一并删除。
+        调用方负责事务。
+        """
+        document = self._row(document_id)
+        reason = self.delete_blocker(document)
+        if reason:
+            raise DocumentError(f'「{document["title"] or "未命名文章"}」{reason}')
+        key = (document_id, self.account_id)
+        for table in ('document_proposals', 'publication_records', 'document_deliveries', 'document_import_originals',
+                      'document_versions', 'document_working'):
+            self.conn.execute(f'DELETE FROM {table} WHERE document_id=? AND account_id=?', key)
+        self.conn.execute('DELETE FROM documents WHERE document_id=? AND account_id=?', key)
+
     def set_generation(self, document_id: str, state: str, meta: dict | None = None) -> None:
         document = self._row(document_id)
         merged = {**document['meta'], **(meta or {})}

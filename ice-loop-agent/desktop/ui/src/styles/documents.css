@@ -76,7 +76,7 @@
 .ice-doc-row-card__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ice-doc-row-card__summary { color: var(--ice-text-secondary); font-size: var(--ice-font-size-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ice-doc-row-card__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
-.ice-doc-row-card__actions { display: flex; align-items: center; gap: 2px; padding-right: var(--ice-space-2); opacity: .55;
+.ice-doc-row-card__actions { display: flex; align-items: center; gap: 2px; padding-right: var(--ice-space-2); opacity: .75;
   transition: opacity var(--ice-motion-fast) var(--ice-motion-ease); }
 .ice-doc-row-card:hover .ice-doc-row-card__actions, .ice-doc-row-card:focus-within .ice-doc-row-card__actions { opacity: 1; }
 .ice-doc-legacy-list { margin-top: var(--ice-space-6); }
@@ -492,3 +492,19 @@ button.ice-doc-chip { cursor: pointer; }
 .ice-compat__table select.is-partial { color: var(--ice-warning); }
 .ice-compat__table select.is-fail { color: var(--ice-danger); }
 .ice-compat__note td { padding-top: 0; }
+
+/* v3.14 文章删除：删除/永久删除用红色文字，避免误点又能一眼找到 */
+.ice-btn.ice-doc-danger-text { color: var(--ice-danger); }
+.ice-btn.ice-doc-danger-text:hover:not(:disabled) { background: var(--ice-danger-bg); }
+.ice-btn.ice-doc-danger-text:disabled { color: var(--ice-text-secondary); }
+
+/* v3.16 本篇写作技能 */
+.ice-doc-skillchip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.ice-doc-skillpick { margin: 0; padding: 10px 12px; border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-md); display: grid; gap: 8px; min-width: 0; }
+.ice-doc-skillpick > label { display: grid; gap: 4px; }
+.ice-doc-skillpick select { min-width: 0; max-width: 100%; height: var(--ice-control-height); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); color: var(--ice-text); font: inherit; padding: 0 8px; }
+.ice-doc-skillpick__addons { display: grid; gap: 4px; }
+.ice-doc-skillprev { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--ice-radius-md); background: var(--ice-surface-muted); overflow-wrap: anywhere; }
+.ice-doc-skillprev p { margin: 0; }
+.ice-doc-skillprev__warn { margin: 4px 0 0; padding-left: 18px; color: var(--ice-warning, #9a6700); }
