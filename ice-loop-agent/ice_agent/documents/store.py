@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import json
+import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -28,6 +30,30 @@ def _cover_of(content: dict | None) -> str | None:
         return cover
     refs = image_refs(content)
     return refs[0].get('resourceId') if refs else None
+
+
+# v3.18 列表派生信息缓存：摘要、字数、图片数、封面只取决于正文，按 content_hash 缓存。
+# 文章列表每次都解析全部正文 JSON 再统计，200 篇约 145ms、且随篇数线性增长（生成中每 3 秒轮询一次）；
+# 命中缓存时连正文都不读。content_hash 由正文规范化后计算，所有写入路径都同步更新。
+_STATS: "OrderedDict[str, tuple]" = OrderedDict()
+_STATS_LIMIT = 5000
+_STATS_LOCK = threading.Lock()
+
+
+def content_stats(content_hash: str, load) -> tuple[str, int, int, str | None]:
+    """(摘要, 字数, 图片数, 封面资源) ；load() 只在未命中时调用，返回正文 dict。"""
+    with _STATS_LOCK:
+        hit = _STATS.get(content_hash)
+        if hit is not None:
+            _STATS.move_to_end(content_hash)
+            return hit
+    content = load()
+    value = (summary(content), word_count(content), len(image_refs(content)), _cover_of(content)) if content else ('', 0, 0, None)
+    with _STATS_LOCK:
+        _STATS[content_hash] = value
+        while len(_STATS) > _STATS_LIMIT:
+            _STATS.popitem(last=False)
+    return value
 
 
 class WorkingConflict(DocumentError):
@@ -86,25 +112,36 @@ class DocumentStore:
                 'word_count': word_count(working['content']),
                 'publications': self.publications(document_id)}
 
+    def _content_json(self, document_id: str) -> str | None:
+        row = self.conn.execute('SELECT content_json FROM document_working WHERE document_id=?', (document_id,)).fetchone()
+        return row[0] if row else None
+
     def summary_row(self, row: dict) -> dict:
-        content = json.loads(row['content_json']) if row.get('content_json') else None
+        def load():
+            raw = row['content_json'] if 'content_json' in row else self._content_json(row['document_id'])
+            return json.loads(raw) if raw else None
+        if row.get('content_hash'):
+            text, words, images, cover = content_stats(row['content_hash'], load)
+        else:
+            content = load()
+            text, words, images, cover = ((summary(content), word_count(content), len(image_refs(content)), _cover_of(content))
+                                          if content else ('', 0, 0, None))
         meta = json.loads(row.get('meta_json') or '{}')
         return {'id': row['document_id'], 'document_id': row['document_id'], 'kind': 'document',
                 'title': row['title'], 'origin': row['origin'], 'origin_ref': row['origin_ref'],
                 'series': row['series'], 'episode': row['episode'], 'lifecycle': row['lifecycle'],
                 'generation_state': row['generation_state'], 'updated_at': row['updated_at'],
                 'created_at': row['created_at'], 'trashed_at': row['trashed_at'],
-                'summary': summary(content) if content else '', 'word_count': word_count(content) if content else 0,
-                'images': len(image_refs(content)) if content else 0,
+                'summary': text, 'word_count': words, 'images': images,
                 'published': bool(row.get('published')), 'readonly': False,
                 'source_label': meta.get('source_label', ''), 'variant': meta.get('variant'),
-                'cover_resource_id': _cover_of(content),
+                'cover_resource_id': cover,
                 'planned_date': meta.get('planned_date'),
                 'variant_group': meta.get('variant_group')}
 
     def list(self, *, lifecycle: str = 'active', query: str = '') -> list[dict]:
         rows = self.conn.execute(
-            'SELECT d.*, w.content_json,'
+            'SELECT d.*, w.content_hash,'
             ' EXISTS(SELECT 1 FROM publication_records p WHERE p.document_id=d.document_id AND p.state=\'active\') AS published'
             ' FROM documents d JOIN document_working w ON w.document_id=d.document_id'
             ' WHERE d.account_id=? AND d.lifecycle=? ORDER BY d.updated_at DESC',

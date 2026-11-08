@@ -120,6 +120,29 @@ def normalize_info(info: Any) -> dict:
         raise DocumentError('封面图片引用无效')
     if cover:
         out['coverResourceId'] = cover
+    # v3.23 留言设置（同步到草稿箱时生效）：all=所有人可留言，fans=仅关注者；关闭时不写入
+    comments = info.get('comments', 'off')
+    if comments not in ('off', 'all', 'fans'):
+        raise DocumentError('留言设置无效')
+    if comments != 'off':
+        out['comments'] = comments
+    # v3.23 封面裁切：{'235': [x1,y1,x2,y2], '11': [...]}，按封面图归一化（0–1）；不填则后台默认居中
+    crop = info.get('coverCrop')
+    if crop not in (None, {}):
+        if not isinstance(crop, dict) or set(crop) - {'235', '11', 'for'}:
+            raise DocumentError('封面裁切格式无效')
+        target = crop.get('for', '')  # 裁切针对的封面图；封面换了就不再套用
+        if not isinstance(target, str) or not target.startswith('resource-') or len(target) > 80:
+            raise DocumentError('封面裁切缺少对应的封面图')
+        cleaned = {'for': target}
+        for key, box in ((k, v) for k, v in crop.items() if k != 'for'):
+            if not isinstance(box, list) or len(box) != 4 or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in box):
+                raise DocumentError('封面裁切坐标无效')
+            x1, y1, x2, y2 = (round(float(v), 4) for v in box)
+            if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
+                raise DocumentError('封面裁切坐标需在 0–1 之间')
+            cleaned[key] = [x1, y1, x2, y2]
+        out['coverCrop'] = cleaned
     return out
 
 

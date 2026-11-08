@@ -5,7 +5,9 @@ import { accountStore, queryClient, rpc } from "../../data/client";
 export type DocTheme = "clean" | "magazine" | "tech" | "warm";
 export type DocStyle = { theme: DocTheme; brandColor: string; fontSize: number; lineHeight: number; paragraphSpacing: number; letterSpacing?: number };
 /** v3.2 文章设置：随版本冻结，随复制/导出交付。 */
-export type DocInfo = { author?: string; summary?: string; sourceUrl?: string; coverResourceId?: string };
+export type DocInfo = { author?: string; summary?: string; sourceUrl?: string; coverResourceId?: string;
+  // v3.23：留言设置与封面裁切（同步到草稿箱时生效）
+  comments?: "off" | "all" | "fans"; coverCrop?: { for: string; "235"?: number[]; "11"?: number[] } };
 export type DocJSON = { type: "doc"; content?: Array<Record<string, unknown>> };
 export type DocContent = { schema: 1; doc: DocJSON; style: DocStyle; info?: DocInfo };
 

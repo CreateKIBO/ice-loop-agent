@@ -35,6 +35,8 @@ async function run() {
           {version:2,name:'ICE 写作方法',chars:10,rule_count:1,created_at:'2026-11-08T09:00:00',source:null,current:true},
           {version:1,name:'ICE 写作方法',chars:8,rule_count:0,created_at:'2026-11-01T09:00:00',source:null,current:false}]};
         if(method==='skills.version')return {skill_id:params.skill_id,version:params.version,name:'ICE 写作方法',instructions:'第一版：先讲故事。',rules:{},source:null,created_at:'2026-11-01T09:00:00'};
+        if(method==='skills.files_add')return {files:params.files.map((f,i)=>({id:'file-'+(i+1),name:f.name,kind:f.kind,stages:f.kind==='example'?['write']:['plan','write','review'],chars:f.text.length}))};
+        if(method==='skills.file_get')return {id:params.file_id,name:'范文.md',kind:'example',text:'那天下午，我清空了书柜。',chars:12};
         if(method==='skills.defaults')return {skills:[{id:'general-writing',name:'通用写作',instructions:'按读者需要写作。',rules:{}},ice]};
         throw Error('Unexpected method '+method);
       }};
@@ -97,6 +99,18 @@ async function run() {
   await page.waitForFunction(() => window.saved.revision === 2);
   assert.deepEqual(await page.evaluate(() => window.saved.skills.find(s => s.id === 'ice-writing').source), { kind: 'restore', from_version: 1 });
   report.checks.history_restore_saves_with_source = true;
+
+  // v3.19 参考资料与示例：添加文件、查看、保存后随技能保存
+  await page.getByLabel('选择参考文件').setInputFiles({ name: '范文.md', mimeType: 'text/markdown', buffer: Buffer.from('那天下午，我清空了书柜。') });
+  await dialog.getByText('范文.md', { exact: true }).waitFor();
+  assert.equal(await dialog.getByLabel('「范文.md」的类型', { exact: true }).inputValue(), 'example');
+  await dialog.getByRole('button', { name: '查看', exact: true }).click();
+  await dialog.getByText('那天下午，我清空了书柜。').waitFor();
+  await dialog.getByRole('button', { name: '保存设置', exact: true }).click();
+  await page.waitForFunction(() => window.saved.revision === 3);
+  assert.deepEqual(await page.evaluate(() => window.saved.skills.find(s => s.id === 'ice-writing').files),
+    [{ id: 'file-1', name: '范文.md', kind: 'example', stages: ['write'], chars: 12 }]);
+  report.checks.reference_file_added = true;
 
   // 恢复预装：缺少的可重新加入，不自动启用
   await dialog.getByRole('button', { name: '恢复预装技能', exact: true }).click();

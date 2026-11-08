@@ -14,6 +14,7 @@ import { DocumentAssistPanel, type AssistBridge } from "./DocumentAssistPanel";
 import { DocumentVariants } from "./DocumentVariants";
 import { CompatRecordPanel } from "./CompatRecordPanel";
 import { PerfReadout } from "./PerfReadout";
+import { WeChatDraftPanel } from "./WeChatDraftPanel";
 
 type Panel = "assist" | "compare" | "compat" | "perf" | "style" | "versions" | "delivery";
 type Props = {
@@ -108,15 +109,20 @@ function VersionsPanel({ documentId, commitVersion, unversioned, revision, flush
     } catch (error) { toast.error({ title: "版本没有保存", detail: (error as Error).message }); }
     finally { setBusy(null); }
   };
+  const alive = useAlive();
   const restore = async (version: VersionSummary) => {
+    const owner = accountStore.get(), here = () => alive.current && accountStore.get() === owner;  // v3.21 异步边界
     setBusy(version.version_id);
     try {
       await flush();
-      await docRpc("documents.restore", { document_id: documentId, version_id: version.version_id, base_revision: revision() });
+      if (!here()) return;
+      await docRpc("documents.restore", { account_id: owner, document_id: documentId, version_id: version.version_id, base_revision: revision() });
+      void invalidateDocuments(owner);
+      if (!here()) { toast.info({ title: "所选版本已恢复", detail: "恢复在离开文章前已提交；重新打开文章可看到恢复后的内容。" }); return; }
       toast.success({ title: "已恢复到所选版本", detail: "恢复前的内容已自动保存为一个版本，可再恢复回来。" });
-      void invalidateDocuments(); onRestored();
-    } catch (error) { toast.error({ title: "恢复失败", detail: (error as Error).message }); }
-    finally { setBusy(null); }
+      onRestored();
+    } catch (error) { if (here()) toast.error({ title: "恢复失败", detail: (error as Error).message }); }
+    finally { if (alive.current) setBusy(null); }
   };
   const show = async (version: VersionSummary) => {
     if (preview?.version_id === version.version_id) { setPreview(null); return; }
@@ -170,16 +176,21 @@ function ImportHistory({ documentId, imports, flush, revision, onReload }: {
     catch (error) { toast.error({ title: "原件读取失败", detail: (error as Error).message }); }
     finally { setBusy(false); }
   };
+  const alive = useAlive();
   const convert = async () => {
     if (!rebuild) return;
+    const owner = accountStore.get(), here = () => alive.current && accountStore.get() === owner;  // v3.21 异步边界
     setBusy(true);
     try {
       await flush();
-      await docRpc("documents.reconvert", { document_id: documentId, import_id: rebuild.import_id, mode: rebuild.mode, base_revision: revision() });
-      void invalidateDocuments(); onReload();
+      if (!here()) return;
+      await docRpc("documents.reconvert", { account_id: owner, document_id: documentId, import_id: rebuild.import_id, mode: rebuild.mode, base_revision: revision() });
+      void invalidateDocuments(owner);
+      if (!here()) { toast.info({ title: "已从原件重新转换", detail: "转换在离开文章前已提交；重新打开文章可看到结果。" }); return; }
+      onReload();
       toast.success({ title: "已从原件重新转换", detail: "转换前的文章已保留为版本，可在版本历史中恢复。" });
-    } catch (error) { toast.error({ title: "没有重新转换", detail: (error as Error).message }); }
-    finally { setBusy(false); }
+    } catch (error) { if (here()) toast.error({ title: "没有重新转换", detail: (error as Error).message }); }
+    finally { if (alive.current) setBusy(false); }
   };
   if (!imports.length) return null;
   return <section className="ice-doc-form" aria-label="导入报告与原件">
@@ -211,12 +222,21 @@ function ImportHistory({ documentId, imports, flush, revision, onReload }: {
   </section>;
 }
 
+/** v3.21 异步边界：组件是否仍挂载（离开文章、切换公众号后为 false）。 */
+function useAlive() {
+  const alive = React.useRef(true);
+  React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  return alive;
+}
+
 function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
+  const alive = useAlive();
   const [delivery, setDelivery] = React.useState<Delivery | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<unknown>(null);
   const [exported, setExported] = React.useState<{ version_id: string; destination: string; complete: boolean; images: number; missing_images: number } | null>(null);
   const [copied, setCopied] = React.useState<string | null>(null);
+  const [synced, setSynced] = React.useState<string | null>(null);  // v3.22 已同步到草稿箱的版本
   const publications = useAccountQuery<PublicationRecord[]>("publications.list", { document_id: documentId }, { staleTime: 0 });
   const build = React.useCallback(async () => {
     setBusy("build"); setError(null);
@@ -247,21 +267,29 @@ function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
     if (!delivery) return;
     const bridge = window.ice;
     if (!bridge?.chooseExportDir) { toast.warning({ title: "此运行环境不支持选择导出目录" }); return; }
+    // v3.21：开始时记下文章、版本与公众号；选目录或导出期间离开文章/切换公众号，不再写回当前界面。
+    const owner = accountStore.get(), versionId = delivery.version_id, title = detail.title || "未命名文章";
+    const here = () => alive.current && accountStore.get() === owner;
     setBusy("export");
     let destination: string | null = null, done = false;
     try {
       destination = await bridge.chooseExportDir();
       if (!destination) return;
+      if (!here()) return; // 选目录期间已离开：不启动导出，批准在 finally 里撤销
       const result = await docRpc<{ version_id: string; destination: string; complete: boolean; images: number; missing_images: number }>("documents.export_bundle",
-        { document_id: documentId, version_id: delivery.version_id, destination });
+        { account_id: owner, document_id: documentId, version_id: versionId, destination });
       done = true;
+      if (!here()) {
+        toast.info({ title: `「${title}」的图文包已导出`, detail: `导出在离开前已开始，文件在 ${result.destination}；属于原公众号。` });
+        return;
+      }
       setExported(result);
       (result.complete ? toast.success : toast.warning)({ title: result.complete ? "图文包已导出" : "已导出草稿包，仍有待处理项",
         detail: `${result.images} 张原图已按正文顺序编号；导出不等于已发布。` });
-    } catch (problem) { toast.error({ title: "导出失败", detail: (problem as Error).message }); }
+    } catch (problem) { if (here()) toast.error({ title: "导出失败", detail: (problem as Error).message }); }
     finally {
       if (destination && !done) try { await bridge.cancelExportDir?.(destination); } catch { /* 已失效的批准无需处理 */ }
-      setBusy(null);
+      if (alive.current) setBusy(null);
     }
   };
   const jump = (blockId: string) => {
@@ -271,7 +299,7 @@ function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
     element?.classList.add("ice-doc-flash"); window.setTimeout(() => element?.classList.remove("ice-doc-flash"), 1200);
   };
   const delivered = Boolean(delivery && ((detail.deliveries ?? []).some(record => record.version_id === delivery.version_id)
-    || exported?.version_id === delivery.version_id || copied === delivery.version_id));
+    || exported?.version_id === delivery.version_id || copied === delivery.version_id || synced === delivery.version_id));
 
   return (
     <div className="ice-doc-form">
@@ -294,7 +322,9 @@ function DeliveryPanel({ documentId, revision, flush, detail }: Props) {
           <Button size="sm" loading={busy === "copy-text"} onClick={() => void copy("text")}>复制纯文本</Button>
           <Button size="sm" loading={busy === "export"} onClick={() => void exportBundle()}>导出图文包</Button>
         </div>
-        <LongImageExport documentId={documentId} versionId={delivery.version_id} />
+        <WeChatDraftPanel documentId={documentId} versionId={delivery.version_id} title={detail.title || "未命名文章"}
+                          complete={delivery.complete} onSynced={setSynced} />
+        <LongImageExport documentId={documentId} versionId={delivery.version_id} title={detail.title || "未命名文章"} />
         {exported && <div className="ice-doc-muted">已导出到 {exported.destination}
           {window.ice?.openExportFolder && <> · <button type="button" className="ice-link-btn" onClick={() => void window.ice?.openExportFolder?.(exported.destination)}>打开文件夹</button></>}</div>}
         {delivery.images.length > 0 && <details className="ice-doc-images">
@@ -367,7 +397,8 @@ function PublicationForm({ documentId, delivery, delivered, records, onChanged }
 }
 
 /** P2 长图与切片：按当前交付版本渲染手机版心长图，并在空白行处切成多张，写入新的导出目录。 */
-function LongImageExport({ documentId, versionId }: { documentId: string; versionId: string }) {
+function LongImageExport({ documentId, versionId, title }: { documentId: string; versionId: string; title: string }) {
+  const alive = useAlive();
   const [open, setOpen] = React.useState(false);
   const [width, setWidth] = React.useState(375);
   const [slice, setSlice] = React.useState(1200);
@@ -377,18 +408,22 @@ function LongImageExport({ documentId, versionId }: { documentId: string; versio
     const bridge = window.ice;
     const capture = bridge?.documentLongImage as undefined | ((params: Record<string, unknown>) => Promise<{ destination: string; pixel_width: number; pixel_height: number; slices: number; can_open?: boolean }>);
     if (!bridge?.chooseExportDir || typeof capture !== "function") { toast.warning({ title: "请在桌面应用中导出长图" }); return; }
+    const owner = accountStore.get();  // v3.21：同图文包导出的边界
+    const here = () => alive.current && accountStore.get() === owner;
     setBusy(true);
     let destination: string | null = null, done = false;
     try {
       destination = await bridge.chooseExportDir();
-      if (!destination) return;
-      const value = await capture({ document_id: documentId, version_id: versionId, account_id: accountStore.get(), destination, width, slice_height: slice });
-      done = true; setResult(value);
+      if (!destination || !here()) return;
+      const value = await capture({ document_id: documentId, version_id: versionId, account_id: owner, destination, width, slice_height: slice });
+      done = true;
+      if (!here()) { toast.info({ title: `「${title}」的长图已导出`, detail: `导出在离开前已开始，文件在 ${value.destination}；属于原公众号。` }); return; }
+      setResult(value);
       toast.success({ title: "长图已导出", detail: `${value.pixel_width}×${value.pixel_height} 像素，切成 ${value.slices} 张；导出不等于已发布。` });
-    } catch (problem) { toast.error({ title: "长图没有导出", detail: (problem as Error).message }); }
+    } catch (problem) { if (here()) toast.error({ title: "长图没有导出", detail: (problem as Error).message }); }
     finally {
       if (destination && !done) try { await bridge.cancelExportDir?.(destination); } catch { /* 已失效的批准无需处理 */ }
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
   };
   return (

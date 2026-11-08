@@ -4,15 +4,31 @@ import * as React from 'react';
 import { Banner, Button, Dialog, Input, Spinner } from '../../components/ui';
 import { toast } from '../../components/toast';
 import { accountStore, rpc } from '../../data/client';
+import { ConflictList, type TextConflict } from './SkillScope';
 
 export type SkillSource = { kind: 'import' | 'copy' | 'default' | 'restore'; file_name?: string; sha256?: string; format?: string;
   imported_at?: string; from_skill_id?: string; from_version?: number; original_version?: number };
-export type ParsedSkill = { name: string; instructions: string; rules: Record<string, unknown>; source: SkillSource; kind?: 'main' | 'addon' };
-type ParseResult = { skill: ParsedSkill; warnings: string[]; ignored_files: string[] };
+// v3.19 参考资料与示例：技能里只记引用，正文由 skills.files_add 单独保存。
+export type FileStage = 'plan' | 'write' | 'review';
+export type SkillFileRef = { id: string; name: string; kind: 'reference' | 'example'; stages: FileStage[]; chars?: number };
+export type ParsedSkill = { name: string; instructions: string; rules: Record<string, unknown>; source: SkillSource; kind?: 'main' | 'addon';
+  files?: SkillFileRef[] };
+type PackageFile = { name: string; path: string; kind: 'reference' | 'example'; stages: FileStage[]; text: string; chars: number };
+type ParseResult = { skill: ParsedSkill; warnings: string[]; ignored_files: string[]; files?: PackageFile[] };
+export const STAGE_LABEL: Record<FileStage, string> = { plan: '构思', write: '写作', review: '审阅' };
+const STAGES: FileStage[] = ['plan', 'write', 'review'];
+const MAX_FILES = 10;
+
+/** 保存参考文件正文，返回引用（阶段用传入的值）。 */
+async function addFiles(items: Array<{ name: string; kind: 'reference' | 'example'; text: string; stages?: FileStage[] }>) {
+  const result = await rpc<{ files: SkillFileRef[] }>('skills.files_add', { account_id: accountStore.get(),
+    files: items.map(({ name, kind, text }) => ({ name, kind, text })) });
+  return result.files.map((ref, i) => ({ ...ref, stages: items[i].stages?.length ? items[i].stages! : ref.stages }));
+}
 type VersionRow = { version: number; name: string; chars: number; rule_count: number; created_at: string | null;
   source: SkillSource | null; current: boolean };
 type VersionDetail = { skill_id: string; version: number; name: string; instructions: string; rules: Record<string, unknown>;
-  source: SkillSource | null; created_at: string | null };
+  source: SkillSource | null; created_at: string | null; files?: SkillFileRef[] };
 
 const MAX_FILE = 1_000_000;
 
@@ -42,7 +58,8 @@ export async function exportSkill(skillId: string, version?: number) {
       if (result) toast.success({ title: '技能已导出', detail: result.file });
       return;
     }
-    const exported = await rpc<{ markdown: string; file_name: string }>('skills.export', params);
+    const exported = await rpc<{ markdown?: string; file_name: string }>('skills.export', params);
+    if (exported.markdown === undefined) { toast.warning({ title: '当前环境不能保存 ZIP', detail: '带参考文件的技能请在桌面应用里导出。' }); return; }
     await navigator.clipboard.writeText(exported.markdown);
     toast.success({ title: '已复制技能 Markdown', detail: `当前环境不能保存文件；可粘贴为 ${exported.file_name}` });
   } catch (error) { toast.error({ title: '没有导出', detail: (error as Error).message }); }
@@ -76,9 +93,16 @@ export function ImportSkillButton({ disabled, onImport }: { disabled?: boolean; 
       description="只导入写作指令和检查规则；不会安装依赖、运行脚本，也不会授予任何工具或发布权限。"
       footer={<>
         <Button onClick={() => setPreview(null)}>取消</Button>
-        <Button variant="primary" disabled={!name.trim()} onClick={() => {
+        <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={async () => {
           if (!preview) return;
-          onImport({ ...preview.skill, name: name.trim().slice(0, 80) }); setPreview(null);
+          let files: SkillFileRef[] | undefined;
+          if (preview.files?.length) {
+            setBusy(true);
+            try { files = await addFiles(preview.files); }
+            catch (error) { toast.error({ title: '参考文件没有保存', detail: (error as Error).message }); return; }
+            finally { setBusy(false); }
+          }
+          onImport({ ...preview.skill, name: name.trim().slice(0, 80), ...(files ? { files } : {}) }); setPreview(null);
           toast.info({ title: '已加入技能列表', detail: '检查内容后点“保存设置”才会生效。' });
         }}>加入技能列表</Button></>}>
       {preview && <div className="ice-skills__import">
@@ -86,6 +110,8 @@ export function ImportSkillButton({ disabled, onImport }: { disabled?: boolean; 
         <p className="ice-skills__note">{preview.skill.kind === 'addon' ? '辅助技能 · ' : ''}{sourceText(preview.skill.source)} · 指令 {preview.skill.instructions.length} 字 · 检查规则 {rules.length} 项{rules.length ? `（${rules.join('、')}）` : ''}</p>
         {preview.warnings.length > 0 && <Banner tone="warning" title="请留意">
           <ul className="ice-skills__list">{preview.warnings.map(text => <li key={text}>{text}</li>)}</ul></Banner>}
+        {(preview.files?.length ?? 0) > 0 && <div className="ice-skills__note">一起导入的参考文件：
+          <ul className="ice-skills__list">{preview.files!.map(f => <li key={f.path}>{f.kind === 'example' ? '示例' : '参考'} · {f.path} · {f.chars} 字 · 用于{f.stages.map(x => STAGE_LABEL[x]).join('、')}</li>)}</ul></div>}
         {preview.ignored_files.length > 0 && <p className="ice-skills__note">未导入的文件：{preview.ignored_files.slice(0, 12).join('、')}{preview.ignored_files.length > 12 ? ` 等 ${preview.ignored_files.length} 个` : ''}</p>}
         <pre className="ice-skills__preview" aria-label="写作指令预览">{preview.skill.instructions}</pre>
       </div>}
@@ -159,4 +185,100 @@ export function SkillHistory({ skillId, onLoad, onClose }: { skillId: string; on
       <p className="ice-skills__note">载入后点“保存设置”才生效，会作为新版本保存；历史版本本身不变。</p>
     </div>}
   </section>;
+}
+
+/** v3.19 技能编辑区：参考资料与示例。改动只进编辑列表，点“保存设置”才生效并记一版。 */
+export function SkillFiles({ files, disabled, onChange }: { files: SkillFileRef[]; disabled?: boolean; onChange: (next: SkillFileRef[]) => void }) {
+  const input = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [view, setView] = React.useState<{ id: string; text: string } | null>(null);
+  const add = async (list: FileList) => {
+    const picked = Array.from(list).slice(0, MAX_FILES - files.length);
+    if (!picked.length) return;
+    setBusy(true);
+    try {
+      const items = await Promise.all(picked.map(async file => {
+        if (file.size > 200_000) throw Error(`「${file.name}」过大，参考文件最多 2 万字`);
+        return { name: file.name.slice(0, 120), kind: /example|示例|范文|样例/i.test(file.name) ? 'example' as const : 'reference' as const, text: await file.text() };
+      }));
+      const refs = await addFiles(items);
+      onChange([...files, ...refs.filter(ref => !files.some(f => f.id === ref.id))]);
+    } catch (error) { toast.error({ title: '没有添加参考文件', detail: (error as Error).message }); }
+    finally { setBusy(false); }
+  };
+  const open = async (id: string) => {
+    if (view?.id === id) { setView(null); return; }
+    try { const file = await rpc<{ text: string }>('skills.file_get', { account_id: accountStore.get(), file_id: id }); setView({ id, text: file.text }); }
+    catch (error) { toast.error({ title: '没有读取参考文件', detail: (error as Error).message }); }
+  };
+  const update = (id: string, patch: Partial<SkillFileRef>) => onChange(files.map(f => f.id === id ? { ...f, ...patch } : f));
+  return <div className="ice-skills__files" role="group" aria-label="参考资料与示例">
+    <div className="ice-skills__row"><strong>参考资料与示例</strong><small>（{files.length}/{MAX_FILES}）按阶段放进提示词；示例只学结构与语气，不照抄</small>
+      <span style={{ flex: 1 }} />
+      <Button size="sm" loading={busy} disabled={disabled || files.length >= MAX_FILES} onClick={() => input.current?.click()}>添加文件</Button>
+      <input ref={input} type="file" hidden multiple accept=".md,.markdown,.txt" aria-label="选择参考文件"
+             onChange={event => { const list = event.target.files; if (list) void add(list); event.target.value = ''; }} /></div>
+    {files.length === 0 && <small>可以放风格指南、术语表、范文等文字资料（.md / .txt，单个 ≤2 万字）。</small>}
+    {files.map(file => <div key={file.id} className="ice-skills__file">
+      <div className="ice-skills__row">
+        <span className="ice-skills__file-name">{file.name}</span>{file.chars ? <small>{file.chars} 字</small> : null}
+        <select aria-label={`「${file.name}」的类型`} disabled={disabled} value={file.kind}
+                onChange={event => update(file.id, { kind: event.target.value as SkillFileRef['kind'] })}>
+          <option value="reference">参考资料</option><option value="example">示例</option>
+        </select>
+        {STAGES.map(stage => { const on = file.stages.includes(stage);
+          return <label key={stage} className="ice-skills__check"><input type="checkbox" disabled={disabled || (on && file.stages.length === 1)} checked={on}
+            onChange={() => update(file.id, { stages: on ? file.stages.filter(x => x !== stage) : STAGES.filter(x => x === stage || file.stages.includes(x)) })} />{STAGE_LABEL[stage]}</label>; })}
+        <span style={{ flex: 1 }} />
+        <Button size="sm" variant="ghost" aria-pressed={view?.id === file.id} onClick={() => void open(file.id)}>{view?.id === file.id ? '收起' : '查看'}</Button>
+        <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { onChange(files.filter(f => f.id !== file.id)); if (view?.id === file.id) setView(null); }}>移除</Button>
+      </div>
+      {view?.id === file.id && <pre className="ice-skills__preview" aria-label={`「${file.name}」内容`}>{view.text}</pre>}
+    </div>)}
+  </div>;
+}
+
+// ------------------------------------------------------------------ v3.20 冲突检查
+type RuleReport = { method: 'rules'; conflicts: TextConflict[]; checked: string[]; skills: Array<{ id: string; name: string }> };
+type AiConflict = { label: string; skill_a: string; quote_a: string; skill_b: string; quote_b: string; severity: 'high' | 'low'; advice: string; verified: boolean };
+type AiReport = { method: 'ai'; conflicts: AiConflict[]; notes: string; model_id: string };
+export type CheckSkill = { id: string; name: string; instructions: string; kind?: 'main' | 'addon'; rules: Record<string, unknown> };
+
+/** 检查当前编辑中的组合（未保存也能查）。规则检查即时、不调模型；AI 深入检查调用一次写作模型，只作提示。 */
+export function ConflictCheck({ skills, disabled }: { skills: () => CheckSkill[] | string; disabled?: boolean }) {
+  const [rules, setRules] = React.useState<RuleReport | null>(null);
+  const [ai, setAi] = React.useState<AiReport | null>(null);
+  const [busy, setBusy] = React.useState<'rules' | 'ai' | null>(null);
+  const run = async (kind: 'rules' | 'ai') => {
+    const chosen = skills();
+    if (typeof chosen === 'string') { toast.warning({ title: '还不能检查', detail: chosen }); return; }
+    setBusy(kind);
+    try {
+      const params = { account_id: accountStore.get(), skills: chosen };
+      if (kind === 'rules') { setRules(await rpc<RuleReport>('skills.check_conflicts', params)); }
+      else { setAi(await rpc<AiReport>('skills.check_conflicts_ai', params)); }
+    } catch (error) { toast.error({ title: kind === 'ai' ? 'AI 检查没有完成' : '检查没有完成', detail: (error as Error).message }); }
+    finally { setBusy(null); }
+  };
+  return <div className="ice-skills__check-panel" role="group" aria-label="冲突检查">
+    <div className="ice-skills__row">
+      <strong>冲突检查</strong><small>检查当前选中的主技能 + 辅助技能（含未保存的修改）</small>
+      <span style={{ flex: 1 }} />
+      <Button size="sm" loading={busy === 'rules'} disabled={disabled || busy !== null} onClick={() => void run('rules')}>检查冲突</Button>
+      <Button size="sm" variant="ghost" loading={busy === 'ai'} disabled={disabled || busy !== null} title="调用一次写作模型，按模型计费；结果只作提示" onClick={() => void run('ai')}>AI 深入检查</Button>
+    </div>
+    {rules && (rules.conflicts.length
+      ? <><p className="ice-skills__note">发现 {rules.conflicts.length} 处可能冲突（{rules.skills.map(s => s.name).join(' + ')}）：</p><ConflictList conflicts={rules.conflicts} /></>
+      : <p className="ice-skills__note" role="status">没有发现明确冲突（{rules.skills.map(s => s.name).join(' + ')}）。已检查：{rules.checked.join('、')}。规则检查只认明确的说法，细微矛盾可用 AI 深入检查。</p>)}
+    {ai && <div className="ice-skills__note" role="status">
+      <strong>AI 深入检查</strong>{ai.model_id ? `（${ai.model_id}）` : ''}：{ai.conflicts.length ? `${ai.conflicts.length} 处` : '没有发现冲突'}{ai.notes ? `。${ai.notes}` : ''}
+      {ai.conflicts.length > 0 && <ul className="ice-skills__conflicts">{ai.conflicts.map((c, i) => <li key={i}>
+        <strong>{c.label}</strong>{c.severity === 'high' ? '（明显）' : ''}：
+        <span className="ice-skills__conflict-item">「{c.skill_a}」<q>{c.quote_a}</q></span>
+        <span className="ice-skills__conflict-item">「{c.skill_b}」<q>{c.quote_b}</q></span>
+        {!c.verified && <small>（原文未能在技能里逐字找到，请自行核对）</small>}
+        {c.advice && <small>{c.advice}</small>}
+      </li>)}</ul>}
+    </div>}
+  </div>;
 }

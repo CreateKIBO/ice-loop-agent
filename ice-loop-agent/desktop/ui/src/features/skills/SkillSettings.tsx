@@ -3,10 +3,11 @@ import { Banner, Button, Dialog, Input, SkeletonRows } from '../../components/ui
 import { toast } from '../../components/toast';
 import { accountStore, dirtyStore, queryClient, registerDirtyFlush, rpc, useAccountQuery, useCurrentAccount } from '../../data/client';
 import { skillSettingsStore } from '../../app/uiState';
-import { ImportSkillButton, RestoreDefaultsButton, SkillHistory, exportSkill, sourceText, type ParsedSkill, type SkillSource } from './SkillPackageTools';
+import { ConflictCheck, ImportSkillButton, RestoreDefaultsButton, SkillFiles, SkillHistory, exportSkill, sourceText, type CheckSkill, type ParsedSkill, type SkillFileRef, type SkillSource } from './SkillPackageTools';
 import '../../styles/skills.css';
 
-type Skill = { id: string; name: string; instructions: string; rules: Record<string, unknown>; version: number; source?: SkillSource; kind?: 'main' | 'addon' };
+type Skill = { id: string; name: string; instructions: string; rules: Record<string, unknown>; version: number; source?: SkillSource; kind?: 'main' | 'addon';
+  files?: SkillFileRef[] };
 // v3.16：系列绑定，缺少的键表示沿用公众号设置。
 type Binding = { main?: string | null; addons?: string[] };
 type Snapshot = { account_id: string; revision: number; state_hash: string; active_skill_id: string | null; skills: Skill[];
@@ -73,10 +74,13 @@ export function SkillSettings() {
   const uniqueName = (name: string, skills: DraftSkill[]) => skills.some(s => s.name === name) ? `${name}（${skills.length + 1}）`.slice(0, 80) : name;
   const addSkill = (id: string, skill: ParsedSkill) => {
     change(value => ({ ...value, skills: [...value.skills, { id, name: uniqueName(skill.name, value.skills), instructions: skill.instructions,
-      rulesText: JSON.stringify(skill.rules, null, 2), version: 1, source: skill.source, kind: skill.kind ?? 'main' }] }));
+      rulesText: JSON.stringify(skill.rules, null, 2), version: 1, source: skill.source, kind: skill.kind ?? 'main',
+      ...(skill.files?.length ? { files: skill.files } : {}) }] }));
     setEditing(id); setHistory(false);
   };
-  const savedSkill = (id: string) => (JSON.parse(base || '{"skills":[]}') as Draft).skills.find(s => s.id === id);
+  // 上次保存的技能（导出按钮用）；base 只在读取/保存后变化，避免每次渲染都解析整份设置。
+  const savedSkills = React.useMemo(() => (JSON.parse(base || '{"skills":[]}') as Draft).skills, [base]);
+  const savedSkill = (id: string) => savedSkills.find(s => s.id === id);
   const save = async () => {
     if (!draft || !hash || lock.current) return;
     lock.current = true; setBusy(true); setError(null); dirtyStore.markDirty(key);
@@ -151,6 +155,19 @@ export function SkillSettings() {
             })}
             {!draft.skills.some(isAddon) && <small>还没有辅助技能。编辑某个技能，把“技能类型”改为辅助技能即可叠加使用（如标题策略、审阅清单）。</small>}
           </div>
+          <ConflictCheck disabled={busy} skills={() => {
+            // v3.20：检查编辑中的公众号组合（主技能 + 已勾选的辅助技能），未保存的修改也算
+            const chosen = [draft.skills.find(s => s.id === draft.active_skill_id), ...draft.active_addon_ids.map(id => draft.skills.find(s => s.id === id))]
+              .filter((s): s is DraftSkill => Boolean(s));
+            if (!chosen.length) return '先选择主技能或勾选辅助技能';
+            const out: CheckSkill[] = [];
+            for (const s of chosen) {
+              let rules: Record<string, unknown>;
+              try { rules = JSON.parse(s.rulesText); } catch { return `「${s.name}」的检查规则不是有效 JSON`; }
+              out.push({ id: s.id, name: s.name || '未命名技能', instructions: s.instructions, kind: s.kind, rules });
+            }
+            return out;
+          }} />
           <Button size="sm" disabled={draft.skills.length >= 20} onClick={() => {
             const id = 'custom-' + crypto.randomUUID();
             change(value => ({ ...value, skills: [...value.skills, { id, name: '我的写作技能', instructions: '请按我的读者、文章目的和风格要求写作。', rulesText: '{}', version: 1 }] })); setEditing(id);
@@ -159,7 +176,7 @@ export function SkillSettings() {
             <ImportSkillButton disabled={busy || draft.skills.length >= 20} onImport={skill => addSkill('imported-' + crypto.randomUUID(), skill)} />
             <RestoreDefaultsButton disabled={busy} present={id => draft.skills.some(s => s.id === id)}
               onAdd={skill => { if (draft.skills.length < 20) addSkill(skill.id, skill); }}
-              onReplace={skill => { edit(skill.id, { name: skill.name, instructions: skill.instructions, rulesText: JSON.stringify(skill.rules, null, 2), source: skill.source }); setEditing(skill.id); setHistory(false); }} />
+              onReplace={skill => { edit(skill.id, { name: skill.name, instructions: skill.instructions, rulesText: JSON.stringify(skill.rules, null, 2), source: skill.source, files: undefined }); setEditing(skill.id); setHistory(false); }} />
           </div>
         </fieldset>
         {selected && <section className="ice-skills__editor" aria-label="编辑技能">
@@ -170,7 +187,7 @@ export function SkillSettings() {
             <Button size="sm" variant="ghost" disabled={busy || draft.skills.length >= 20} onClick={() => {
               let rules: Record<string, unknown> = {};
               try { rules = JSON.parse(selected.rulesText); } catch { /* 规则 JSON 有误时复制为空规则，原技能不受影响 */ }
-              addSkill('copy-' + crypto.randomUUID(), { name: selected.name + ' 副本', instructions: selected.instructions, rules, kind: selected.kind,
+              addSkill('copy-' + crypto.randomUUID(), { name: selected.name + ' 副本', instructions: selected.instructions, rules, kind: selected.kind, files: selected.files,
                 source: { kind: 'copy', from_skill_id: selected.id, from_version: selected.version } });
             }}>复制为新技能</Button>
             <Button size="sm" variant="ghost" disabled={busy || !savedSkill(selected.id)} title={savedSkill(selected.id) ? '导出上次保存的版本（Markdown，可再导入）' : '保存后才能导出'}
@@ -179,7 +196,7 @@ export function SkillSettings() {
           </div>
           {history && <SkillHistory skillId={selected.id} onClose={() => setHistory(false)} onLoad={detail => {
             edit(selected.id, { name: detail.name, instructions: detail.instructions, rulesText: JSON.stringify(detail.rules, null, 2),
-              source: { kind: 'restore', from_version: detail.version } });
+              source: { kind: 'restore', from_version: detail.version }, files: detail.files?.length ? detail.files : undefined });
             setHistory(false);
             toast.info({ title: `已载入 v${detail.version}`, detail: '核对后点“保存设置”，会作为新版本保存。' });
           }} />}
@@ -193,6 +210,7 @@ export function SkillSettings() {
             <option value="addon">辅助技能：可叠加的局部方法，如标题策略、审阅清单</option>
           </select></label>
           <label>写作指令<textarea aria-label="写作指令" disabled={busy} rows={10} maxLength={12000} value={selected.instructions} onChange={event => edit(selected.id, { instructions: event.target.value })} /></label>
+          <SkillFiles files={selected.files ?? []} disabled={busy} onChange={files => edit(selected.id, { files: files.length ? files : undefined })} />
           <label>固定结尾标题（留空不要求）<Input disabled={busy || !parsed} maxLength={50} value={typeof parsed?.required_ending_heading === 'string' ? parsed.required_ending_heading : ''} onChange={event => updateRule('required_ending_heading', event.target.value)} /></label>
           <label className="ice-skills__check"><input type="checkbox" disabled={busy || !parsed} checked={parsed?.numbered_headings === true} onChange={event => updateRule('numbered_headings', event.target.checked)} />章节按中文数字编号</label>
           <details><summary>高级检查规则（JSON）</summary>

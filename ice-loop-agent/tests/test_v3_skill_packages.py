@@ -82,7 +82,10 @@ class TestParse(unittest.TestCase):
         self.assertEqual(result['skill']['name'], '教程方法 v2')
         self.assertEqual(result['skill']['rules'], {'code_blocks': [0, 3]})
         self.assertEqual(result['skill']['source']['format'], 'zip')
-        self.assertEqual(result['ignored_files'], ['references/style.md', 'scripts/run.py'])
+        self.assertEqual(result['ignored_files'], ['scripts/run.py'])
+        # v3.19：文本参考文件一起导入
+        self.assertEqual([(f['path'], f['kind'], f['stages']) for f in result['files']],
+                         [('references/style.md', 'reference', ['plan', 'write', 'review'])])
         self.assertTrue(any('不会导入，也不会运行' in w for w in result['warnings']))
 
     def test_zip_rejects_unsafe_entries(self):

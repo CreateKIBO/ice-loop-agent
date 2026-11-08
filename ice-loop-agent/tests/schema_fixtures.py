@@ -1,8 +1,17 @@
 """Explicit synthetic old stores for migration acceptance; never use on user data."""
 def downgrade_to_19(db):
     version=db.execute('PRAGMA user_version').fetchone()[0]
-    if version!=26:
+    if version!=30:
         raise AssertionError('Synthetic schema fixture must be reviewed when latest schema changes')
+    db.execute('DROP TABLE wechat_draft_groups')
+    db.execute('DELETE FROM schema_migrations WHERE version=30')
+    for table in ('wechat_operations', 'wechat_drafts', 'wechat_assets', 'wechat_config'):
+        db.execute(f'DROP TABLE {table}')
+    db.execute('DELETE FROM schema_migrations WHERE version=29')
+    db.execute('DROP TABLE writing_skill_files')
+    db.execute('DELETE FROM schema_migrations WHERE version=28')
+    db.execute('DROP TABLE conversation_skill_bindings')
+    db.execute('DELETE FROM schema_migrations WHERE version=27')
     db.execute('DROP TABLE writing_skill_versions')
     db.execute('DELETE FROM schema_migrations WHERE version=26')
     db.execute('DROP TABLE trial_events')

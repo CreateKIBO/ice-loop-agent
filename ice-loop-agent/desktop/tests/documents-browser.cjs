@@ -54,6 +54,12 @@ async function run() {
       if(method==='documents.image_import_data'){if(window.holdImage)await new Promise(resolve=>window.releaseImage=resolve);return structuredClone(image);}
       if(method==='documents.image_view')return structuredClone(image);
       if(method==='publications.list')return[];
+      if(method==='wechat.status')return window.wechatStatus||{configured:false,appid:'',secret_set:false,last_check_at:null,last_check_ok:null,last_check_message:''};
+      if(method==='wechat.draft_sync'){window.syncCalls=(window.syncCalls||[]).concat([p]);return p.mode==='new'
+        ?{media_id:'DRAFT9',action:'created',version_id:p.version_id,uploaded:1,reused:0,warnings:[],note:'已同步到草稿箱，还没有发布'}
+        :{conflict:true,media_id:'DRAFT1',message:'后台草稿的正文被修改过'};}
+      if(method==='documents.export_bundle'){if(window.holdExport)await new Promise(resolve=>window.releaseExport=resolve);
+        return{version_id:p.version_id,destination:p.destination,complete:true,images:0,missing_images:0};}
       if(method==='documents.versions')return[{version_id:'ver-original',producer:'user',created_at:row.working_updated_at,word_count:4,images:0,note:'原版本'}];
       if(method==='documents.import_original')return{import_id:p.import_id,original:'<p>完整原件</p><script>never execute()</script>'};
       if(method==='documents.commit_version')return{version_id:'ver-'+row.revision,created:true};
@@ -229,6 +235,50 @@ async function run() {
     assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.image_import_data').length),1,
       'only the already dispatched import may finish; later files must not import after leaving');
     assert.equal(await page.evaluate(()=>window.calls.some(c=>c.method==='documents.save_working')),false);
+  });
+  // v3.21 导出目录选择与导出期间离开/切号
+  const openDelivery=async()=>{
+    await page.evaluate(()=>{window.cancelled=[];window.ice.cancelExportDir=async dir=>{window.cancelled.push(dir);};
+      window.ice.chooseExportDir=()=>new Promise(resolve=>{window.releaseDir=resolve;});});
+    await page.getByRole('button',{name:'手机预览与交付',exact:true}).click();
+    await page.getByRole('button',{name:'导出图文包',exact:true}).click();
+    await page.waitForFunction(()=>typeof window.releaseDir==='function');
+  };
+  await check('export_dir_choice_cancelled_on_account_switch',async()=>{
+    await fresh();await openDelivery();
+    await page.evaluate(()=>window.switchAccount('other-owned'));
+    await page.getByRole('button',{name:'重新打开',exact:true}).waitFor();
+    await page.evaluate(()=>window.releaseDir('/owned/export'));await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.export_bundle').length),0,
+      'a directory chosen for the old account must not start an export');
+    assert.deepEqual(await page.evaluate(()=>window.cancelled),['/owned/export']);
+  });
+  await check('export_result_after_leaving_stays_with_owner',async()=>{
+    await fresh();await page.evaluate(()=>window.holdExport=true);await openDelivery();
+    await page.evaluate(()=>window.releaseDir('/owned/export'));
+    await page.waitForFunction(()=>typeof window.releaseExport==='function');
+    await page.getByRole('button',{name:'返回文章列表',exact:true}).click();
+    await page.getByRole('button',{name:'重新打开',exact:true}).waitFor();
+    await page.evaluate(()=>{window.holdExport=false;window.releaseExport();});
+    await page.getByText('「第一篇」的图文包已导出',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.calls.filter(c=>c.method==='documents.export_bundle').map(c=>[c.p.account_id,c.p.destination])),
+      [['owned','/owned/export']]);
+    assert.equal(await page.evaluate(()=>window.cancelled.length),0,'a finished export keeps its approval');
+    assert.equal(await page.getByText(/已导出到/).count(),0);
+  });
+  // v3.22 同步到公众号草稿箱
+  await check('wechat_sync_needs_config_then_handles_conflict',async()=>{
+    await fresh();await page.getByRole('button',{name:'手机预览与交付',exact:true}).click();
+    await page.getByRole('button',{name:'设置公众号接口',exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:'同步到草稿箱',exact:true}).isDisabled(),true);
+    await fresh();await page.evaluate(()=>window.wechatStatus={configured:true,appid:'wx1234567890abcdef',secret_set:true,last_check_at:null,last_check_ok:true,last_check_message:'',draft:null,unknown_operation:null});
+    await page.getByRole('button',{name:'手机预览与交付',exact:true}).click();
+    await page.getByRole('button',{name:'同步到草稿箱',exact:true}).click();
+    await page.getByText('后台草稿的正文被修改过').waitFor();
+    await page.getByRole('button',{name:'另建一篇草稿',exact:true}).click();
+    await page.getByText('已新建草稿',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.syncCalls.map(c=>[c.account_id,c.mode||'auto',Boolean(c.version_id)])),[['owned','auto',true],['owned','new',true]]);
+    assert.equal(await page.getByRole('button',{name:'登记一次发布',exact:true}).isDisabled(),false,'a synced draft counts as a delivery');
   });
   assert.deepEqual(report.errors,[]);
 }

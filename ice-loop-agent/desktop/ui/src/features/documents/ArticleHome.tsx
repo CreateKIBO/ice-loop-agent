@@ -20,6 +20,9 @@ import { DeleteForeverDialog, trashDocument } from "./documentDelete";
 import { SkillPicker, type SkillBinding } from "./DocumentSkills";
 import "../../styles/documents.css";
 
+// v3.24 多图文：对话框按需加载，不进首页主包
+const WeChatGroupDialog = React.lazy(() => import("./WeChatGroupDialog").then(module => ({ default: module.WeChatGroupDialog })));
+
 // 兼容旧引用：导航辅助函数已移到 documentNav.ts（避免左栏静态引用整个首页模块，破坏按需加载）。
 export { createBlankDocument, openDocument };
 
@@ -32,6 +35,8 @@ async function readBase64(file: File): Promise<string> {
   return btoa(binary);
 }
 
+
+const PAGE = 60;
 
 export function ArticleHome() {
   const account = useCurrentAccount();
@@ -47,6 +52,9 @@ export function ArticleHome() {
   const dialog = articleCreateStore.use();
   const [creating, setCreating] = React.useState(false);
   React.useEffect(() => { setLifecycle("active"); setView("list"); setSelected(new Set()); setQuery(""); }, [account]);
+  // v3.18：文章多时分批渲染（每行带布局动画，几百行一次挂载会明显卡顿）；换视图/搜索/公众号时回到第一批。
+  const [limit, setLimit] = React.useState(PAGE);
+  React.useEffect(() => { setLimit(PAGE); }, [account, lifecycle, deferred]);
 
   const blank = async () => {
     if (creating) return;
@@ -165,13 +173,18 @@ export function ArticleHome() {
       )}
       <ul className="ice-doc-list" aria-label="文章列表">
         <AnimatePresence initial={false}>
-          {documents.map(item => <motion.li key={item.document_id} layout="position" initial={{ opacity: 0, y: 4 }}
+          {documents.slice(0, limit).map(item => <motion.li key={item.document_id} layout="position" initial={{ opacity: 0, y: 4 }}
                                             animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }}>
             <DocumentRow item={item} trashed={lifecycle === "trashed"} selected={selected.has(item.document_id)}
               onSelect={() => setSelected(previous => { const next = new Set(previous); if (next.has(item.document_id)) next.delete(item.document_id); else next.add(item.document_id); return next; })} />
           </motion.li>)}
         </AnimatePresence>
       </ul>
+      {documents.length > limit && <div className="ice-doc-row ice-doc-more">
+        <span className="ice-doc-muted">已显示 {limit} / {documents.length} 篇</span>
+        <Button size="sm" variant="ghost" onClick={() => setLimit(value => value + PAGE)}>再显示 {Math.min(PAGE, documents.length - limit)} 篇</Button>
+        <Button size="sm" variant="ghost" onClick={() => setLimit(documents.length)}>全部显示</Button>
+      </div>}
       {lifecycle === "active" && legacy.length > 0 && <section className="ice-doc-legacy-list">
         <h2>旧稿件 <span className="ice-doc-muted">· {legacy.length}</span></h2>
         <p className="ice-doc-muted">旧草稿和旧制作任务在打开时接入为独立文章，原数据保持不变；旧任务的审批和运行记录只读保留。</p>
@@ -203,6 +216,7 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
   const [series, setSeries] = React.useState("");
   const [date, setDate] = React.useState("");
   const [forever, setForever] = React.useState<string[] | "all" | null>(null);
+  const [group, setGroup] = React.useState<string[] | null>(null);
   const run = async (action: string, extra: Record<string, unknown> = {}, label = "已完成") => {
     if (!selected.size) return;
     setBusy(true);
@@ -243,7 +257,13 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
             <Button size="sm" variant="ghost" disabled={!date || busy} onClick={() => void run("set_planned", { planned_date: date }, "已排期")}>排期</Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("clear_planned", {}, "已取消排期")}>取消排期</Button>
           </span>
+          <Button size="sm" variant="ghost" disabled={busy || selected.size < 2 || selected.size > 8}
+                  title={selected.size < 2 ? "选 2 到 8 篇文章，合成一篇多图文草稿" : selected.size > 8 ? "多图文最多 8 篇" : "按列表顺序合成多图文草稿，可在对话框里调整"}
+                  onClick={() => setGroup(all.filter(id => selected.has(id)))}>合成多图文</Button>
         </>}
+      {group && <React.Suspense fallback={null}>
+        <WeChatGroupDialog open documentIds={group} onClose={() => setGroup(null)} onDone={() => { setGroup(null); onSelect(new Set()); }} />
+      </React.Suspense>}
     </div>
   );
 }

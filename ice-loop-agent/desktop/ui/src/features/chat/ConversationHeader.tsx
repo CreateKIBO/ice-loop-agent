@@ -6,6 +6,7 @@ import { refreshAfterWrite } from "../../data/receipts";
 import { toast } from "../../components/toast";
 import type { ChatResult } from '../../data/workbenchResponses';
 import { useBootstrap } from "../../app/modelBootstrap";
+import { ConversationSkillChip } from "./ConversationSkills";
 
 export function ConversationHeader({ conversation, streaming, onFind, findOpen }: {
   conversation?: ChatResult['conversation']; streaming: boolean; onFind?: () => void; findOpen?: boolean;
@@ -44,6 +45,7 @@ export function ConversationHeader({ conversation, streaming, onFind, findOpen }
           写作模型：{writer?`${writer.provider} · ${writer.model_id}`:'尚未读取'}
         </span>
         {!selection&&<span className="ice-composer-note">未关联期号——讨论不会自动创建文章或占用期号</span>}
+        {conversation&&<ConversationSkillChip key={conversation.id} conversationId={conversation.id} />}
       </div>
       <span className="ice-conversation-header__status"><span className={"ice-dot" + (streaming ? " ice-dot--ok" : "")} aria-hidden />{streaming ? "正在回复" : "已就绪"}</span>
       {onFind && (

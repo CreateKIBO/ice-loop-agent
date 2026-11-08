@@ -498,13 +498,29 @@ button.ice-doc-chip { cursor: pointer; }
 .ice-btn.ice-doc-danger-text:hover:not(:disabled) { background: var(--ice-danger-bg); }
 .ice-btn.ice-doc-danger-text:disabled { color: var(--ice-text-secondary); }
 
-/* v3.16 本篇写作技能 */
-.ice-doc-skillchip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.ice-doc-skillpick { margin: 0; padding: 10px 12px; border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-md); display: grid; gap: 8px; min-width: 0; }
-.ice-doc-skillpick > label { display: grid; gap: 4px; }
-.ice-doc-skillpick select { min-width: 0; max-width: 100%; height: var(--ice-control-height); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md);
-  background: var(--ice-surface); color: var(--ice-text); font: inherit; padding: 0 8px; }
-.ice-doc-skillpick__addons { display: grid; gap: 4px; }
-.ice-doc-skillprev { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--ice-radius-md); background: var(--ice-surface-muted); overflow-wrap: anywhere; }
-.ice-doc-skillprev p { margin: 0; }
-.ice-doc-skillprev__warn { margin: 4px 0 0; padding-left: 18px; color: var(--ice-warning, #9a6700); }
+.ice-doc-more { justify-content: center; padding: 6px 0 2px; gap: 8px; }
+
+/* v3.22 同步到公众号草稿箱 */
+.ice-doc-wechat { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--ice-border-subtle); min-width: 0; }
+.ice-doc-wechat .ice-doc-muted { margin: 0; overflow-wrap: anywhere; }
+
+/* v3.23 封面裁切与留言 */
+.ice-doc-crop { display: grid; grid-template-columns: 2.35fr 1fr; gap: 10px; align-items: end; min-width: 0; }
+.ice-doc-crop__item { display: grid; gap: 4px; min-width: 0; }
+.ice-doc-crop__preview { width: 100%; border-radius: var(--ice-radius-sm, 4px); background-repeat: no-repeat; background-color: var(--ice-surface-muted);
+  border: 1px solid var(--ice-border-subtle); }
+.ice-doc-crop__slider { display: grid; gap: 2px; font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+.ice-doc-crop__slider input { width: 100%; }
+.ice-doc-crop > .ice-link-btn { grid-column: 1 / -1; justify-self: start; }
+.ice-doc-settings select { height: var(--ice-control-height); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); color: var(--ice-text); font: inherit; padding: 0 8px; max-width: 100%; }
+
+/* v3.24 多图文草稿 */
+.ice-doc-group { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ice-doc-group__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--ice-border-subtle);
+  border-radius: var(--ice-radius-md); background: var(--ice-surface); }
+.ice-doc-group__item.is-blocked { border-color: var(--ice-danger); }
+.ice-doc-group__pos { flex: none; min-width: 3.5em; font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+.ice-doc-group__main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ice-doc-group__main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ice-doc-wechat__group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

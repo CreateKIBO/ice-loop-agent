@@ -25,6 +25,9 @@ MAX_INSTRUCTIONS = 12_000    # 与 WritingSkills.save 一致
 MAX_ZIP = 1_000_000          # ZIP 原始字节
 MAX_ZIP_ENTRIES = 100
 MAX_ZIP_UNPACKED = 4_000_000
+MAX_PACKAGE_FILES = 10           # v3.19 参考资料与示例：与单个技能的上限一致
+MAX_PACKAGE_FILE_CHARS = 20_000
+MAX_PACKAGE_TOTAL_CHARS = 60_000
 RULES_FENCE = re.compile(r'(?:<!--[^\n]*-->\n)?```json ice-skill-rules\n(.*?)\n```\n?', re.S)
 SCRIPT_EXT = {'.py', '.js', '.mjs', '.cjs', '.ts', '.sh', '.ps1', '.bat', '.cmd', '.exe', '.dll', '.so', '.rb', '.pl'}
 TEXT_EXT = {'.md', '.markdown', '.txt'}
@@ -56,6 +59,34 @@ def to_markdown(skill: dict, *, version: int | None = None) -> dict:
     text = '\n'.join(lines)
     return {'file_name': f'{_safe_name(name)}-v{int(version or skill.get("version") or 1)}.md', 'markdown': text,
             'sha256': hashlib.sha256(text.encode('utf-8')).hexdigest()}
+
+
+def to_zip(skill: dict, files: list[tuple[dict, str]], *, version: int | None = None) -> dict:
+    """v3.19 带参考文件的技能导出为 ZIP：SKILL.md、skill.json、references/、examples/。可原样再导入。"""
+    exported = to_markdown(skill, version=version)
+    number = int(version or skill.get('version') or 1)
+    buffer = io.BytesIO()
+    used: set[str] = set()
+    entries = []
+    for meta, text in files:
+        folder = 'examples' if meta['kind'] == 'example' else 'references'
+        base = _safe_name(posixpath.splitext(meta['name'])[0]) or 'file'
+        ext = posixpath.splitext(meta['name'])[1].lower() if posixpath.splitext(meta['name'])[1].lower() in TEXT_EXT else '.md'
+        path, n = f'{folder}/{base}{ext}', 2
+        while path in used:
+            path, n = f'{folder}/{base}-{n}{ext}', n + 1
+        used.add(path)
+        entries.append((path, text, {'path': path, 'kind': meta['kind'], 'stages': meta['stages']}))
+    manifest = {'format': FORMAT, 'name': skill['name'], 'version': number, 'kind': skill.get('kind') or 'main',
+                'instructions': 'SKILL.md', 'rules': skill.get('rules') or {}, 'files': [e[2] for e in entries]}
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('SKILL.md', exported['markdown'])
+        archive.writestr('skill.json', json.dumps(manifest, ensure_ascii=False, indent=2))
+        for path, text, _ in entries:
+            archive.writestr(path, text)
+    raw = buffer.getvalue()
+    return {'file_name': f'{_safe_name(skill["name"])}-v{number}.zip', 'data_base64': base64.b64encode(raw).decode(),
+            'sha256': hashlib.sha256(raw).hexdigest(), 'files': len(entries)}
 
 
 # ------------------------------------------------------------------ parse
@@ -217,13 +248,46 @@ def parse_zip(raw: bytes, file_name: str = '') -> dict:
         main = next((n for n in roots if n.lower() == 'skill.md'), None) or (roots[0] if len(roots) == 1 else None)
     if not main:
         raise SkillPackageError('技能包里没有 SKILL.md')
-    ignored = sorted(n for n in files if n not in (main, manifest_name))
-    scripts = [n for n in ignored if posixpath.splitext(n)[1].lower() in SCRIPT_EXT]
+    rest = sorted(n for n in files if n not in (main, manifest_name))
+    scripts = [n for n in rest if posixpath.splitext(n)[1].lower() in SCRIPT_EXT]
     if scripts:
         warnings.append(f'包含 {len(scripts)} 个脚本或程序文件，不会导入，也不会运行')
+    # v3.19：文本类的参考资料与示例一起导入（只取文字；类型与阶段来自 skill.json，否则按目录推断）
+    declared = {str(f.get('path', '')).replace('\\', '/'): f for f in meta.get('files') or [] if isinstance(f, dict)}
+    materials, ignored, total = [], list(scripts), 0
+    for name in (n for n in rest if n not in scripts):
+        if posixpath.splitext(name)[1].lower() not in TEXT_EXT:
+            ignored.append(name)
+            continue
+        if len(materials) >= MAX_PACKAGE_FILES:
+            ignored.append(name)
+            warnings.append(f'参考文件超过 {MAX_PACKAGE_FILES} 个，{name} 未导入')
+            continue
+        try:
+            text = _decode(files[name], name, warnings).replace('\r\n', '\n').strip()
+        except SkillPackageError:
+            ignored.append(name)
+            warnings.append(f'{name} 不是可读的文本，未导入')
+            continue
+        if not text:
+            ignored.append(name)
+            continue
+        if len(text) > MAX_PACKAGE_FILE_CHARS or total + len(text) > MAX_PACKAGE_TOTAL_CHARS:
+            ignored.append(name)
+            warnings.append(f'{name} 有 {len(text)} 字，超过单个 {MAX_PACKAGE_FILE_CHARS} 字或合计 {MAX_PACKAGE_TOTAL_CHARS} 字的上限，未导入')
+            continue
+        spec = declared.get(name, {})
+        lowered = name.lower()
+        kind = spec.get('kind') if spec.get('kind') in ('reference', 'example') else \
+            'example' if lowered.startswith(('examples/', 'example/', 'samples/')) or '/examples/' in lowered else 'reference'
+        stages = spec.get('stages') if isinstance(spec.get('stages'), list) and spec['stages'] and \
+            not set(spec['stages']) - {'plan', 'write', 'review'} else (['write'] if kind == 'example' else ['plan', 'write', 'review'])
+        total += len(text)
+        materials.append({'name': posixpath.basename(name)[:120], 'path': name, 'kind': kind,
+                          'stages': [x for x in ('plan', 'write', 'review') if x in stages], 'text': text, 'chars': len(text)})
     others = [n for n in ignored if n not in scripts]
     if others:
-        warnings.append(f'{len(others)} 个参考或示例文件首期不导入，需要时请把要点写进指令正文')
+        warnings.append(f'{len(others)} 个非文本或超限文件未导入')
     fields = {k: meta[k] for k in ('name', 'version', 'description', 'format', 'kind') if isinstance(meta.get(k), (str, int))}
     if 'rules' in meta:
         fields['rules'] = meta['rules'] if isinstance(meta['rules'], dict) else None
@@ -233,7 +297,8 @@ def parse_zip(raw: bytes, file_name: str = '') -> dict:
         fields[key] = '1'
     result = parse_markdown(_decode(files[main], main, warnings), file_name or main, warnings=warnings, meta=fields)
     result['skill']['source']['format'] = 'zip'
-    result['ignored_files'] = ignored[:100]
+    result['ignored_files'] = sorted(ignored)[:100]
+    result['files'] = materials
     return result
 
 
@@ -261,4 +326,5 @@ def parse(params: dict) -> dict:
         raise SkillPackageError('请选择要导入的 Markdown 或 ZIP 文件')
     result['skill']['source']['sha256'] = digest
     result.setdefault('ignored_files', [])
+    result.setdefault('files', [])
     return result

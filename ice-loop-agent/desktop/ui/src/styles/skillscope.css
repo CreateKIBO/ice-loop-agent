@@ -1,0 +1,29 @@
+/* v3.16/v3.17 写作技能作用域（文章、AI 起草、助手会话共用） */
+.ice-skillscope__chip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; flex: none;
+  padding: 2px 8px; border: 1px solid var(--ice-border); border-radius: 999px; background: var(--ice-surface); color: var(--ice-text-secondary);
+  font: inherit; font-size: var(--ice-font-size-sm); line-height: 1.6; }
+.ice-skillscope__chip:hover { color: var(--ice-text); border-color: var(--ice-border-strong); }
+.ice-skillscope__chip.is-own { color: var(--ice-signal-blue); border-color: var(--ice-signal-blue); }
+.ice-skillscope__chip:focus-visible { outline: none; box-shadow: var(--ice-focus-ring); }
+.ice-skillscope__form { display: grid; gap: 12px; min-width: 0; }
+.ice-skillscope__muted { color: var(--ice-text-secondary); font-size: var(--ice-font-size-sm); }
+p.ice-skillscope__muted { margin: 0; }
+.ice-skillscope__pick { margin: 0; padding: 10px 12px; border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-md); display: grid; gap: 8px; min-width: 0; }
+.ice-skillscope__pick > label { display: grid; gap: 4px; }
+.ice-skillscope__pick select { min-width: 0; max-width: 100%; height: var(--ice-control-height); border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); color: var(--ice-text); font: inherit; padding: 0 8px; }
+.ice-skillscope__addons { display: grid; gap: 4px; }
+.ice-skillscope__check { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.ice-skillscope__prev { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--ice-radius-md); background: var(--ice-surface-muted); overflow-wrap: anywhere; }
+.ice-skillscope__prev p { margin: 0; }
+.ice-skillscope__warn { margin: 4px 0 0; padding-left: 18px; color: var(--ice-warning); }
+@media (prefers-reduced-motion: reduce) { .ice-skillscope__chip { transition: none; } }
+.ice-conversation-header__identity > .ice-skillscope__chip { display: inline-block; margin-top: 4px; max-width: 100%; }
+.ice-skillscope__chip { max-width: min(260px, 100%); }
+.ice-skillscope__warn-block { display: grid; gap: 4px; color: var(--ice-warning); }
+.ice-skillscope__warn-block .ice-skills__conflicts { color: var(--ice-text); }
+/* v3.20 冲突列表（设置页与本篇/本会话预览共用） */
+.ice-skills__conflicts { margin: 0; padding-left: 18px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.ice-skills__conflicts small { display: block; color: var(--ice-text-secondary); }
+.ice-skills__conflict-item { display: block; }
+.ice-skills__conflict-item q { color: var(--ice-text); }

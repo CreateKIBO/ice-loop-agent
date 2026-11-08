@@ -79,6 +79,7 @@ def main() -> int:
     parser.add_argument('--images', type=int, default=30)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--repeat', type=int, default=5)
+    parser.add_argument('--list-docs', type=int, default=200, help='v3.18：文章列表基准使用的文章篇数（0 跳过）')
     parser.add_argument('--workdir', help='临时目录的父目录（Windows 上导出图文包需非 C 盘）')
     parser.add_argument('--out', help='结果 JSON 另存路径')
     parser.add_argument('--keep', action='store_true', help='保留临时运行目录便于检查')
@@ -123,6 +124,15 @@ def main() -> int:
         samples['copy_payload_embed']['html_kb'] = round(len(payload['html']) / 1024)
         timed(samples, 'markdown_projection', lambda: content_to_md(content), args.repeat)
         timed(samples, 'long_image_page', lambda: docs.long_image_page({'document_id': document_id, 'version_id': version_id, 'width': 375}), 3)
+        if args.list_docs > 0:  # v3.18 文章列表（首页、左栏、生成中轮询）
+            para = {'type': 'paragraph', 'content': [{'type': 'text', 'text': '列表基准正文。' * 40}]}
+            for i in range(args.list_docs - 1):
+                made = docs.create({'kind': 'blank', 'title': f'列表基准 {i}'})
+                docs.save_working({'document_id': made['document_id'], 'base_revision': made['revision'],
+                                   'content': {'schema': 1, 'doc': {'type': 'doc', 'content': [dict(para) for _ in range(40)]}, 'style': {}}})
+            timed(samples, 'list_documents_cold', lambda: docs.list({'include_legacy': False}))
+            timed(samples, 'list_documents', lambda: docs.list({'include_legacy': False}), args.repeat)
+            samples['list_documents']['documents'] = args.list_docs
         try:
             from ice_agent.paths import assert_not_c_drive
             target = root / 'export'

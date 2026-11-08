@@ -20,6 +20,15 @@ module.exports = Object.freeze([
   'skills.versions', 'skills.version', 'skills.defaults', 'skills.export', 'skills.import_parse',
   // v3.16 技能组合与作用域：解析预览（本篇 → 系列 → 公众号）
   'skills.resolve',
+  // v3.17 会话技能
+  'skills.conversation_binding',
+  // v3.19 技能参考资料与示例
+  'skills.files_add', 'skills.file_get',
+  // v3.20 技能冲突检查（本地规则 / AI 深入检查）
+  'skills.check_conflicts', 'skills.check_conflicts_ai',
+  // v3.22 同步到公众号草稿箱（不含发布）
+  'wechat.status', 'wechat.configure', 'wechat.test', 'wechat.draft_sync', 'wechat.resolve_unknown',
+  'wechat.group_preview', 'wechat.group_sync',
   // v3 普通文章 / 收藏 / 人工发布登记（documents.copy_payload、delivery_record、image_import 只供主进程，不在此列）
   'documents.list', 'documents.create', 'documents.get', 'documents.save_working', 'documents.commit_version',
   'documents.versions', 'documents.version', 'documents.restore', 'documents.update_meta', 'documents.trash',

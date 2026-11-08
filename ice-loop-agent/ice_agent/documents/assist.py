@@ -195,10 +195,17 @@ class DocumentAssist:
         return context
 
     @staticmethod
-    def profile_context(profile: dict | None) -> dict:
-        """当前公众号写作技能与文章规则（只读资料，有界）。"""
+    def profile_context(profile: dict | None, action: str | None = None) -> dict:
+        """当前公众号写作技能与文章规则（只读资料，有界）。v3.19：技能参考资料按动作所属阶段另给（≤6000 字）。"""
+        from ..skills import materials_text, skill_for_prompt
         out: dict = {}
         profile = profile or {}
+        snapshot = profile.get('writing_skill_snapshot')
+        if snapshot and snapshot.get('materials'):
+            profile = {**profile, 'writing_skill_snapshot': skill_for_prompt(snapshot)}
+            text = materials_text(snapshot, 'plan' if action == 'image_slots' else 'write', limit=6000)
+            if text:
+                out['skill_materials'] = text.strip()
         for key, source, limit in (('writing_skill', 'writing_skill_snapshot', 6000), ('house_rules', 'article', 3000)):
             value = profile.get(source)
             if value:
@@ -445,13 +452,14 @@ class DocumentAssist:
     def run(self, proposal_id: str, request: dict, generate, profile: dict | None = None) -> None:
         """后台执行：generate(LLMRequest) -> LLMResponse；结果只写入提案，不碰正文。"""
         try:
-            extra = self.profile_context(profile)
+            extra = self.profile_context(profile, request.get('action'))
             if extra:
                 request = {**request, 'context': {**request['context'], **extra}}
                 row = self.store.conn.execute('SELECT context_json FROM document_proposals WHERE proposal_id=?',
                                               (proposal_id,)).fetchone()
                 manifest = json.loads(row['context_json']) if row else {}
-                manifest.update(writing_skill='writing_skill' in extra, house_rules='house_rules' in extra)
+                manifest.update(writing_skill='writing_skill' in extra, house_rules='house_rules' in extra,
+                                skill_materials='skill_materials' in extra)
                 with self.store.transaction():
                     self.store.conn.execute('UPDATE document_proposals SET context_json=? WHERE proposal_id=?',
                                             (json.dumps(manifest, ensure_ascii=False), proposal_id))

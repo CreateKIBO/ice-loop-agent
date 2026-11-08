@@ -561,15 +561,20 @@ function registerIPC() {
       || (params.version !== undefined && !Number.isInteger(params.version))) throw Error('无效的导出请求');
     const exported = await request('skills.export', { account_id: params.account_id, skill_id: params.skill_id,
       ...(params.version !== undefined ? { version: params.version } : {}) });
+    // v3.19：带参考资料/示例的技能导出为 ZIP（引擎给 base64），否则为 Markdown。
+    const zip = typeof exported.data_base64 === 'string';
     const choice = await dialog.showSaveDialog(window, { title: '导出写作技能', defaultPath: path.join(app.getPath('documents'), exported.file_name),
-      filters: [{ name: 'Markdown', extensions: ['md'] }] });
+      filters: [zip ? { name: 'ZIP', extensions: ['zip'] } : { name: 'Markdown', extensions: ['md'] }] });
     if (choice.canceled) return null;
-    fs.writeFileSync(choice.filePath, exported.markdown, 'utf8');
+    if (zip) fs.writeFileSync(choice.filePath, Buffer.from(exported.data_base64, 'base64'));
+    else fs.writeFileSync(choice.filePath, exported.markdown, 'utf8');
     return { file: choice.filePath };
   });
   ipcMain.handle('ice:save-key', async (event, provider, key) => {
     assertSender(event);
-    if (!['qwen', 'deepseek', 'kimi', 'bigmodel', 'ark','minimax'].includes(provider) || typeof key !== 'string' || key.length > 4096) throw new Error('凭据无效');
+    // v3.22：公众号 AppSecret 用 wechat-<公众号标识> 保存，同样经系统凭据加密
+    if (!(['qwen', 'deepseek', 'kimi', 'bigmodel', 'ark','minimax'].includes(provider) || /^wechat-[A-Za-z0-9_-]{1,80}$/.test(String(provider)))
+        || typeof key !== 'string' || key.length > 4096) throw new Error('凭据无效');
     if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭据加密不可用，请改用环境变量配置');
     const file = path.join(runtime, 'credentials.json');
     let stored={};if(fs.existsSync(file)){

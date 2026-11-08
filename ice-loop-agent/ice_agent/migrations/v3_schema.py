@@ -126,3 +126,76 @@ def _writing_skill_versions(conn: sqlite3.Connection) -> None:
         " content_hash TEXT NOT NULL, source_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,"
         " PRIMARY KEY(account_id, skill_id, version))"
     )
+
+
+@migration(27, "v3.17 会话技能：助手会话可选主技能与辅助技能，之后的回复按会话设置")
+def _conversation_skill_bindings(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE conversation_skill_bindings ("
+        " account_id TEXT NOT NULL, conversation_id TEXT NOT NULL, binding_json TEXT NOT NULL, updated_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, conversation_id))"
+    )
+
+
+@migration(28, "v3.19 技能参考资料与示例：文件正文单独保存（不可变），技能与历史版本只记引用")
+def _writing_skill_files(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE writing_skill_files ("
+        " account_id TEXT NOT NULL, file_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,"
+        " text TEXT NOT NULL, sha256 TEXT NOT NULL, chars INTEGER NOT NULL, created_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, file_id))"
+    )
+    conn.execute("ALTER TABLE writing_skill_versions ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'")
+
+
+@migration(29, "v3.22 同步到公众号草稿箱：接口配置、远端素材映射、草稿同步记录与外部写入日志；交付记录增加 wechat_draft")
+def _wechat_drafts(conn: sqlite3.Connection) -> None:
+    # SQLite 不能修改 CHECK：重建交付记录表，原数据逐行保留。
+    conn.execute(
+        "CREATE TABLE document_deliveries_v29 ("
+        " delivery_id TEXT PRIMARY KEY, document_id TEXT NOT NULL, account_id TEXT NOT NULL,"
+        " version_id TEXT NOT NULL, delivery_hash TEXT NOT NULL,"
+        " kind TEXT NOT NULL CHECK(kind IN ('copy_html','copy_text','export','wechat_draft')),"
+        " destination TEXT NOT NULL DEFAULT '', issues_json TEXT NOT NULL DEFAULT '[]',"
+        " created_at TEXT NOT NULL)"
+    )
+    conn.execute("INSERT INTO document_deliveries_v29 SELECT delivery_id, document_id, account_id, version_id, delivery_hash,"
+                 " kind, destination, issues_json, created_at FROM document_deliveries")
+    conn.execute("DROP TABLE document_deliveries")
+    conn.execute("ALTER TABLE document_deliveries_v29 RENAME TO document_deliveries")
+    conn.execute("CREATE INDEX idx_document_deliveries ON document_deliveries(document_id, created_at)")
+    conn.execute(
+        "CREATE TABLE wechat_config ("
+        " account_id TEXT PRIMARY KEY, appid TEXT NOT NULL, updated_at TEXT NOT NULL,"
+        " last_check_at TEXT, last_check_ok INTEGER, last_check_message TEXT NOT NULL DEFAULT '')"
+    )
+    conn.execute(  # 本地图片 → 远端地址/素材。按公众号 + AppID 隔离，不跨账号复用远端 ID。
+        "CREATE TABLE wechat_assets ("
+        " account_id TEXT NOT NULL, appid TEXT NOT NULL, sha256 TEXT NOT NULL,"
+        " kind TEXT NOT NULL CHECK(kind IN ('content','cover')),"
+        " remote_url TEXT NOT NULL DEFAULT '', media_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,"
+        " PRIMARY KEY(account_id, appid, sha256, kind))"
+    )
+    conn.execute(
+        "CREATE TABLE wechat_drafts ("
+        " account_id TEXT NOT NULL, document_id TEXT NOT NULL, appid TEXT NOT NULL, media_id TEXT NOT NULL,"
+        " version_id TEXT NOT NULL, delivery_hash TEXT NOT NULL, remote_text_hash TEXT NOT NULL DEFAULT '',"
+        " synced_at TEXT NOT NULL, PRIMARY KEY(account_id, document_id, appid))"
+    )
+    conn.execute(  # 每次外部写入先记日志：超时等“结果未知”时，下次先请用户核对后台，不盲目重复创建
+        "CREATE TABLE wechat_operations ("
+        " op_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, document_id TEXT, appid TEXT NOT NULL,"
+        " action TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('started','succeeded','failed','unknown')),"
+        " detail_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, finished_at TEXT)"
+    )
+    conn.execute("CREATE INDEX idx_wechat_operations ON wechat_operations(account_id, document_id, created_at)")
+
+
+@migration(30, "v3.24 多图文草稿：几篇文章按顺序合成一篇草稿，记录每个位置对应的文章、版本与后台正文指纹")
+def _wechat_draft_groups(conn: sqlite3.Connection) -> None:
+    conn.execute(  # group_key 由文章顺序决定：顺序或篇目变了就是另一篇多图文（接口不能增删、调序）
+        "CREATE TABLE wechat_draft_groups ("
+        " account_id TEXT NOT NULL, appid TEXT NOT NULL, group_key TEXT NOT NULL,"
+        " document_ids_json TEXT NOT NULL, media_id TEXT NOT NULL, members_json TEXT NOT NULL,"
+        " synced_at TEXT NOT NULL, PRIMARY KEY(account_id, appid, group_key))"
+    )

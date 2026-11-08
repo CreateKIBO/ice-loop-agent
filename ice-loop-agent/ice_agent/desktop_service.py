@@ -1521,6 +1521,14 @@ class DesktopService:
 
     def secrets_set(self, params):
         for aid, key in params.get("keys", {}).items():
+            if isinstance(aid, str) and aid.startswith("wechat-") and isinstance(key, str):
+                # v3.22 公众号 AppSecret：只放在引擎内存，按公众号区分
+                secrets = self.__dict__.setdefault("wechat_secrets", {})
+                if key:
+                    secrets[aid[len("wechat-"):]] = key
+                else:
+                    secrets.pop(aid[len("wechat-"):], None)
+                continue
             if aid not in self.settings["profiles"] or not isinstance(key, str):
                 raise ValueError("凭据配置无效")
             env = self.settings["profiles"][aid]["api_key_env"]
@@ -1890,6 +1898,8 @@ HEAVY_METHODS = frozenset({
     'documents.image_import', 'documents.image_import_data', 'documents.image_edit', 'documents.import_docx',
     'documents.long_image_page', 'documents.long_image_compose', 'documents.svg_import',
     'documents.perf_sample', 'documents.compat_create',
+    'skills.check_conflicts_ai',
+    'wechat.test', 'wechat.draft_sync', 'wechat.group_preview', 'wechat.group_sync',
 })
 
 

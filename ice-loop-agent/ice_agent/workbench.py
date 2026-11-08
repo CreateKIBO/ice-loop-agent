@@ -14,7 +14,7 @@ from .domain.types import now_iso, sha256_json, sha256_text, new_id
 from .paths import ensure_dir, assert_within, atomic_write_text
 
 class Workbench:
-    METHODS={'skills.get','skills.save','skills.versions','skills.version','skills.defaults','skills.export','skills.import_parse','skills.resolve','rules.list','rules.save','rules.resolve','rules.remove','tools.status','tools.diagnostics','tools.execution_settings','tools.provider_check',
+    METHODS={'skills.get','skills.save','skills.versions','skills.version','skills.defaults','skills.export','skills.import_parse','skills.resolve','skills.conversation_binding','skills.files_add','skills.file_get','skills.check_conflicts','skills.check_conflicts_ai','rules.list','rules.save','rules.resolve','rules.remove','tools.status','tools.diagnostics','tools.execution_settings','tools.provider_check',
              'reminders.list','reminders.save','reminders.dismiss','git.preview','git.apply','models.catalog',
              'articles.semantic_review','articles.clipboard','assets.redo','resources.transform','resources.cover','capture.windows','capture.native','capture.web_finish',
              'prompts.generate','prompts.save','prompts.references','resources.import_style','budgets.get','budgets.save'}
@@ -29,6 +29,15 @@ class Workbench:
             if method == 'skills.import_parse':  # v3.15：只解析文件，不写入；加入列表后随“保存设置”生效
                 from .skill_packages import parse
                 return parse(params)
+            if method == 'skills.check_conflicts_ai':  # v3.20：调用一次写作模型做语义检查，只返回提示
+                from .skill_conflicts import ai_request, ai_result, payload_skills
+                engine, _, store = self.s._app(account_id=account['id'])
+                try:
+                    chosen, rules = payload_skills(params, WritingSkills(store, account).get())
+                    response = engine.router.generate(ai_request(chosen, rules), max_attempts=1)
+                    return ai_result(response.json, chosen, getattr(response, 'model_id', ''))
+                finally:
+                    store.close()
             _, _, store = self.s._app(account_id=account['id'])
             try:
                 skills = WritingSkills(store, account)

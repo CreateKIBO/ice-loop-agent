@@ -6,6 +6,7 @@ documents.copy_payload / documents.delivery_record / documents.image_import 只�
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
 from . import Handler, register
@@ -109,6 +110,16 @@ _ASSIST = {
 @register
 class DocumentsHandler(Handler):
     METHODS = PUBLIC | MAIN_ONLY
+
+    @contextmanager
+    def _store(self):
+        """短时打开一个数据库连接（读技能设置、会话/提案归属等），用完即关。"""
+        from ..domain.store import Store
+        store = Store(self.service.runtime / 'app.db')
+        try:
+            yield store
+        finally:
+            store.close()
 
     def handle(self, method: str, params: dict) -> Any:
         account = self.service._account()
@@ -237,18 +248,18 @@ class DocumentsHandler(Handler):
         request_id = params.get('request_id')
         if not isinstance(request_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', request_id):
             raise DocumentError('起草请求标识无效')
+        from ..skills import WritingSkills
         binding = None
         if params.get('skill_binding') is not None:  # v3.16：引导模式同样可选技能
-            from ..domain.store import Store
-            from ..skills import WritingSkills
-            store = Store(self.service.runtime / 'app.db')
-            try:
+            with self._store() as store:
                 binding = WritingSkills(store, account).validate_binding(params['skill_binding'])
-            finally:
-                store.close()
         chat = CreativeChat(self.service)
         conversation = chat.call('chat.create', {'title': re.sub(r'\s+', ' ', brief.strip())[:40], 'request_id': 'guide-' + request_id})
         conversation_id = conversation['conversation']['id'] if 'conversation' in conversation else conversation['id']
+        if binding:  # v3.17：记为会话技能，回答问题后的继续写作与改稿沿用
+            with self._store() as store:
+                if store.conn.execute('SELECT 1 FROM creative_conversations WHERE id=? AND account_id=?', (conversation_id, account['id'])).fetchone():
+                    WritingSkills(store, account).conversation_binding({'conversation_id': conversation_id, 'binding': binding})
         send = {'conversation_id': conversation_id, 'text': brief.strip() + GUIDED_HINT,
                 'mode': 'draft', 'request_id': 'guidesend-' + request_id}
         if binding:
@@ -276,15 +287,11 @@ class DocumentsHandler(Handler):
         from ..domain.store import Store
         try:
             # v3.16：助手按这篇文章的技能（本篇 → 系列 → 公众号）解析，而不是只看公众号默认。
-            from ..domain.store import Store
             from ..skills import selection_for_document
-            probe = Store(self.service.runtime / 'app.db')
-            try:
+            with self._store() as probe:
                 row = probe.conn.execute('SELECT document_id FROM document_proposals WHERE proposal_id=? AND account_id=?',
                                          (proposal_id, account['id'])).fetchone()
                 selection = selection_for_document(probe, account['id'], row['document_id']) if row else None
-            finally:
-                probe.close()
             engine, cfg, store = self.service._app(account_id=account['id'], skill_selection=selection)
         except Exception as error:  # 模型/账号配置不可用：如实记在提案上
             release(proposal_id)

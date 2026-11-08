@@ -5,14 +5,14 @@ import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 
-import { Banner, Button, ErrorPanel, Input, Spinner } from "../../components/ui";
+import { Banner, Button, ErrorPanel, Spinner } from "../../components/ui";
 import { ErrorNote } from "../../components/ErrorNote";
 import { toast } from "../../components/toast";
 import { accountStore, dirtyStore, flushAllDirty, queryClient, registerDirtyFlush, useCurrentAccount } from "../../data/client";
 import { conversationStore } from "../../data/client";
 import { documentEditingStore, documentPanelStore, documentStore, setWorkspace } from "../../app/uiState";
 import {
-  AUTHOR_LIMIT, DEFAULT_STYLE, HIGHLIGHTS, INLINE_FONT_SIZES, LETTER_SPACINGS, LINE_HEIGHTS, PARAGRAPH_SPACINGS, SUMMARY_LIMIT, TITLE_LIMIT,
+  AUTHOR_LIMIT, DEFAULT_STYLE, TITLE_LIMIT,
   docRpc, formatTime, invalidateDocuments, pendingCache,
   type AssistApplied, type DocContent, type DocInfo, type DocStyle, type DocumentDetail, type ImageView, type ImportReport, type SaveResult,
 } from "./documentsApi";
@@ -20,25 +20,22 @@ import { ArticleImage, BlockId, Callout, DocImageSlot, DocRawBlock, DocRunOutput
 import { DocumentSidePanel } from "./DocumentSidePanel";
 import { MaterialLibrary } from "./MaterialLibrary";
 import { trashDocument } from "./documentDelete";
+import { ArticleSettings } from "./ArticleSettings";
+import { EditorToolbar } from "./EditorToolbar";
+import { PasteReportBar, type PasteState } from "./PasteReportBar";
+import { pickDocumentImage } from "./documentImages";
 import { DocumentSkillChip, type SkillBinding } from "./DocumentSkills";
 import { docPerf } from "./docPerf";
 import type { AssistBridge } from "./DocumentAssistPanel";
 import "../../styles/documents.css";
 
+// 兼容旧引用：选图导入已移到 documentImages.ts（文章设置等子组件共用，避免循环引用）。
+export { pickDocumentImage };
+
 type SaveState = "saved" | "dirty" | "saving" | "error" | "conflict";
 type Conflict = Extract<SaveResult, { conflict: true }>;
-type PasteState = { html: string; mode: "adapt" | "text"; report: ImportReport; seq: number } | null;
 
 const ASSIST_EDITABLE = new Set(["paragraph", "heading", "bulletList", "orderedList", "blockquote"]);
-const COLORS = ["#111827", "#6b7280", "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0891b2", "#2563eb", "#7c3aed", "#db2777"];
-
-/** 选图导入：显式带上发起时的公众号，选择框打开期间切号也不会导入到新公众号。 */
-export async function pickDocumentImage(accountId = accountStore.get()): Promise<ImageView | null> {
-  const pick = window.ice?.pickDocumentImage as undefined | ((accountId: string) => Promise<ImageView | null>);
-  if (typeof pick !== "function") { toast.warning({ title: "请在桌面应用中插入图片", detail: "也可以直接粘贴或拖入图片。" }); return null; }
-  try { return await pick(accountId); }
-  catch (error) { if (accountStore.get() === accountId) toast.error({ title: "图片没有导入", detail: (error as Error).message }); return null; }
-}
 
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -114,6 +111,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
   const revision = React.useRef(initial.revision);
   const sequence = React.useRef(0);
   const timer = React.useRef<number | undefined>(undefined);
+  const cacheTimer = React.useRef<number | undefined>(undefined);
   const saving = React.useRef<Promise<void> | null>(null);
   const titleRef = React.useRef(initial.title);
   const styleRef = React.useRef(style);
@@ -132,10 +130,27 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     const editor = editorRef.current;
     if (!editor) return null;
     const value: DocContent = { schema: 1, doc: editor.getJSON() as DocContent["doc"], style: styleRef.current };
-    const meta = Object.fromEntries(Object.entries(infoRef.current).filter(([, v]) => typeof v === "string" && v.trim())) as DocInfo;
+    // 空字符串不写入；对象型设置（v3.23 封面裁切）原样保留，交给引擎校验。
+    const meta = Object.fromEntries(Object.entries(infoRef.current).filter(([, v]) =>
+      typeof v === "string" ? v.trim() !== "" : v !== null && typeof v === "object")) as DocInfo;
     if (Object.keys(meta).length) value.info = meta;
     return value;
   }, []);
+
+  // 本地暂存（崩溃恢复用）：序列化整篇正文较重，输入停顿 250ms 后再写，不在每次按键时写；
+  // 页面隐藏/关闭、离开编辑器时立即补写。仍早于 800ms 的自动保存。
+  const writeCache = React.useCallback(() => {
+    window.clearTimeout(cacheTimer.current);
+    cacheTimer.current = undefined;
+    if (!dirtyStore.isDirty(dirtyKey)) return;
+    const value = content();
+    if (value) pendingCache.write(account, documentId, { content: value, title: titleRef.current, base_revision: revision.current });
+  }, [account, content, dirtyKey, documentId]);
+  React.useEffect(() => {
+    const now = () => { if (cacheTimer.current !== undefined) { try { writeCache(); } catch { /* 编辑器已销毁 */ } } };
+    window.addEventListener("pagehide", now);
+    return () => { window.removeEventListener("pagehide", now); now(); };
+  }, [writeCache]);
 
   const saveNow = React.useCallback(async (force = false): Promise<void> => {
     if (saving.current) return saving.current;
@@ -162,6 +177,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
         if (mounted.current) { setSavedAt(result.saved_at); setConflict(null); setSaveError(null); }
         if (seq === sequence.current) {
           dirtyStore.markClean(dirtyKey);
+          window.clearTimeout(cacheTimer.current);
           pendingCache.clear(account, documentId);
           if (mounted.current) setSaveState("saved");
         } else {
@@ -170,6 +186,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
         }
         if (result.checkpoint) void invalidateDocuments(account);
       } catch (error) {
+        if (cacheTimer.current !== undefined) writeCache();  // 保存失败：先确保本地暂存已写入
         if (mounted.current) { setSaveState("error"); setSaveError(error); }
         throw error;
       }
@@ -180,7 +197,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     finally {
       saving.current = null;
     }
-  }, [account, content, dirtyKey, documentId]);
+  }, [account, content, dirtyKey, documentId, writeCache]);
 
   const getRevision = React.useCallback(() => revision.current, []);
   const flush = React.useCallback(async () => {
@@ -193,11 +210,11 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
     sequence.current += 1;
     dirtyStore.markDirty(dirtyKey);
     setSaveState(state => state === "conflict" ? state : "dirty");
-    const value = content();
-    if (value) pendingCache.write(account, documentId, { content: value, title: titleRef.current, base_revision: revision.current });
+    window.clearTimeout(cacheTimer.current);
+    cacheTimer.current = window.setTimeout(writeCache, 250);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => { void saveNow().catch(() => undefined); }, 800);
-  }, [account, content, dirtyKey, documentId, saveNow]);
+  }, [dirtyKey, saveNow, writeCache]);
 
   // 导航（切文章/会话/账号/关闭）前立即落盘；冲突或失败时阻止离开。
   React.useEffect(() => {
@@ -557,7 +574,7 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
           另一处保存于 {formatTime(conflict.server.updated_at)}。你的修改仍保留在编辑器中，不会丢失。</Banner>}
         {saveState === "error" && saveError != null && <ErrorNote error={saveError} note="修改仍在编辑器和本地恢复缓存中。"
           onRetry={() => void saveNow().catch(() => undefined)} retryLabel="重试保存" />}
-        <Toolbar editor={editor} style={style} onStyle={updateStyle} />
+        <EditorToolbar editor={editor} style={style} onStyle={updateStyle} />
         <AnimatePresence>{(paste || pasting) && <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
           <PasteReportBar state={paste} busy={pasting} onToggle={() => void toggleTextOnly()} onClose={() => setPaste(null)} />
         </motion.div>}</AnimatePresence>
@@ -608,189 +625,4 @@ function LoadedEditor({ initial, onReload }: { initial: DocumentDetail; onReload
       </motion.aside>}</AnimatePresence>
     </div>
   );
-}
-
-function PasteReportBar({ state, busy, onToggle, onClose }: { state: PasteState; busy: boolean; onToggle: () => void; onClose: () => void }) {
-  const [open, setOpen] = React.useState(false);
-  if (!state) return <div className="ice-doc-report"><Spinner size={12} /> 正在转换粘贴内容…</div>;
-  const r = state.report;
-  const missing = r.images.missing.length, islands = r.islands.length;
-  const dropped = Object.entries(r.dropped).filter(([key]) => !["meta", "link", "head", "title"].includes(key));
-  return (
-    <div className={"ice-doc-report" + (missing || islands ? " is-warning" : "")} role="status">
-      <strong>{state.mode === "adapt" ? "已按当前样式粘贴" : "已仅保留文字"}</strong>
-      <span>{r.paragraphs} 段 · {r.headings} 个标题 · 图片 {r.images.imported}/{r.images.total}</span>
-      {missing > 0 && <span className="is-warn">{missing} 张图片需要替换</span>}
-      {islands > 0 && <span className="is-warn">{islands} 个未支持模块保留为只读原件</span>}
-      <span style={{ flex: 1 }} />
-      <button type="button" className="ice-link-btn" onClick={() => setOpen(value => !value)}>{open ? "收起报告" : "查看报告"}</button>
-      <Button size="sm" loading={busy} onClick={onToggle}>{state.mode === "adapt" ? "改为仅保留文字" : "恢复适配样式"}</Button>
-      <button type="button" className="ice-link-btn" onClick={onClose} aria-label="关闭导入报告">关闭</button>
-      {open && <div className="ice-doc-report__detail">
-        {r.images.missing.map((item, index) => <div key={index}>缺图：{item.alt || "未命名"} — {item.reason}{item.src && item.src !== "data:…" ? `（${item.src}）` : ""}</div>)}
-        {r.islands.map((item, index) => <div key={"i" + index}>原件：{item.reason}「{item.preview.slice(0, 40)}」</div>)}
-        {Object.keys(r.styles.ignored).length > 0 && <div>未映射样式：{Object.entries(r.styles.ignored).map(([k, v]) => `${k}×${v}`).join("、")}</div>}
-        {dropped.length > 0 && <div>已移除（不安全或无法交付）：{dropped.map(([k, v]) => `${k}×${v}`).join("、")}</div>}
-        <div className="ice-doc-muted">原始粘贴内容已留档；切换模式可用 Ctrl+Z 撤销。</div>
-      </div>}
-    </div>
-  );
-}
-
-function Toolbar({ editor, style, onStyle }: { editor: Editor | null; style: DocStyle; onStyle: (patch: Partial<DocStyle>) => void }) {
-  const [, force] = React.useReducer((value: number) => value + 1, 0);
-  const [linkOpen, setLinkOpen] = React.useState(false);
-  const [href, setHref] = React.useState("");
-  React.useEffect(() => {
-    if (!editor) return;
-    editor.on("selectionUpdate", force); editor.on("transaction", force);
-    return () => { editor.off("selectionUpdate", force); editor.off("transaction", force); };
-  }, [editor]);
-  React.useEffect(() => {
-    const open = () => { if (editor) { setHref(String(editor.getAttributes("link").href ?? "")); setLinkOpen(true); } };
-    document.addEventListener("ice-doc-link", open);
-    return () => document.removeEventListener("ice-doc-link", open);
-  }, [editor]);
-  if (!editor) return <div className="ice-doc-toolbar" />;
-  const chain = () => editor.chain().focus();
-  const block = editor.isActive("heading", { level: 1 }) ? "h1" : editor.isActive("heading", { level: 2 }) ? "h2"
-    : editor.isActive("heading", { level: 3 }) ? "h3" : "p";
-  const align = (editor.getAttributes(editor.isActive("heading") ? "heading" : "paragraph").textAlign as string | null) ?? "left";
-  const indent = Boolean(editor.getAttributes("paragraph").indent);
-  const textStyle = editor.getAttributes("textStyle") as { color?: string | null; fontSize?: string | null; backgroundColor?: string | null };
-  const setTextStyle = (patch: { color?: string | null; fontSize?: string | null; backgroundColor?: string | null }) => {
-    const next = { color: textStyle.color ?? null, fontSize: textStyle.fontSize ?? null, backgroundColor: textStyle.backgroundColor ?? null, ...patch };
-    if (!next.color && !next.fontSize && !next.backgroundColor) chain().unsetMark("textStyle").run();
-    else chain().setMark("textStyle", next).run();
-  };
-  const setAlign = (value: string) => {
-    const textAlign = value === "left" ? null : value;
-    chain().updateAttributes("paragraph", { textAlign }).updateAttributes("heading", { textAlign }).run();
-  };
-  const T = ({ label, active, onClick, children, disabled }: { label: string; active?: boolean; onClick: () => void; children: React.ReactNode; disabled?: boolean }) =>
-    <button type="button" className={"ice-doc-tool" + (active ? " is-active" : "")} aria-label={label} title={label}
-            aria-pressed={active} disabled={disabled} onMouseDown={event => event.preventDefault()} onClick={onClick}>{children}</button>;
-  const Swatches = ({ colors, current, onPick, reset, label }: { colors: string[]; current?: string | null; onPick: (c: string) => void; reset: string; label: string }) => (
-    <div className="ice-doc-pop__panel">
-      <div className="ice-doc-swatches">
-        {colors.map(color => <button key={color} type="button" style={{ background: color }} aria-label={label + " " + color} aria-pressed={current === color}
-          onMouseDown={event => event.preventDefault()} onClick={() => onPick(color)} />)}
-      </div>
-      <button type="button" className="ice-link-btn" onMouseDown={event => event.preventDefault()} onClick={() => onPick("")}>{reset}</button>
-    </div>
-  );
-  return (
-    <div className="ice-doc-toolbar" role="toolbar" aria-label="正文格式">
-      <T label="撤销 (Ctrl+Z)" disabled={!editor.can().undo()} onClick={() => chain().undo().run()}>↶</T>
-      <T label="重做 (Ctrl+Shift+Z)" disabled={!editor.can().redo()} onClick={() => chain().redo().run()}>↷</T>
-      <T label="清除格式" onClick={() => chain().unsetAllMarks().updateAttributes("paragraph", { textAlign: null, indent: null }).run()}>⌫</T>
-      <span className="ice-doc-tool-sep" />
-      <select aria-label="段落类型" value={block} onChange={event => {
-        const value = event.target.value;
-        if (value === "p") chain().setParagraph().run();
-        else chain().setHeading({ level: Number(value[1]) as 1 | 2 | 3 }).run();
-      }}>
-        <option value="p">正文</option><option value="h1">大标题</option><option value="h2">小标题</option><option value="h3">三级标题</option>
-      </select>
-      <select aria-label="选中文字字号" title="选中文字的字号；全文字号在“一键排版”中设置" value={textStyle.fontSize ?? ""}
-              onChange={event => setTextStyle({ fontSize: event.target.value || null })}>
-        <option value="">{style.fontSize}px</option>{INLINE_FONT_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
-      </select>
-      <span className="ice-doc-tool-sep" />
-      <T label="加粗 (Ctrl+B)" active={editor.isActive("bold")} onClick={() => chain().toggleBold().run()}><b>B</b></T>
-      <T label="斜体 (Ctrl+I)" active={editor.isActive("italic")} onClick={() => chain().toggleItalic().run()}><i>I</i></T>
-      <T label="下划线 (Ctrl+U)" active={editor.isActive("underline")} onClick={() => chain().toggleUnderline().run()}><u>U</u></T>
-      <T label="删除线" active={editor.isActive("strike")} onClick={() => chain().toggleStrike().run()}><s>S</s></T>
-      <details className="ice-doc-pop">
-        <summary className="ice-doc-tool" title="文字颜色" aria-label="文字颜色"><span style={{ borderBottom: `3px solid ${textStyle.color || "currentColor"}` }}>A</span></summary>
-        <Swatches colors={[...new Set([style.brandColor, ...COLORS])]} current={textStyle.color} label="文字颜色" reset="恢复默认颜色"
-                  onPick={color => setTextStyle({ color: color || null })} />
-      </details>
-      <details className="ice-doc-pop">
-        <summary className="ice-doc-tool" title="背景色（高亮）" aria-label="背景色"><span className="ice-doc-hl" style={{ background: textStyle.backgroundColor || "#fff3a3" }}>ab</span></summary>
-        <Swatches colors={HIGHLIGHTS} current={textStyle.backgroundColor} label="背景色" reset="清除背景色"
-                  onPick={color => setTextStyle({ backgroundColor: color || null })} />
-      </details>
-      <span className="ice-doc-tool-sep" />
-      {(["left", "center", "right", "justify"] as const).map(value =>
-        <T key={value} label={{ left: "左对齐", center: "居中", right: "右对齐", justify: "两端对齐" }[value]} active={align === value}
-           onClick={() => setAlign(value)}>{{ left: "⇤", center: "≡", right: "⇥", justify: "☰" }[value]}</T>)}
-      <T label="首行缩进两字" active={indent} onClick={() => chain().updateAttributes("paragraph", { indent: indent ? null : true }).run()}>⇥¶</T>
-      <select aria-label="全文行距" title="全文行距" value={style.lineHeight} onChange={event => onStyle({ lineHeight: Number(event.target.value) })}>
-        {LINE_HEIGHTS.map(value => <option key={value} value={value}>行距 {value}</option>)}
-      </select>
-      <select aria-label="全文段距" title="全文段落间距" value={style.paragraphSpacing} onChange={event => onStyle({ paragraphSpacing: Number(event.target.value) })}>
-        {PARAGRAPH_SPACINGS.map(value => <option key={value} value={value}>段距 {value}</option>)}
-      </select>
-      <select aria-label="全文字间距" title="全文字间距" value={style.letterSpacing ?? 0.5} onChange={event => onStyle({ letterSpacing: Number(event.target.value) })}>
-        {LETTER_SPACINGS.map(value => <option key={value} value={value}>字距 {value}</option>)}
-      </select>
-      <span className="ice-doc-tool-sep" />
-      <T label="无序列表" active={editor.isActive("bulletList")} onClick={() => chain().toggleBulletList().run()}>•≡</T>
-      <T label="有序列表" active={editor.isActive("orderedList")} onClick={() => chain().toggleOrderedList().run()}>1.</T>
-      <T label="行内代码" active={editor.isActive("code")} onClick={() => chain().toggleCode().run()}>{"<>"}</T>
-      <T label="链接" active={editor.isActive("link")} onClick={() => { setHref(String(editor.getAttributes("link").href ?? "")); setLinkOpen(value => !value); }}>🔗</T>
-      {linkOpen && <form className="ice-doc-linkform" onSubmit={event => {
-        event.preventDefault();
-        const value = href.trim();
-        if (!value) chain().extendMarkRange("link").unsetLink().run();
-        else chain().extendMarkRange("link").setLink({ href: /^(https?:|mailto:)/i.test(value) ? value : "https://" + value }).run();
-        setLinkOpen(false);
-      }}>
-        <Input autoFocus value={href} placeholder="https://" aria-label="链接地址" onChange={event => setHref(event.target.value)} />
-        <Button size="sm" type="submit" variant="primary">确定</Button>
-        <Button size="sm" variant="ghost" onClick={() => setLinkOpen(false)}>取消</Button>
-      </form>}
-    </div>
-  );
-}
-
-/** 文章设置（对应公众号编辑页的“文章设置”）：封面、摘要、原文链接。作者在标题下方填写。 */
-function ArticleSettings({ info, onChange, onClose, editor }: { info: DocInfo; onChange: (patch: Partial<DocInfo>) => void; onClose: () => void; editor: Editor | null }) {
-  const firstImage = React.useMemo(() => {
-    let id: string | null = null;
-    editor?.state.doc.descendants(node => { if (!id && node.type.name === "articleImage" && node.attrs.resourceId) id = String(node.attrs.resourceId); return !id; });
-    return id;
-  }, [editor, info]);
-  const coverId = info.coverResourceId || firstImage;
-  const summary = info.summary ?? "";
-  return (
-    <div className="ice-doc-settings" role="dialog" aria-label="文章设置">
-      <div className="ice-doc-row"><strong>文章设置</strong><span style={{ flex: 1 }} /><button type="button" className="ice-link-btn" onClick={onClose}>收起</button></div>
-      <label>封面
-        <div className="ice-doc-cover">
-          {coverId ? <CoverThumb resourceId={coverId} /> : <div className="ice-doc-cover__empty">正文还没有图片</div>}
-          <div className="ice-doc-cover__actions">
-            <Button size="sm" onClick={async () => {
-              const owner = accountStore.get(), target = editor;
-              const image = await pickDocumentImage(owner);
-              // 选择框打开期间离开文章或切号：不把封面写到别处。
-              if (image && accountStore.get() === owner && target && !target.isDestroyed) onChange({ coverResourceId: image.resource_id });
-            }}>另选封面</Button>
-            {info.coverResourceId && <button type="button" className="ice-link-btn" onClick={() => onChange({ coverResourceId: "" })}>改回正文第一张图</button>}
-          </div>
-        </div>
-        <span className="ice-doc-muted">{info.coverResourceId ? "已指定封面" : "默认取正文第一张图"}；导出图文包时另存为“封面”文件，便于在后台上传。</span>
-      </label>
-      <label>摘要
-        <textarea aria-label="摘要" className="ice-doc-textarea" rows={3} maxLength={SUMMARY_LIMIT} value={summary} placeholder="选填，不填写则后台默认抓取正文前 54 字"
-                  onChange={event => onChange({ summary: event.target.value })} />
-        <span className="ice-doc-counter">{summary.length}/{SUMMARY_LIMIT}</span>
-      </label>
-      <label>原文链接（选填）
-        <Input aria-label="原文链接（选填）" value={info.sourceUrl ?? ""} placeholder="https://" onChange={event => onChange({ sourceUrl: event.target.value })} />
-      </label>
-      <p className="ice-doc-muted">这些信息随版本保存，并写入导出包的 manifest；粘贴到公众号后，请在后台对应位置填写。</p>
-    </div>
-  );
-}
-
-function CoverThumb({ resourceId }: { resourceId: string }) {
-  const [view, setView] = React.useState<ImageView | null>(null);
-  React.useEffect(() => {
-    let active = true;
-    docRpc<ImageView>("documents.image_view", { resource_id: resourceId }).then(value => { if (active) setView(value); }).catch(() => { if (active) setView(null); });
-    return () => { active = false; };
-  }, [resourceId]);
-  return view?.ok ? <img className="ice-doc-cover__img" src={view.preview} alt="封面" /> : <div className="ice-doc-cover__empty">封面图片缺失</div>;
 }

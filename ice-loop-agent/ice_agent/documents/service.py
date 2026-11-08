@@ -831,6 +831,7 @@ class DocumentService:
                         'exported_at': now_iso(), 'complete': rendered['complete'], 'issues': rendered['issues'],
                         'images': manifest_images, 'files': _tree_hashes(staging),
                         'article': {'author': rendered['info'].get('author', ''), 'summary': rendered['info'].get('summary', ''),
+                                    'comments': rendered['info'].get('comments', 'off'),
                                     'source_url': rendered['info'].get('sourceUrl', ''),
                                     'cover': ({'file': cover['file_name'], 'source': cover['source']} if cover else None)},
                         'note': '导出不等于已发布；发布后请在应用中登记发布链接与时间。'}
@@ -944,10 +945,34 @@ class DocumentService:
         from ..creative_chat import CreativeChat
         candidate = CreativeChat.candidate(self.store, self.account['id'], str(params.get('candidate_id', '')))
         content = md_to_content(candidate['body'])
+        meta = {'source_label': 'AI 初稿', 'conversation_id': candidate['conversation_id'], 'candidate_id': candidate['id']}
+        meta.update(self._candidate_skills(candidate))
         return self.docs.create(title=candidate['title'], content=content, origin='ai', origin_ref=candidate['id'],
-                                series=(candidate['base'] or {}).get('series') or None,
-                                meta={'source_label': 'AI 初稿', 'conversation_id': candidate['conversation_id'],
-                                      'candidate_id': candidate['id']}, producer='ai')
+                                series=(candidate['base'] or {}).get('series') or None, meta=meta, producer='ai')
+
+    def _candidate_skills(self, candidate: dict) -> dict:
+        """v3.17：从会话存为文章时，带上会话技能（作为本篇技能）和生成这版时实际使用的技能。"""
+        from ..skills import normalize_binding, skill_summary
+        out: dict = {}
+        if self._has_table('conversation_skill_bindings'):
+            row = self.store.conn.execute('SELECT binding_json FROM conversation_skill_bindings WHERE account_id=? AND conversation_id=?',
+                                          (self.account['id'], candidate['conversation_id'])).fetchone()
+            try:
+                binding = normalize_binding(json.loads(row['binding_json'])) if row else None
+            except (TypeError, ValueError):
+                binding = None
+            if binding:
+                out['skill_binding'] = binding
+        row = self.store.conn.execute(
+            "SELECT metadata_json FROM creative_messages WHERE conversation_id=? AND json_extract(metadata_json,'$.candidate_id')=? "
+            "ORDER BY created_at DESC LIMIT 1", (candidate['conversation_id'], candidate['id'])).fetchone()
+        try:
+            snapshot = json.loads(row['metadata_json'])['request_snapshot']['writing_profile']['writing_skill_snapshot'] if row else None
+        except (TypeError, KeyError, ValueError):
+            snapshot = None
+        if snapshot:
+            out['generated_skills'] = skill_summary(snapshot)
+        return out
 
     def reconcile_generations(self, document_id: str | None = None) -> None:
         """惰性对账：把生成中的 AI 初稿与其会话消息状态对齐（重启后仍成立）。"""

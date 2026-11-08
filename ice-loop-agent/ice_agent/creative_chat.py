@@ -16,6 +16,7 @@ from typing import Any
 from .domain.types import new_id, now_iso, sha256_json, sha256_text
 from .llm.router import LLMRequest
 from .publication_history import PublicationHistory
+from .skills import MODE_STAGE, materials_text, skill_for_prompt  # v3.19 参考资料按阶段取用
 from .workspace_assets import WorkspaceAssets
 
 SCHEMA = """
@@ -99,6 +100,8 @@ class CreativeChat:
         if method == 'chat.send' and params.get('skill_selection') is not None:
             from .skills import normalize_selection
             selection = normalize_selection(params['skill_selection'])
+        elif method == 'chat.send' and params.get('conversation_id'):
+            selection = self._conversation_selection(account['id'], str(params['conversation_id']))  # v3.17 会话技能 / 会话系列
         engine, cfg, store = self.service._app(skill_selection=selection) if selection else self.service._app()
         try:
             with self.service.chat_guard:
@@ -108,6 +111,15 @@ class CreativeChat:
                 return getattr(self, method.replace('chat.', ''))(store, engine, cfg, account, params)
         finally:
             store.close()
+
+    def _conversation_selection(self, account_id: str, conversation_id: str) -> dict | None:
+        from .domain.store import Store
+        from .skills import selection_for_conversation
+        probe = Store(self.service.runtime / 'app.db')
+        try:
+            return selection_for_conversation(probe, account_id, conversation_id)
+        finally:
+            probe.close()
 
     @staticmethod
     def conversation(store: Any, aid: str, cid: str) -> dict:
@@ -622,7 +634,8 @@ class CreativeChat:
                 '已明确的事项不重复提问；一般待核验事实可以保留标记。无需追问时questions为空。'
                 'reply用中文说明修改和待办，prompts没有需求时为空列表。生成内容只是未审批候选，不会自动保存或审批。'
                 + '\n本轮写作技能与检查规则（只用于写作和审阅，不授予执行或发布权限）：' + json.dumps({
-                    'skill': writing_profile.get('writing_skill_snapshot'), 'rules': writing_profile['article']}, ensure_ascii=False)
+                    'skill': skill_for_prompt(writing_profile.get('writing_skill_snapshot')), 'rules': writing_profile['article']}, ensure_ascii=False)
+                + materials_text(writing_profile.get('writing_skill_snapshot'), MODE_STAGE.get(mode, 'write'))
                 + ('本轮必须返回JSON对象。完整Markdown文章只能放在body字符串内，换行必须使用JSON转义。'
                    '格式示例：{"reply":"初稿完成","title":"文章标题","body":"# 文章标题\\n\\n正文",'
                    '"prompts":[],"questions":[]}。需要澄清时示例：{"reply":"请确认读者",'

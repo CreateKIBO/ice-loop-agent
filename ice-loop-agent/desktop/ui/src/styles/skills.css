@@ -35,3 +35,10 @@
 .ice-skills__series-body { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); min-width: 0; }
 .ice-skills__series-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; padding-bottom: 8px; border-bottom: 1px dashed var(--ice-border-subtle); }
 .ice-skills__series-row strong { overflow-wrap: anywhere; }
+/* v3.19 参考资料与示例 */
+.ice-skills__files { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-md); min-width: 0; }
+.ice-skills__file { display: grid; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--ice-border-subtle); min-width: 0; }
+.ice-skills__file-name { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.ice-skills__files select { height: 28px; }
+/* v3.20 冲突检查 */
+.ice-skills__check-panel { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--ice-border-subtle); min-width: 0; }
