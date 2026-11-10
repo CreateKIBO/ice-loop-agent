@@ -57,3 +57,22 @@ test('clarification citation choices distinguish inheritance, explicit removal a
  assert.deepEqual(questions.clarificationCitations('selected',selected),{citations:[{chunk_id:'new-chunk',hash:'new-hash'}]});
  assert.throws(()=>questions.clarificationCitations('selected',[]),/先.*选择/);
 });
+
+test('rich clarification drafts survive storage escaping without truncating their JSON',()=>{
+ const q=questions.questionsFrom([{id:'parts',question:'保留哪些内容？',multiple:true,options:['选项甲'.repeat(60),'选项乙'.repeat(60),'选项丙'.repeat(60),'选项丁'.repeat(60)]}]);
+ const answer={selected:q[0].options,other:'引号"与换行\n'.repeat(250).slice(0,1800)};
+ const encoded=questions.encodeDraft(answer),s=storage();
+ assert.ok(encoded.length>2000,'fixture crosses the previous storage limit');
+ assert.equal(questions.saveAnswers(s,'owned','chat','message',q,{parts:encoded}),true);
+ const restored=questions.readAnswers(s,'owned','chat','message',q);
+ assert.deepEqual(questions.decodeDraft(q[0],restored.parts),{...answer,delegate:false});
+ assert.equal(questions.draftAnswer(q[0],questions.decodeDraft(q[0],restored.parts)),questions.draftAnswer(q[0],answer));
+});
+
+test('overlong combined clarification answers remain intact and cannot be submitted',()=>{
+ const q=questions.questionsFrom([{id:'parts',question:'选择材料',multiple:true,options:['甲'.repeat(180),'乙'.repeat(180),'丙'.repeat(180),'丁'.repeat(180)]}]);
+ const value={selected:q[0].options,other:'补'.repeat(1800)};
+ const full=[value.selected.join('、'),value.other].join('；');
+ assert.equal(questions.draftAnswer(q[0],value),full,'show the full answer instead of silently cutting user text');
+ assert.equal(questions.answersReady(q,{parts:full}),false);
+});

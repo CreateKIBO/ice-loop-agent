@@ -7,7 +7,9 @@ import { toast } from "../components/toast";
 import { createConversation, openConversation, openEditor,openGettingStarted } from "../data/actions";
 import { editorStore, flushAllDirty, useAccountQuery, useEditorJob } from "../data/client";
 import { switchToClassic } from "../data/desktop";
-import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore, shortcutHelpStore } from "./uiState";
+import { editorialStore,backupSettingsStore, paletteStore, publicationSettingsStore, settingsStore, skillSettingsStore, shortcutHelpStore,
+  articleCreateStore, documentStore, setWorkspace } from "./uiState";
+import { openWebsite } from "../data/websites";
 
 type Action = {
   id: string; label: string; group: string; hint?: string; keywords?: string;
@@ -51,9 +53,27 @@ export function CommandPalette({ open, onOpenChange }: {
   }, [open]);
 
   const actions = React.useMemo<Action[]>(() => {
+    const toArticles = async (dialog: null | "paste" | "ai") => {
+      await flushAllDirty(); editorStore.set(null); documentStore.set(null); setWorkspace("articles"); articleCreateStore.set(dialog);
+    };
     const list: Action[] = [{
-      id: "new-conversation", group: "操作", label: "新建会话", hint: "Ctrl N", keywords: "new chat 讨论",
-      run: async () => { await createConversation(); },
+      id: "new-article", group: "操作", label: "新建文章", keywords: "new article 写作 空白 文档",
+      run: async () => { const { createBlankDocument } = await import("../features/documents/ArticleHome"); setWorkspace("articles"); await createBlankDocument(); },
+    }, {
+      id: "paste-article", group: "操作", label: "粘贴导入文章", keywords: "paste import 网页 公众号 word",
+      run: () => toArticles("paste"),
+    }, {
+      id: "ai-article", group: "操作", label: "AI 起草文章", keywords: "ai draft 生成 初稿",
+      run: () => toArticles("ai"),
+    }, {
+      id: "articles-home", group: "操作", label: "文章列表", keywords: "articles home 首页 回收站",
+      run: () => toArticles(null),
+    }, {
+      id: "web", group: "操作", label: "打开网页", keywords: "web browser 浏览器 收藏 公众号后台 tapnow",
+      run: () => openWebsite("web"),
+    }, {
+      id: "new-conversation", group: "操作", label: "新建会话", hint: "Ctrl N", keywords: "new chat 讨论 助手",
+      run: async () => { setWorkspace("assistant"); await createConversation(); },
     }];
     if (editorJob) {
       list.push({
@@ -66,6 +86,8 @@ export function CommandPalette({ open, onOpenChange }: {
     },{
       id:'shortcut-help',group:'操作',label:'快捷键与操作帮助',keywords:'快捷键 键盘 帮助 keyboard shortcuts help',
       run:()=>shortcutHelpStore.set(true),
+    },{
+      id:'skill-settings',group:'操作',label:'写作技能',keywords:'skills 技能 选择 修改 方法 风格',run:()=>skillSettingsStore.set(true),
     },{
       id:'publication-settings',group:'操作',label:'公众号与品牌',keywords:'账号 新增 公众号 品牌 历史 导入 account brand',
       run:()=>publicationSettingsStore.set(true),

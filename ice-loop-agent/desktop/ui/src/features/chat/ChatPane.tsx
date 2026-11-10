@@ -14,7 +14,10 @@ import { TurnProgress } from "./TurnProgress";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 import {ClarificationForm} from "./ClarificationForm";
+import {QuestionDock, pendingQuestionRow} from "./QuestionDock";
 import {useChatDelivery} from "./useChatDelivery";
+import {DraftFromDiscussion} from "./DraftFromDiscussion";
+import {canDraftFrom} from "./draftRequest";
 import { idleChatPollingInterval, isNearBottom, unreadAssistantUpdates } from "./readingState";
 import type { ChatResult } from "../../data/workbenchResponses";
 import { MESSAGE_WINDOW, CANDIDATE_WINDOW, messagePosition, estimateMessage, type HistoryPosition } from "./historyWindow";
@@ -165,6 +168,8 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
   if (historyIds.current === null && messages.data) historyIds.current = new Set(rows.map(row => row.id));
   const streamingRow = latest.data?.messages.find(row => row.status === "streaming");
   const latestAssistantId=latest.data?.messages.filter(message=>message.role==='assistant').at(-1)?.id;
+  // v3.1：最新回复带有待答问题时，在输入框上方显示逐题提问框。
+  const questionRow=pendingQuestionRow(latest.data?.messages);
   const events = useEventStream(conversationId ? "chat:" + conversationId : null, streaming || sending);
   // 轮次结束事件一到就刷新会话，不等下一个 chat.get 轮询周期。
   const finishedSeq = React.useMemo(() => {
@@ -241,6 +246,7 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
                 onRetry={()=>void delivery.send({retry_message_id:row.id},'retry').catch(()=>{})} />
               {row.role==='assistant'&&row.status==='completed'&&<ClarificationForm row={row} account={account} conversation={conversationId}
                 active={!streaming&&latestAssistantId===row.id} delivery={delivery} />}
+              {!position&&!streaming&&canDraftFrom(row,latestAssistantId,questionRow?.id)&&<DraftFromDiscussion delivery={delivery} disabled={streaming} />}
             </div>;
           })}
         </div>
@@ -264,6 +270,8 @@ function ConversationPane({conversationId,account}:{conversationId:string|null;a
       {/* 行动岛：待确认的动作卡与输入框合为一块，从对话流中抬起。 */}
       <div className="ice-action-dock">
         <AgentActionCards conversationId={conversationId} refreshSignal={toolSeq} />
+        {questionRow && <QuestionDock row={questionRow} account={account} conversation={conversationId}
+          delivery={delivery} disabled={streaming} />}
         <Composer key={account + ":" + conversationId} conversationId={conversationId} streaming={streaming} reuse={reuse} delivery={delivery} />
       </div>
     </div>

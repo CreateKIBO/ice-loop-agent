@@ -1,6 +1,6 @@
 {
   "name": "ice-loop-studio",
-  "version": "2.0.0-beta.2",
+  "version": "3.0.0-alpha.1",
   "private": true,
   "description": "支持多公众号档案、草稿与视觉资产的内容创作桌面工作台",
   "main": "main.cjs",

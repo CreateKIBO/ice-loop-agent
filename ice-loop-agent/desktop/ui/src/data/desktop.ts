@@ -20,6 +20,7 @@ declare global {
       activateRestoredBackup?: (token:string) => Promise<RestoredBackup>;
       choosePublicationDir?: (kind:'library'|'output') => Promise<string|null>;
       exportPublication?: () => Promise<{file:string}|null>;
+      exportSkill?: (params:{account_id:string;skill_id:string;version?:number}) => Promise<{file:string}|null>;
       chooseExportDir?: () => Promise<string|null>;
       cancelExportDir?: (destination:string) => Promise<{ok:boolean}>;
       openExportFolder?: (destination:string) => Promise<{ok:boolean}>;

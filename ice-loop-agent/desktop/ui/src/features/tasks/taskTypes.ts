@@ -22,6 +22,7 @@ export type RunEvidence = {
   exit_code:number; verdict:string; duration_ms:number;
 };
 export type TaskDetail = {
+  execution_retired?:boolean;
   job:{job_id:string;state:string;current_node:string;lease:string|null;pause_reason:string;stopping?:boolean};
   article:{topic:string;final_title:string|null;series:string;episode:number;spec:{demo?:boolean;account_id:string}};
   pending_approval:Approval|null; execution:ExecutionPlan|null;

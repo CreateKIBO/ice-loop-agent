@@ -8,7 +8,7 @@ class PreparationQueue{
       const jobs=await this.request('jobs.list');
       for(const row of jobs.filter(j=>j.production_mode==='auto_prepare'&&j.state==='completed'&&!j.image_only)){
         let data=await this.request('jobs.get',{job_id:row.job_id});
-        if(data.job.lease||data.article.spec.production_mode!=='auto_prepare')continue;
+        if(data.execution_retired||data.job.lease||data.article.spec.production_mode!=='auto_prepare')continue;
         const runs=Object.keys(data.runs);if(!runs.length)continue;
         let captured=false;
         for(const slot of data.slots.filter(s=>s.kind==='body_real'&&!s.selected_candidate)){

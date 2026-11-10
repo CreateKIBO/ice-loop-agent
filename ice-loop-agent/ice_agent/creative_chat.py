@@ -13,10 +13,10 @@ import time
 from contextlib import closing
 from typing import Any
 
-from .accounts import profile_from_account
 from .domain.types import new_id, now_iso, sha256_json, sha256_text
 from .llm.router import LLMRequest
 from .publication_history import PublicationHistory
+from .skills import MODE_STAGE, materials_text, skill_for_prompt  # v3.19 参考资料按阶段取用
 from .workspace_assets import WorkspaceAssets
 
 SCHEMA = """
@@ -95,7 +95,14 @@ class CreativeChat:
 
     def call(self, method: str, params: dict) -> Any:
         account = self.service._account(params.get('account_id'))
-        engine, cfg, store = self.service._app()
+        # v3.16：起草时可带本篇/系列的技能选择（只影响写作与检查）；重试仍用原请求快照。
+        selection = None
+        if method == 'chat.send' and params.get('skill_selection') is not None:
+            from .skills import normalize_selection
+            selection = normalize_selection(params['skill_selection'])
+        elif method == 'chat.send' and params.get('conversation_id'):
+            selection = self._conversation_selection(account['id'], str(params['conversation_id']))  # v3.17 会话技能 / 会话系列
+        engine, cfg, store = self.service._app(skill_selection=selection) if selection else self.service._app()
         try:
             with self.service.chat_guard:
                 if method in ('chat.review', 'chat.save_draft'):
@@ -104,6 +111,15 @@ class CreativeChat:
                 return getattr(self, method.replace('chat.', ''))(store, engine, cfg, account, params)
         finally:
             store.close()
+
+    def _conversation_selection(self, account_id: str, conversation_id: str) -> dict | None:
+        from .domain.store import Store
+        from .skills import selection_for_conversation
+        probe = Store(self.service.runtime / 'app.db')
+        try:
+            return selection_for_conversation(probe, account_id, conversation_id)
+        finally:
+            probe.close()
 
     @staticmethod
     def conversation(store: Any, aid: str, cid: str) -> dict:
@@ -534,7 +550,8 @@ class CreativeChat:
         selected_text = params.get('selected_text', '')
         if selected_text is None or selected_text == '':
             selected_text = original_context.get('selected_text', '')
-        context = {'publication': profile_from_account(account), 'mode': mode,
+        writing_profile = copy.deepcopy(original_context.get('writing_profile') or cfg.profile)
+        context = {'publication': writing_profile, 'mode': mode,
                    'target_article': base, 'candidate_article': {'title': prior['title'], 'body': prior['body']} if prior else None,
                    'references': references, 'history': planning, 'scheduled_topic': schedule, 'visual_references': assets,
                    'selected_text': bounded(selected_text, 8000, '选中文字', empty=True)}
@@ -589,7 +606,9 @@ class CreativeChat:
                 'prompts': {'type': 'list', 'item': 'str', 'required': True},
                 'questions': {'type': 'list', 'required': False, 'item': {'type': 'object', 'fields': {
                     'id': {'type': 'str'}, 'question': {'type': 'str'},
-                    'options': {'type': 'list', 'item': 'str', 'required': False}}}}}}
+                    'header': {'type': 'str', 'required': False}, 'multiple': {'type': 'bool', 'required': False},
+                    # 选项可为短文本，或 {"label":…, "description":…}；入库前统一规范化。
+                    'options': {'type': 'list', 'item': 'any', 'required': False}}}}}}
         req = LLMRequest(role='writer', node='creative_chat', prompt=text, context=context, schema=schema, stream=True, timeout=300,
             history=transcript, system=(
                 '你是专门服务当前公众号的编辑助手。只讨论观点、拟题、组织大纲、编辑文章和准备配图。'
@@ -597,7 +616,10 @@ class CreativeChat:
                 '历史拟题必须依据本栏目前五篇正文和全部标题，并优先采用对应期的预设大纲标题。'
                 'confirmed_editorial是用户已确认的本期需求，期号固定；title_selection.locked为真时，初稿必须保留用户确认的标题，不重新拟题。'
                 '未知事实、引用和运行输出不要编造；保留待核验标记与待配图占位符。'
-                '讨论模式只回复观点。生成初稿模式根据本轮要求、前文讨论、栏目历史与资料组织完整Markdown初稿；'
+                '讨论模式只回复观点；如需用户确认会改变方向、读者定位或关键结论的信息，先用一两句说明原因，'
+                '再在回复最后附一个```ice-questions代码块，内容为JSON数组，每项为{"id":"英文id","question":"中文问题","header":"短标签",'
+                '"options":[{"label":"选项","description":"一句话影响"}],"multiple":false}，最多4项；问题不要在正文里重复列出，无需追问时不要附加。'
+                '生成初稿模式根据本轮要求、前文讨论、栏目历史与资料组织完整Markdown初稿；'
                 '改稿模式输出完整Markdown候选正文（唯一一级标题），不要省略未改段落。'
                 '配图模式保留当前正文，prompts按图位输出可编辑英文生图提示词，严格遵循image_prompt_contract。'
                 '有封面模板时以Edit image开头，仅修改匹配栏目的已有模板标题和期号，品牌标志形状原样保留。'
@@ -605,15 +627,21 @@ class CreativeChat:
                 '说明元素位置、文字层级、箭头方向，不只复述标题；不用无关插画或真实产品logo。'
                 '范例只示范结构，主题和图内文字必须依据当前正文。reply用中文说明每个图位应上传哪些参考图及顺序。'
                 '若缺少会改变文章方向、读者定位或关键结论的信息，先提问，不要猜测。'
-                '结构化模式在questions给出最多3个问题，每项id用英文数字下划线，question用中文，'
-                'options可为0至4个简短中文选项；此时title、body留空，prompts为空。'
+                '结构化模式在questions给出最多4个问题，每项id用英文数字下划线，question用中文且每题只问一件事，'
+                'header为不超过8字的短标签；options可为0至4个选项，每项为{"label":"简短中文选项","description":"一句话说明选择后的影响"}；'
+                '有推荐项时放在第一位并在label末尾加“（推荐）”；可多选时设置multiple为true；'
+                '用户总能自行填写其他答案，因此不要提供“其他”选项；此时title、body留空，prompts为空。'
                 '已明确的事项不重复提问；一般待核验事实可以保留标记。无需追问时questions为空。'
                 'reply用中文说明修改和待办，prompts没有需求时为空列表。生成内容只是未审批候选，不会自动保存或审批。'
+                + '\n本轮写作技能与检查规则（只用于写作和审阅，不授予执行或发布权限）：' + json.dumps({
+                    'skill': skill_for_prompt(writing_profile.get('writing_skill_snapshot')), 'rules': writing_profile['article']}, ensure_ascii=False)
+                + materials_text(writing_profile.get('writing_skill_snapshot'), MODE_STAGE.get(mode, 'write'))
                 + ('本轮必须返回JSON对象。完整Markdown文章只能放在body字符串内，换行必须使用JSON转义。'
                    '格式示例：{"reply":"初稿完成","title":"文章标题","body":"# 文章标题\\n\\n正文",'
                    '"prompts":[],"questions":[]}。需要澄清时示例：{"reply":"请确认读者",'
                    '"title":"","body":"","prompts":[],"questions":[{"id":"reader",'
-                   '"question":"面向什么读者？","options":["零基础","已有基础"]}]}。' if schema else '')))
+                   '"question":"面向什么读者？","header":"读者","options":[{"label":"零基础（推荐）","description":"多用类比，少用术语"},'
+                   '{"label":"已有基础","description":"直接讲原理和进阶用法"}]}]}。' if schema else '')))
         from .llm.router import request_manifest
         input_manifest = request_manifest(req)
         mid, uid = new_id('message'), new_id('message')
@@ -631,6 +659,7 @@ class CreativeChat:
             metadata['summary_manifest'] = summary_manifest
         metadata['prior_candidate_id'] = prior['id'] if prior else None
         metadata['request_snapshot'] = {'mode': mode, 'text': text,
+            'writing_profile': writing_profile,
             'citations': [{'chunk_id':chunk['chunk_id'],'hash':chunk['chunk_hash']} for chunk in resolved],
             'profile_id': profile_id,
             'references': [r['id'] for r in references], 'reference_hashes': {r['id']: r['content_hash'] for r in references},
@@ -727,11 +756,91 @@ class CreativeChat:
         return {'message_id': message_id, 'mode': metadata.get('mode', 'draft'), 'questions': questions,
                 'answers': answers, 'metadata': metadata}
 
+    def _pause_for_questions(self, metadata: dict, questions: list[dict], req: Any, base: dict, reply: str) -> tuple[str, str]:
+        """把澄清问题写入消息元数据并暂停等待作答；正文保留问题清单，供下一轮对话上下文使用。"""
+        metadata.update(questions=questions, clarification_status='pending')
+        original = req.context.get('clarification') or {}
+        previous_answers = list(original.get('previous_answers', []))
+        for question in original.get('questions', []):
+            if question['id'] in original.get('answers', {}):
+                previous_answers.append({'question': question['question'], 'answer': original['answers'][question['id']]})
+        if original.get('freeform_answer'):
+            previous_answers.append({'question': '此前澄清问题的自由回答', 'answer': original['freeform_answer']})
+        metadata['context_snapshot'] = {
+            'original_request': original.get('original_request') or req.prompt,
+            'references': [r['id'] for r in req.context.get('references', [])],
+            'reference_hashes': {r['id']: r['content_hash'] for r in req.context.get('references', [])},
+            'documents': req.context.get('documents', []),
+            'selected_text': req.context.get('selected_text', ''),
+            'candidate_id': metadata.get('prior_candidate_id'),
+            'answers_so_far': previous_answers[-30:],
+            'target_content_hash': base['content_hash']}
+        intro = reply.strip()
+        # 界面用 reply_intro 显示说明文字，问题本身只在提问框中出现一次。
+        metadata['reply_intro'] = intro
+        listed = '\n'.join(f"{index}. {q['question']}" for index, q in enumerate(questions, 1))
+        return (intro + '\n\n' + listed).strip(), 'awaiting_input'
+
+    QUESTION_BLOCK = re.compile(r'```ice-questions[ \t]*\n(.*?)(?:```|\Z)', re.S)
+    ASK_CUE = re.compile(r'(请(你)?(先)?(确认|告诉我|回答|选择|补充|明确)|想(先)?(确认|了解|问)|需要(你|您)(确认|补充|回答)|几个问题|以下问题|下面.{0,6}问题|请问)')
+    NUMBERED_QUESTION = re.compile(r'^\s*(?:\d{1,2}[.、)）]|[（(]\d{1,2}[)）]|[-*•])\s*(?:\*\*)?(.{2,200}?[？?])(?:\*\*)?\s*(.*)$')
+
+    @classmethod
+    def _discussion_questions(cls, reply: str) -> tuple[str, list[dict], str]:
+        """讨论模式提问的两种来源：1) 模型按约定输出的 ```ice-questions JSON 块；
+        2) 兜底：回复末尾、带明确提问用语的编号问题清单（每项以问号结尾，可在括号/冒号后给出“A/B/C”选项）。"""
+        matches = list(cls.QUESTION_BLOCK.finditer(reply or ''))
+        if matches:
+            block = matches[-1]
+            stripped = (reply[:block.start()] + reply[block.end():]).strip()
+            try:
+                value = json.loads(block.group(1).strip())
+                questions = cls._questions({'questions': value['questions'] if isinstance(value, dict) else value})
+                if questions:
+                    return stripped, questions, 'block'
+            except (ValueError, KeyError, TypeError):
+                pass
+            reply = stripped  # 块无效：不把原始 JSON 显示给用户，改走兜底识别
+        lines = (reply or '').rstrip().split('\n')
+        tail: list[tuple[str, str]] = []
+        index = len(lines) - 1
+        while index >= 0 and not lines[index].strip():
+            index -= 1
+        while index >= 0:
+            match = cls.NUMBERED_QUESTION.match(lines[index])
+            if not match:
+                break
+            tail.insert(0, (match.group(1).strip(), match.group(2).strip()))
+            index -= 1
+            while index >= 0 and not lines[index].strip():
+                index -= 1
+        intro = '\n'.join(lines[:index + 1]).strip()
+        if not 2 <= len(tail) <= 4 or not cls.ASK_CUE.search(intro[-200:] if intro else ''):
+            return reply, [], ''
+        questions = []
+        for number, (question, rest) in enumerate(tail, 1):
+            options: list[str] = []
+            hint = re.search(r'[（(]([^（）()]{2,120})[）)]\s*$', question) or (re.match(r'^[（(:：]?\s*([^。（）()]{2,120})[）)]?\s*$', rest) if rest else None)
+            if hint:
+                parts = [p.strip(' ，,。') for p in re.split(r'[/／|｜、]|还是|或者', hint.group(1)) if p.strip(' ，,。')]
+                if 2 <= len(parts) <= 4 and all(len(p) <= 40 for p in parts) and len(set(parts)) == len(parts):
+                    options = parts
+                    if hint.re.pattern.startswith('[（(]([^'):
+                        question = question[:hint.start()].rstrip() + question[hint.end():]
+            question = re.sub(r'\*\*', '', question).strip()
+            if not question.endswith(('？', '?')):
+                question += '？'
+            questions.append({'id': f'q{number}', 'question': question[:500], 'options': options})
+        try:
+            return intro, cls._questions({'questions': questions}), 'list'
+        except ValueError:
+            return reply, [], ''
+
     @staticmethod
     def _questions(data: dict) -> list[dict]:
         questions = data.get('questions', [])
-        if not isinstance(questions, list) or len(questions) > 3:
-            raise ValueError('澄清问题最多3个')
+        if not isinstance(questions, list) or len(questions) > 4:
+            raise ValueError('澄清问题最多4个')
         result, ids = [], set()
         for value in questions:
             if not isinstance(value, dict):
@@ -743,11 +852,28 @@ class CreativeChat:
             options = value.get('options', [])
             if not isinstance(options, list) or len(options) > 4:
                 raise ValueError('每个问题最多4个选项')
-            options = [bounded(option, 200, '问题选项').strip() for option in options]
-            if len(options) != len(set(options)):
-                raise ValueError('问题选项不能重复')
+            labels, details = [], []
+            for option in options:
+                # 兼容两种写法：纯文本，或 {"label","description"}。
+                if isinstance(option, dict):
+                    labels.append(bounded(option.get('label'), 200, '问题选项').strip())
+                    note = option.get('description', '')
+                    details.append(bounded(note, 200, '选项说明').strip() if note else '')
+                else:
+                    labels.append(bounded(option, 200, '问题选项').strip())
+                    details.append('')
+            if any(not label for label in labels) or len(labels) != len(set(labels)):
+                raise ValueError('问题选项不能为空或重复')
+            item = {'id': qid, 'question': question, 'options': labels}
+            header = value.get('header')
+            if isinstance(header, str) and header.strip():
+                item['header'] = header.strip()[:12]
+            if value.get('multiple') is True and labels:
+                item['multiple'] = True
+            if any(details):
+                item['details'] = details
             ids.add(qid)
-            result.append({'id': qid, 'question': question, 'options': options})
+            result.append(item)
         return result
 
     def _generate(self, account: dict, cid: str, mid: str, req: LLMRequest, base: dict, parent: str | None, snapshot: dict, cancel: threading.Event) -> None:
@@ -794,7 +920,7 @@ class CreativeChat:
                 progress('waiting_model', last_provider_error=inv.get('status', ''))
 
         try:
-            engine, _, store = self.service._app()
+            engine, _, store = self.service._app(account_id=account['id'])
             engine.router.restore(snapshot)
             engine.router.cancelled = cancel.is_set
             engine.router.on_delta = delta
@@ -819,25 +945,7 @@ class CreativeChat:
                         raise ValueError('配图提示词超出数量或长度上限')
                     reply = bounded(data.get('reply'), 12000, '回复', empty=True)
                     if questions:
-                        metadata.update(questions=questions, clarification_status='pending')
-                        original = req.context.get('clarification') or {}
-                        previous_answers = list(original.get('previous_answers', []))
-                        for question in original.get('questions', []):
-                            if question['id'] in original.get('answers', {}):
-                                previous_answers.append({'question': question['question'], 'answer': original['answers'][question['id']]})
-                        if original.get('freeform_answer'):
-                            previous_answers.append({'question': '此前澄清问题的自由回答', 'answer': original['freeform_answer']})
-                        metadata['context_snapshot'] = {
-                            'original_request': original.get('original_request') or req.prompt,
-                            'references': [r['id'] for r in req.context.get('references', [])],
-                            'reference_hashes': {r['id']: r['content_hash'] for r in req.context.get('references', [])},
-                            'documents': req.context.get('documents', []),
-                            'selected_text': req.context.get('selected_text', ''),
-                            'candidate_id': metadata.get('prior_candidate_id'),
-                            'answers_so_far': previous_answers[-30:],
-                            'target_content_hash': base['content_hash']}
-                        phase = 'awaiting_input'
-                        reply = (reply + '\n\n' + '\n'.join(f"{index}. {q['question']}" for index, q in enumerate(questions, 1))).strip()
+                        reply, phase = self._pause_for_questions(metadata, questions, req, base, reply)
                     else:
                         title = bounded(data['title'], 300, '候选标题')
                         body = bounded(data['body'], 100000, '候选正文')
@@ -857,6 +965,13 @@ class CreativeChat:
                             self._event(account['id'], cid, mid, 'turn.phase', phase='saving_candidate')
                         candidate_id = self._insert_candidate(store, account['id'], cid, title, body, base, prompts, parent)
                         metadata['candidate_id'] = candidate_id
+                else:
+                    # v3.3：讨论模式也能结构化提问——回复末尾的 ```ice-questions 块（或明确的编号提问清单）
+                    # 转为提问框；块本身从正文中移除。
+                    reply, questions, source = self._discussion_questions(reply)
+                    if questions:
+                        metadata['questions_source'] = source
+                        reply, phase = self._pause_for_questions(metadata, questions, req, base, reply)
                 clarification = req.context.get('clarification') or {}
                 if clarification.get('freeform_answer'):
                     old = store.conn.execute('SELECT metadata_json FROM creative_messages WHERE id=? AND conversation_id=?', (clarification['message_id'], cid)).fetchone()
@@ -883,7 +998,7 @@ class CreativeChat:
                             account_id=account['id'], account=account, service=self.service,
                             store_factory=self.service._app_store_factory(),
                             run_id=run_id_new(), conversation_id=cid,
-                            turn_id=mid, cancel_event=cancel)
+                            turn_id=mid, cancel_event=cancel, writing_profile=req.context['publication'])
 
                         def agent_turn(round_index: int, transcript: list):
                             nonlocal reply
@@ -1168,7 +1283,7 @@ class CreativeChat:
         folder = ensure_dir(self.service.runtime / 'staging' / 'creative-drafts')
         file = folder / (draft['draft_id'] + '-' + draft['content_hash'][:12] + '.md')
         atomic_write_text(file, draft['body'])
-        cfg.profile = profile_from_account(account)
+        # Keep the resolved writing-skill profile supplied by _app.
         result = create(engine, store, account, file)
         metadata = store.conn.execute('SELECT series,episode FROM creative_article_metadata WHERE account_id=? AND draft_id=?',(account['id'],draft['draft_id'])).fetchone()
         if metadata and metadata['series']:

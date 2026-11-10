@@ -92,6 +92,48 @@ class CreativeChatTests(unittest.TestCase):
         self.service = DesktopService(REPO, self.root)
         self.assertIn('观点', self.call('get', conversation_id=cid)['messages'][-1]['content'])
 
+    def test_discussion_questions_open_question_box_and_answers_resume(self):
+        """v3.3：讨论模式的 ice-questions 块转为结构化问题（提问框），块不出现在正文中；逐题回答后继续讨论。"""
+        cid = self.call('create')['conversation']['id']
+        reply = ('动笔前想先确认读者。\n\n```ice-questions\n'
+                 '[{"id":"reader","question":"面向什么读者？","header":"读者","options":[{"label":"零基础（推荐）","description":"多举例"},"已有基础"]},'
+                 '{"id":"length","question":"篇幅多长？"}]\n```')
+        with patch.object(RoleRouter, 'generate', return_value=LLMResponse(reply)):
+            self.call('send', conversation_id=cid, text='想写一篇循环入门')
+            paused = self.wait(cid)
+        assistant = paused['messages'][-1]
+        self.assertEqual(assistant['metadata']['progress']['phase'], 'awaiting_input')
+        self.assertEqual([q['id'] for q in assistant['metadata']['questions']], ['reader', 'length'])
+        self.assertEqual(assistant['metadata']['questions'][0]['details'], ['多举例', ''])
+        self.assertEqual(assistant['metadata']['reply_intro'], '动笔前想先确认读者。')
+        self.assertNotIn('ice-questions', assistant['content'])
+        captured = []
+        def answer(_router, request, **_kwargs):
+            captured.append(request)
+            return LLMResponse('好的，按零基础读者展开。')
+        with patch.object(RoleRouter, 'generate', autospec=True, side_effect=answer):
+            self.call('send', conversation_id=cid, clarification_message_id=assistant['id'],
+                      clarification_answers={'reader': '零基础（推荐）', 'length': '1500 字'})
+            done = self.wait(cid)
+        self.assertEqual(captured[0].context['clarification']['answers']['length'], '1500 字')
+        self.assertEqual(done['messages'][-1]['status'], 'completed')
+
+    def test_discussion_numbered_questions_fallback(self):
+        cid = self.call('create')['conversation']['id']
+        reply = '请先确认以下问题：\n\n1. 面向什么读者？（零基础/有一定基础）\n2. 语气轻松还是严肃？'
+        with patch.object(RoleRouter, 'generate', return_value=LLMResponse(reply)):
+            self.call('send', conversation_id=cid, text='写点什么')
+            paused = self.wait(cid)
+        questions = paused['messages'][-1]['metadata']['questions']
+        self.assertEqual(questions[0]['options'], ['零基础', '有一定基础'])
+        self.assertEqual(paused['messages'][-1]['metadata']['questions_source'], 'list')
+        # 普通讨论里的反问不应被误判为提问
+        with patch.object(RoleRouter, 'generate', return_value=LLMResponse('观点如下。\n\n1. 为什么这样写？\n2. 读者会怎么想？')):
+            other = self.call('create')['conversation']['id']
+            self.call('send', conversation_id=other, text='聊聊写法')
+            plain = self.wait(other)
+        self.assertNotIn('questions', plain['messages'][-1]['metadata'])
+
     def test_nested_library_recent_five_and_all_titles(self):
         for issue in range(1, 13):
             folder = self.library / 'PY' / f'{issue:03d}-title'

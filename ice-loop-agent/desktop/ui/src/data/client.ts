@@ -8,6 +8,7 @@ import { advanceCursor, boundStreamEvents, mergeEvents, needsBackfill, type Stre
 import { ResourceCache } from "./resourceCache";
 import { chatResult, jobRows } from "./workbenchResponses";
 import { createDirtyFlusher } from "./dirtyFlush";
+import { documentStore } from "../app/uiState";
 
 export interface IceBridge {
   request: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -199,6 +200,7 @@ export function resetForAccountSwitch(nextAccount: string) {
   streamCache.clear();
   editorStore.set(null);
   conversationStore.set(null);
+  documentStore.set(null);
   accountStore.set(nextAccount);
 }
 

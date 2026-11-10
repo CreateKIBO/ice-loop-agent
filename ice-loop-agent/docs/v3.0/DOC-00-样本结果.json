@@ -1,0 +1,71 @@
+{
+ "S1 旧任务 Markdown（tests/fixtures/editorial-sample.md）": {
+  "route_A_markdown_canonical": {
+   "lossless": false,
+   "features_before": {
+    "textStyle": 0,
+    "textAlign": 0,
+    "imageWidthAlign": 0,
+    "islandDeliver": 1,
+    "underline": 0
+   },
+   "features_after": {
+    "textStyle": 0,
+    "textAlign": 0,
+    "imageWidthAlign": 0,
+    "islandDeliver": 0,
+    "underline": 0
+   }
+  },
+  "route_B_structured_canonical": {
+   "lossless": true,
+   "note": "规范值即编辑器 JSON，保存不经转换"
+  }
+ },
+ "S2 公众号风格 HTML 粘贴": {
+  "route_A_markdown_canonical": {
+   "lossless": false,
+   "features_before": {
+    "textStyle": 1,
+    "textAlign": 2,
+    "imageWidthAlign": 0,
+    "islandDeliver": 1,
+    "underline": 1
+   },
+   "features_after": {
+    "textStyle": 0,
+    "textAlign": 0,
+    "imageWidthAlign": 0,
+    "islandDeliver": 0,
+    "underline": 0
+   }
+  },
+  "route_B_structured_canonical": {
+   "lossless": true,
+   "note": "规范值即编辑器 JSON，保存不经转换"
+  }
+ },
+ "S3 图文排版稿（图宽60%/左对齐、表格按HTML交付）": {
+  "route_A_markdown_canonical": {
+   "lossless": false,
+   "features_before": {
+    "textStyle": 1,
+    "textAlign": 2,
+    "imageWidthAlign": 1,
+    "islandDeliver": 1,
+    "underline": 1
+   },
+   "features_after": {
+    "textStyle": 0,
+    "textAlign": 0,
+    "imageWidthAlign": 0,
+    "islandDeliver": 0,
+    "underline": 0
+   }
+  },
+  "route_B_structured_canonical": {
+   "lossless": true,
+   "note": "规范值即编辑器 JSON，保存不经转换"
+  }
+ }
+}

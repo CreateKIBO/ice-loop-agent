@@ -44,10 +44,15 @@ contextBridge.exposeInMainWorld('ice', Object.freeze({
   captureWindow: () => ipcRenderer.invoke('ice:capture-window'),
   captureRun: (jobId,figureNo,runKeys) => ipcRenderer.invoke('ice:capture-run',jobId,figureNo,runKeys),
   copyText: text => ipcRenderer.invoke('ice:copy-text',text),
+  pickDocumentImage: accountId => ipcRenderer.invoke('ice:document-pick-image',accountId),
+  copyDocument: params => ipcRenderer.invoke('ice:document-copy',params),
+  documentLongImage: params => ipcRenderer.invoke('ice:document-long-image',params),
+  documentSvgImage: params => ipcRenderer.invoke('ice:document-svg-image',params),
   importPublication: () => ipcRenderer.invoke('ice:import-publication'),
   exportPublication: () => ipcRenderer.invoke('ice:export-publication'),
   importResource: () => ipcRenderer.invoke('ice:import-resource'),
   importDraft: () => ipcRenderer.invoke('ice:import-draft'),
   exportDraft: draftId => ipcRenderer.invoke('ice:export-draft', draftId),
+  exportSkill: params => ipcRenderer.invoke('ice:export-skill', params),
   onEngineExit: callback => { const listener = () => callback(); ipcRenderer.on('ice:engine-exit', listener); return () => ipcRenderer.removeListener('ice:engine-exit', listener); }
 }));

@@ -78,3 +78,12 @@
 .ice-window-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px var(--ice-space-3); border-bottom: 1px solid var(--ice-border); background: var(--ice-surface); }
 .ice-window-find > input { flex: 1 1 180px; min-width: 100px; }
 .ice-window-find > [role="status"] { min-width: 70px; text-align: center; font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); }
+
+/* v3.11 讨论结束后的“写初稿” */
+.ice-draft-cta { margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--ice-signal-blue); border-radius: var(--ice-radius-md);
+  background: var(--ice-surface); display: grid; gap: 8px; }
+.ice-draft-cta__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ice-draft-cta__hint { flex: 1 1 220px; min-width: 0; font-size: var(--ice-font-size-sm); color: var(--ice-text-secondary); line-height: 1.5; }
+.ice-draft-cta__extra { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; font: inherit; font-size: var(--ice-font-size-md);
+  border: 1px solid var(--ice-border-subtle); border-radius: var(--ice-radius-sm); background: var(--ice-surface); color: var(--ice-text); }
+.ice-draft-cta__extra:focus { outline: none; border-color: var(--ice-signal-blue); box-shadow: var(--ice-focus-ring); }

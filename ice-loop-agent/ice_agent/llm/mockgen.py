@@ -111,6 +111,8 @@ def canon_code(series: str, episode: int) -> list[dict[str, str]]:
 
 
 def generate_structured(node: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    if node == 'skill_conflicts':  # v3.20 演示模型：不编造冲突
+        return {'conflicts': [], 'notes': '离线演示模型不做语义判断；请配置写作模型后再用 AI 深入检查。'}
     if node == 'creative_chat':
         clarification = ctx.get('clarification') or {}
         if ctx.get('mode') == 'draft' and ctx.get('fixture_clarification') and not (clarification.get('answers') or clarification.get('freeform_answer')):

@@ -125,16 +125,21 @@ class DesktopService:
         return copy.deepcopy(account)
 
     def _app(self, *, demo: bool = False, article_root: str | None = None,
-             account_id: str | None = None):
+             account_id: str | None = None, skill_selection: dict | None = None):
         # Background tasks keep their persisted owner even after the UI switches.
         account = self._account(account_id if account_id is not None else "ice-loop" if demo else None)
+        retired = self.code_execution_retired
         engine, cfg, store = build_app(
             Path(article_root or account["article_root"]), self.runtime,
-            provider="mock" if demo else "qwen-deepseek", allow_local_exec=True)
+            provider="mock" if demo else "qwen-deepseek", allow_local_exec=not retired)
+        cfg.code_execution_retired = retired
         if not demo or account['id'] != 'ice-loop':
             cfg.profile = profile_from_account(account)
             from .workspace_assets import WorkspaceAssets
             cfg.profile['brand']['visual_references']=WorkspaceAssets(store,self.runtime,account['id']).style_context()
+            from .skills import WritingSkills
+            # v3.16：可带本篇/系列的技能选择；未带时按公众号设置。
+            cfg.profile = WritingSkills(store, account).apply(cfg.profile, skill_selection)
             from .rules.sources import RuleSources
             cfg.profile = RuleSources(store,account['id']).apply(cfg.profile)
         if not demo:
@@ -214,8 +219,20 @@ class DesktopService:
         with request_control(lambda: self._consumer_stop.is_set()):
             return self._dispatch_call(method,params)
 
+    @property
+    def code_execution_retired(self) -> bool:
+        """C-03：v3 桌面工作台默认不再启动新的代码执行。
+
+        ICE_LEGACY_CODE_EXECUTION=1 只用于源码环境的历史回归测试；安装包中始终退场。"""
+        if os.environ.get('ICE_PACKAGED') == '1':
+            return True
+        return os.environ.get('ICE_LEGACY_CODE_EXECUTION') != '1'
+
     def _dispatch_call(self, method: str, params: dict | None = None) -> Any:
         params = params or {}
+        if method in RETIRED_EXECUTION_METHODS and self.code_execution_retired:
+            raise ValueError('[CODE_EXECUTION_RETIRED] 代码执行功能已在 v3 退场，不能再启动、批准或修改代码运行；'
+                             '历史运行记录仍可查看。旧任务如需继续写作，请在文章首页使用“复制为新文章”。')
         if params.get('job_id') and params.get('account_id') and params['account_id'] != self._account()['id']:
             raise ValueError('公众号已切换，请刷新任务列表')
         if method == 'jobs.get':
@@ -774,6 +791,7 @@ class DesktopService:
                     "body_hash": sha256_text(state.get('integrated_md',state.get('draft_md',''))),
                     'delivery_hash':delivery_hash(state,slots),'auto_capture_errors':state.get('auto_capture_errors',{}),
                     "draft": state.get("draft_md", ""), "runs": state.get("runs", {}),
+                    "execution_retired": self.code_execution_retired,
                     "execution_hash":execution['content_hash'] if execution else None,
                     "stdin_by_filename": state["spec"].get("stdin_by_filename", {}),
                     "execution":execution,
@@ -1503,6 +1521,14 @@ class DesktopService:
 
     def secrets_set(self, params):
         for aid, key in params.get("keys", {}).items():
+            if isinstance(aid, str) and aid.startswith("wechat-") and isinstance(key, str):
+                # v3.22 公众号 AppSecret：只放在引擎内存，按公众号区分
+                secrets = self.__dict__.setdefault("wechat_secrets", {})
+                if key:
+                    secrets[aid[len("wechat-"):]] = key
+                else:
+                    secrets.pop(aid[len("wechat-"):], None)
+                continue
             if aid not in self.settings["profiles"] or not isinstance(key, str):
                 raise ValueError("凭据配置无效")
             env = self.settings["profiles"][aid]["api_key_env"]
@@ -1850,6 +1876,14 @@ class DesktopService:
             return None
 
 
+# C-03：会启动、批准、补输入或改写代码执行的入口（历史证据读取不在此列）。
+RETIRED_EXECUTION_METHODS = frozenset({
+    'execution.approve', 'execution.inputs', 'execution.code_save', 'execution.policy_save',
+    'supplements.prepare', 'supplements.execute',
+    'assets.capture_context', 'assets.capture_finish',
+})
+
+
 # 重操作路由（M1-04）：这些方法在池内串行执行，不阻塞 stdin 读循环。
 # 判定标准：涉及模型调用/演示程序执行/备份恢复/资源分析等可感知的长操作。
 HEAVY_METHODS = frozenset({
@@ -1859,6 +1893,13 @@ HEAVY_METHODS = frozenset({
     'models.probe', 'models.catalog', 'models.window_refresh', 'vision.probe', 'backup.create', 'backup.inspect', 'backup.restore', 'backup.resume_queue', 'recovery.create', 'recovery.inspect', 'recovery.restore', 'recovery.delete',
     'accounts.import', 'articles.finalize', 'planning.propose',
     'outlines.preview', 'brief.suggest',
+    'documents.export_bundle', 'documents.import_paste', 'documents.convert_paste', 'documents.reconvert',
+    'documents.render_delivery', 'documents.copy_payload', 'documents.open_legacy', 'documents.ai_draft_start', 'documents.ai_guided_start',
+    'documents.image_import', 'documents.image_import_data', 'documents.image_edit', 'documents.import_docx',
+    'documents.long_image_page', 'documents.long_image_compose', 'documents.svg_import',
+    'documents.perf_sample', 'documents.compat_create',
+    'skills.check_conflicts_ai',
+    'wechat.test', 'wechat.draft_sync', 'wechat.group_preview', 'wechat.group_sync',
 })
 
 

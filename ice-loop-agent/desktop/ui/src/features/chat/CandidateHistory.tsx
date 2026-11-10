@@ -8,7 +8,7 @@ import { refreshAfterWrite } from "../../data/receipts";
 import { queryClient, rpc, useAccountQuery, useCurrentAccount } from "../../data/client";
 import type { ChatResult } from "../../data/workbenchResponses";
 import { flashSurface } from "../../components/flash";
-import { flashDraft } from "../../app/uiState";
+import { flashDraft, documentStore } from "../../app/uiState";
 import { CANDIDATE_WINDOW, type CandidatePosition } from "./historyWindow";
 import { CandidateCompareDialog, compareStatusNote, toggleComparePick, type ComparePick } from "./CandidateCompare";
 
@@ -86,11 +86,11 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
   // 真实排版（标题/列表/表格/引用/代码；链接与图片占位沿用消息区既有安全行为）。
   // 仅界面轻量状态：随卡片卸载消失，不写 localStorage、不影响草稿/审阅语义。
   const [reading, setReading] = React.useState(true);
-  const [busy, setBusy] = React.useState<"save" | "submit" | null>(null);
+  const [busy, setBusy] = React.useState<"save" | "submit" | "article" | null>(null);
   // 2026-10-20 交互验收：同 tick 连点会绕过 state 闭包守卫（与重命名同缺陷模式），ref 双闸。
   const busyRef = React.useRef(false);
   const cardRef = React.useRef<HTMLDivElement>(null);
-  const guardBusy = (kind: "save" | "submit", run: () => Promise<void>) => async () => {
+  const guardBusy = (kind: "save" | "submit" | "article", run: () => Promise<void>) => async () => {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(kind);
@@ -124,6 +124,22 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
       setShowDiagnostics(false);
     }
     finally { /* busy 由 guardBusy 复位 */ }
+  });
+  // v3（C-04）：候选正文存为一篇独立的“AI 初稿”文章（同一候选只存一次；不覆盖任何已有文章）。
+  const saveArticle = guardBusy("article", async () => {
+    setError(null); setErrorDetail(null);
+    try {
+      const document = await rpc<{ document_id: string }>("documents.from_candidate", { candidate_id: candidate.id, account_id: account });
+      flashSurface(cardRef.current, "--ice-success-bg");
+      await queryClient.invalidateQueries({ queryKey: ["ice", account, "documents.list"] });
+      toast.success({ title: "已存为 AI 初稿文章", detail: "可在「文章」中继续编辑、排版和交付。",
+        action: { label: "打开", run: () => { documentStore.set(document.document_id); } } });
+    } catch (err) {
+      const copy = errorCopy(err);
+      setError(copy.title + (copy.nextStep ? "：" + copy.nextStep : ""));
+      setErrorDetail(diagnosticText(err));
+      setShowDiagnostics(false);
+    }
   });
   const submitReview = guardBusy("submit", async () => {
     setError(null); setErrorDetail(null);
@@ -207,6 +223,8 @@ function CandidateCard({ candidate, onChanged, compareSelected, onToggleCompare 
         </div>
       )}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <Button variant="primary" loading={busy === "article"} disabled={busy !== null} onClick={saveArticle}
+                title="存为一篇独立文章，在「文章」中编辑、排版和交付">存为文章</Button>
         <Button loading={busy === "save"} disabled={busy !== null || readOnly} onClick={saveDraft}>保存为草稿</Button>
         <Button variant="primary" loading={busy === "submit"} disabled={busy !== null || !saved || candidate.status === "pending" || readOnly}
                 title={saved ? "提交人工审阅（不自动发布）" : "请先保存为草稿"}

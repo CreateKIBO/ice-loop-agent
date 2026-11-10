@@ -85,6 +85,15 @@ _PRAGMA_APPLY: dict[int, Callable[[sqlite3.Connection], None]] = {
     19: lambda conn: conn.execute("PRAGMA user_version=19"),
     20: lambda conn: conn.execute("PRAGMA user_version=20"),
     21: lambda conn: conn.execute("PRAGMA user_version=21"),
+    22: lambda conn: conn.execute("PRAGMA user_version=22"),
+    23: lambda conn: conn.execute("PRAGMA user_version=23"),
+    24: lambda conn: conn.execute("PRAGMA user_version=24"),
+    25: lambda conn: conn.execute("PRAGMA user_version=25"),
+    26: lambda conn: conn.execute("PRAGMA user_version=26"),
+    27: lambda conn: conn.execute("PRAGMA user_version=27"),
+    28: lambda conn: conn.execute("PRAGMA user_version=28"),
+    29: lambda conn: conn.execute("PRAGMA user_version=29"),
+    30: lambda conn: conn.execute("PRAGMA user_version=30"),
 }
 
 
@@ -193,6 +202,7 @@ def run_migrations(conn: sqlite3.Connection, *, dry_run: bool = False,
 # v2.0 numbered migrations are defined in v2_schema and self-register on import.
 # Placed last so `from . import migration` inside v2_schema resolves cleanly.
 from . import v2_schema as _v2_schema  # noqa: E402,F401
+from . import v3_schema as _v3_schema  # noqa: E402,F401
 
 # Max schema version this build understands; Store refuses newer databases.
 MAX_KNOWN_VERSION = max([BASELINE_VERSION] + [m.version for m in MIGRATIONS])

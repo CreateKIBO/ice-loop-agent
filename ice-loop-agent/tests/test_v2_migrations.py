@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import sqlite3
 import unittest
 from pathlib import Path
@@ -237,8 +238,8 @@ class TestBackupRestoreDrill(unittest.TestCase):
         self.assertTrue((destination / 'runtime' / 'app.db').exists())
         restored = sqlite3.connect(str(destination / 'runtime' / 'app.db'))
         self.assertEqual(restored.execute('SELECT article_id FROM articles').fetchall(), [('art-1',)])
-        source_version = sqlite3.connect(str(runtime / 'app.db')).execute(
-            'PRAGMA user_version').fetchone()[0]
+        with closing(sqlite3.connect(str(runtime / 'app.db'))) as source:
+            source_version = source.execute('PRAGMA user_version').fetchone()[0]
         self.assertEqual(restored.execute('PRAGMA user_version').fetchone()[0], source_version)
         restored.close()
         evidence = destination / 'runtime' / 'jobs' / 'job-1' / 'evidence.txt'
@@ -246,8 +247,8 @@ class TestBackupRestoreDrill(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(evidence.read_bytes()).hexdigest(),
             hashlib.sha256((runtime / 'jobs' / 'job-1' / 'evidence.txt').read_bytes()).hexdigest())
-        article = json.loads(sqlite3.connect(str(destination / 'runtime' / 'app.db'))
-                             .execute('SELECT spec_json FROM articles').fetchone()[0])
+        with closing(sqlite3.connect(str(destination / 'runtime' / 'app.db'))) as copied:
+            article = json.loads(copied.execute('SELECT spec_json FROM articles').fetchone()[0])
         expected_root = str(destination / 'articles' / 'root-0')
         self.assertEqual(article['article_root'], expected_root)
 

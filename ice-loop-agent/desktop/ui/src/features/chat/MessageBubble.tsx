@@ -34,6 +34,9 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
   }, [x, y, opacity, reduced, emptyStreaming]);
   const failure=!isUser&&row.status==='failed'?{code:row.metadata?.error_code,message:row.metadata?.error_message??row.metadata?.error??row.content}:null;
   const preflight = !isUser ? tokenReceipt(row.metadata?.input_preflight) : null;
+  // v3.3：带结构化问题的回复只显示说明文字（问题在输入框上方的提问框里回答）；
+  // 生成中隐藏尚未收完的 ```ice-questions 块，避免把 JSON 显示给用户。
+  const shown = isUser ? row.content : assistantText(row);
   if (emptyStreaming) return null; // 空的生成中消息由打字指示代替
   return (
     <motion.div initial={entering ? { opacity: 0, y: isUser ? 14 : 6, x: 0 } : false}
@@ -51,7 +54,7 @@ export function MessageBubble({ row, animateIn, highlighted = false, onReuse, on
         border: `1px solid ${isUser ? "transparent" : "var(--ice-border-subtle)"}`,
         boxShadow: "none",
       }}>
-        {failure?<p style={{margin:0}}>生成未完成，原需求与已有稿件保留。</p>:isUser ? row.content : <MarkdownContent text={row.content} />}
+        {failure?<p style={{margin:0}}>生成未完成，原需求与已有稿件保留。</p>:isUser ? row.content : <MarkdownContent text={shown} />}
         {row.status === "streaming" && <span className="ice-caret" aria-hidden />}
       </div>
       {row.content && row.status !== "streaming" && <div className="ice-message__actions">
@@ -89,3 +92,10 @@ function InputContextReceipt({ value }: { value: unknown }) {
   </details>;
 }
 
+
+function assistantText(row: ChatMessage): string {
+  const meta = row.metadata ?? {};
+  if (Array.isArray(meta.questions) && meta.questions.length && typeof meta.reply_intro === "string")
+    return meta.reply_intro || "我需要先确认几件事，请在下方的提问框中回答。";
+  return row.status === "streaming" ? row.content.replace(/```ice-questions[\s\S]*$/, "").trimEnd() : row.content;
+}

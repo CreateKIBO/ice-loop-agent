@@ -3,6 +3,7 @@ const {siteFor,allowedURL,partition,bounds}=require('../browser.cjs');
 test('embedded sites are fixed HTTPS entry points',()=>{
   assert.equal(siteFor('tapnow').url,'https://app.tapnow.media/home');
   assert.equal(siteFor('wechat').url,'https://mp.weixin.qq.com/');
+  assert.equal(siteFor('web').url,'about:blank','通用网页会话从空白页开始');
   assert.throws(()=>siteFor('__proto__'));assert.throws(()=>siteFor('unknown'));
 });
 test('remote navigation cannot load local files or privileged app pages',()=>{
@@ -14,6 +15,8 @@ test('site and publication cookies use distinct durable partitions',()=>{
   assert.equal(partition('账号A','tapnow'),partition('账号A','tapnow'));
   assert.notEqual(partition('账号A','tapnow'),partition('账号B','tapnow'));
   assert.notEqual(partition('账号A','tapnow'),partition('账号A','wechat'));
+  assert.notEqual(partition('账号A','web'),partition('账号B','web'),'通用网页会话也按公众号隔离');
+  assert.notEqual(partition('账号A','web'),partition('账号A','wechat'));
   assert.ok(partition('账号A','tapnow').startsWith('persist:'));
 });
 test('native view remains inside content area and below application controls',()=>{
