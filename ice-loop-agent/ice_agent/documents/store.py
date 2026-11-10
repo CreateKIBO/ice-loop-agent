@@ -133,7 +133,7 @@ class DocumentStore:
                 'generation_state': row['generation_state'], 'updated_at': row['updated_at'],
                 'created_at': row['created_at'], 'trashed_at': row['trashed_at'],
                 'summary': text, 'word_count': words, 'images': images,
-                'published': bool(row.get('published')), 'readonly': False,
+                'published': bool(row.get('published')), 'drafted': bool(row.get('drafted')), 'readonly': False,
                 'source_label': meta.get('source_label', ''), 'variant': meta.get('variant'),
                 'cover_resource_id': cover,
                 'planned_date': meta.get('planned_date'),
@@ -142,7 +142,8 @@ class DocumentStore:
     def list(self, *, lifecycle: str = 'active', query: str = '') -> list[dict]:
         rows = self.conn.execute(
             'SELECT d.*, w.content_hash,'
-            ' EXISTS(SELECT 1 FROM publication_records p WHERE p.document_id=d.document_id AND p.state=\'active\') AS published'
+            ' EXISTS(SELECT 1 FROM publication_records p WHERE p.document_id=d.document_id AND p.state=\'active\') AS published,'
+            ' EXISTS(SELECT 1 FROM document_deliveries x WHERE x.document_id=d.document_id AND x.kind=\'wechat_draft\') AS drafted'
             ' FROM documents d JOIN document_working w ON w.document_id=d.document_id'
             ' WHERE d.account_id=? AND d.lifecycle=? ORDER BY d.updated_at DESC',
             (self.account_id, lifecycle)).fetchall()

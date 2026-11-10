@@ -68,14 +68,14 @@ export function SkillPicker({ value, onChange, inheritLabel, disabled }: {
         </select>
       </label>
       {addons.length > 0 && <div className="ice-skillscope__addons" role="group" aria-label="辅助技能">
-        <label className="ice-skillscope__check"><input type="checkbox" checked={!customAddons} onChange={event => {
+        <label className="ice-skillscope__check"><input type="checkbox" aria-label={`辅助技能：${inheritLabel}`} checked={!customAddons} onChange={event => {
           const { addons: _drop, ...rest } = binding; void _drop;
           set(event.target.checked ? rest : { ...rest, addons: [] });
         }} />辅助技能：{inheritLabel}</label>
         {customAddons && addons.map(s => {
           const on = binding.addons!.includes(s.id);
           return <label key={s.id} className="ice-skillscope__check">
-            <input type="checkbox" checked={on} disabled={!on && binding.addons!.length >= MAX_ADDONS}
+            <input type="checkbox" aria-label={`${s.name} v${s.version}`} checked={on} disabled={!on && binding.addons!.length >= MAX_ADDONS}
                    onChange={() => set({ ...binding, addons: on ? binding.addons!.filter(a => a !== s.id) : [...binding.addons!, s.id] })} />
             {s.name} <span className="ice-skillscope__muted">v{s.version}</span></label>;
         })}

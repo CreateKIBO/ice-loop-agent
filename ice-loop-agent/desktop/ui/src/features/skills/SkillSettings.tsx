@@ -211,7 +211,7 @@ export function SkillSettings() {
           </select></label>
           <label>写作指令<textarea aria-label="写作指令" disabled={busy} rows={10} maxLength={12000} value={selected.instructions} onChange={event => edit(selected.id, { instructions: event.target.value })} /></label>
           <SkillFiles files={selected.files ?? []} disabled={busy} onChange={files => edit(selected.id, { files: files.length ? files : undefined })} />
-          <label>固定结尾标题（留空不要求）<Input disabled={busy || !parsed} maxLength={50} value={typeof parsed?.required_ending_heading === 'string' ? parsed.required_ending_heading : ''} onChange={event => updateRule('required_ending_heading', event.target.value)} /></label>
+          <label>固定结尾标题（留空不要求）<Input aria-label="固定结尾标题（留空不要求）" disabled={busy || !parsed} maxLength={50} value={typeof parsed?.required_ending_heading === 'string' ? parsed.required_ending_heading : ''} onChange={event => updateRule('required_ending_heading', event.target.value)} /></label>
           <label className="ice-skills__check"><input type="checkbox" disabled={busy || !parsed} checked={parsed?.numbered_headings === true} onChange={event => updateRule('numbered_headings', event.target.checked)} />章节按中文数字编号</label>
           <details><summary>高级检查规则（JSON）</summary>
             <p className="ice-skills__note">支持标题长度、字数区间、代码数量/行数、结尾、编号、标点及禁用词。空对象表示不增加技能检查。</p>

@@ -32,6 +32,7 @@ v3 的方向与范围见 [开发报告](../上线准备/工作台优先转向-�
 | v3.24 | [多图文草稿](v3.24-多图文草稿.md) | §28 |
 | v3.25 | [编辑器里的多图文状态与发布授权草案](v3.25-多图文状态与发布授权草案.md) | §29 |
 | v3.26 | [编辑器优化与封面裁切保存修复](v3.26-编辑器优化.md) · **[后续迭代规划](后续迭代规划-2026-11-08.md)** | §30 |
+| v3.27 | [整体检查与优化](v3.27-整体检查与优化.md) | §31 |
 
 > 验收清单章节号以清单本身为准；早期版本合并在 §10 之前的章节里。
 
@@ -60,4 +61,6 @@ node desktop/tests/skills-settings-browser.cjs
 node desktop/tests/skills-packages-browser.cjs
 node desktop/tests/skills-scope-browser.cjs
 node desktop/tests/wechat-browser.cjs
+node desktop/tests/layout-browser.cjs
+node --test desktop/tests/ui-a11y.test.cjs
 ```

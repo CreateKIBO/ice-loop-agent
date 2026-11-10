@@ -63,7 +63,7 @@
 .ice-qbox__review li[data-missing="true"] .ice-qbox__review-a { color: var(--ice-warning); }
 .ice-qbox__more { margin-bottom: 10px; font-size: var(--ice-font-size-sm); }
 .ice-qbox__more summary { cursor: pointer; color: var(--ice-text-secondary); }
-.ice-qbox__more select { margin-top: 6px; width: 100%; font: inherit; color: var(--ice-text); background: var(--ice-bg);
+.ice-qbox__more select { margin-top: 6px; width: 100%; font: inherit; color: var(--ice-text); background: var(--ice-surface);
   border: 1px solid var(--ice-border); border-radius: var(--ice-radius-md); padding: 6px 8px; }
 
 /* 对话流中的问题记录（摘要） */

@@ -20,6 +20,8 @@ import { DeleteForeverDialog, trashDocument } from "./documentDelete";
 import { SkillPicker, type SkillBinding } from "./DocumentSkills";
 import "../../styles/documents.css";
 
+const TOOLS_KEY = "ice.doc.home.tools";
+
 // v3.24 多图文：对话框按需加载，不进首页主包
 const WeChatGroupDialog = React.lazy(() => import("./WeChatGroupDialog").then(module => ({ default: module.WeChatGroupDialog })));
 
@@ -123,6 +125,12 @@ export function ArticleHome() {
   };
   const documents = list.data?.documents ?? [];
   const legacy = list.data?.legacy ?? [];
+  const [toolsOpen, setToolsOpen] = React.useState(() => { try { return window.localStorage.getItem(TOOLS_KEY) === "1"; } catch { return false; } });
+  const rememberTools = (open: boolean) => {
+    if (open === toolsOpen) return;
+    setToolsOpen(open);
+    try { window.localStorage.setItem(TOOLS_KEY, open ? "1" : "0"); } catch { /* 存储不可用时只在本次有效 */ }
+  };
 
   return (
     <div className="ice-doc-home">
@@ -141,15 +149,21 @@ export function ArticleHome() {
           <strong>{importing ? "正在导入…" : "Word 导入"}</strong><span>选择 .docx 文件，本地转换，附导入报告</span></button>
         <button type="button" className="ice-doc-start" onClick={() => articleCreateStore.set("ai")}>
           <strong>AI 起草</strong><span>描述需求，后台生成独立初稿</span></button>
-        <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={compatBusy} onClick={() => setCompatOpen(true)}>
-          <strong>{compatBusy ? "正在生成…" : "微信兼容测试稿"}</strong><span>覆盖全部元素的测试稿，逐项记录真实微信结果</span></button>
-        <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={perfBusy} onClick={() => void createPerf()}>
-          <strong>{perfBusy ? "正在生成…" : "性能样本"}</strong><span>约 1 万字 / 30 张测试图的固定样本，侧栏看性能读数</span></button>
-        <button type="button" className="ice-doc-start ice-doc-start--tool" onClick={() => trialDialogStore.set("open")}>
-          <strong>作者试用记录</strong><span>邀请作者试用时记录用时、卡点与 AI 改稿量（本机、不含正文）</span></button>
         <input ref={wordInput} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                hidden aria-label="选择 Word 文件" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importWord(file); }} />
       </div>
+      {/* v3.27：测试与试用工具默认收起，不占文章列表的位置；展开状态记在本机。 */}
+      <details className="ice-doc-tools" open={toolsOpen} onToggle={event => rememberTools((event.currentTarget as HTMLDetailsElement).open)}>
+        <summary>测试与试用工具<span className="ice-doc-muted">微信兼容测试稿 · 性能样本 · 作者试用记录</span></summary>
+        <div className="ice-doc-starts ice-doc-starts--tools">
+          <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={compatBusy} onClick={() => setCompatOpen(true)}>
+          <strong>{compatBusy ? "正在生成…" : "微信兼容测试稿"}</strong><span>覆盖全部元素的测试稿，逐项记录真实微信结果</span></button>
+          <button type="button" className="ice-doc-start ice-doc-start--tool" disabled={perfBusy} onClick={() => void createPerf()}>
+          <strong>{perfBusy ? "正在生成…" : "性能样本"}</strong><span>约 1 万字 / 30 张测试图的固定样本，侧栏看性能读数</span></button>
+          <button type="button" className="ice-doc-start ice-doc-start--tool" onClick={() => trialDialogStore.set("open")}>
+          <strong>作者试用记录</strong><span>邀请作者试用时记录用时、卡点与 AI 改稿量（本机、不含正文）</span></button>
+        </div>
+      </details>
       <div className="ice-doc-home__filters">
         <Input type="search" value={query} placeholder="搜索标题或开头" aria-label="搜索文章" onChange={event => setQuery(event.target.value)}
                style={{ flex: 1 }} />
@@ -253,7 +267,7 @@ function BatchBar({ view, selected, all, onSelect }: { view: "list" | "trash"; s
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("clear_series", {}, "已清除系列")}>清除系列</Button>
           </span>
           <span className="ice-doc-batch__grp">
-            <input type="date" value={date} aria-label="批量设置计划日期" onChange={event => setDate(event.target.value)} />
+            <input type="date" className="ice-doc-date" value={date} aria-label="批量设置计划日期" onChange={event => setDate(event.target.value)} />
             <Button size="sm" variant="ghost" disabled={!date || busy} onClick={() => void run("set_planned", { planned_date: date }, "已排期")}>排期</Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("clear_planned", {}, "已取消排期")}>取消排期</Button>
           </span>
@@ -294,6 +308,7 @@ function DocumentRow({ item, trashed, selected, onSelect }: { item: DocumentSumm
           {state === "running" && <span className="ice-doc-chip is-busy"><Spinner size={10} /> 生成中</span>}
           {state === "failed" && <span className="ice-doc-chip is-bad">生成失败</span>}
           {item.published && <span className="ice-doc-chip is-ok">已登记发布</span>}
+          {item.drafted && !item.published && <span className="ice-doc-chip is-busy" title="已同步到公众号草稿箱，还没有登记发布">已同步草稿箱</span>}
           {item.planned_date && !item.published && <span className="ice-doc-chip is-busy">计划 {item.planned_date.slice(5)}</span>}
           <span className="ice-doc-chip">{item.source_label || ORIGIN_LABEL[item.origin]}</span>
           {item.series && <span className="ice-doc-chip">{item.series}{item.episode ? `·${item.episode}` : ""}</span>}

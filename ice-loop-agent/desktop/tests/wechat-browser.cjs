@@ -58,7 +58,7 @@ async function run() {
 
   // 封面裁切：4:1 的图 → 2.35:1 左右移动；1:1 也是左右移动；恢复默认清除
   const crop = page.locator('#crop');
-  await crop.getByText('2.35:1 大图（默认居中）').waitFor();
+  await crop.getByText('不调整时由公众号后台默认居中').waitFor();
   await crop.getByLabel('2.35:1 大图裁切位置').fill('0');
   let value = await page.evaluate(() => window.crop);
   assert.equal(value.for, 'resource-cover');
@@ -68,6 +68,7 @@ async function run() {
   await crop.getByLabel('1:1 小图裁切位置').fill('100');
   value = await page.evaluate(() => window.crop);
   assert.ok(Math.abs(value['11'][2] - 1) < 0.001 && Math.abs(value['11'][0] - 0.75) < 0.001);
+  await crop.getByText('已调整裁切位置').waitFor();
   await crop.getByRole('button', { name: '恢复默认居中' }).click();
   assert.equal(await page.evaluate(() => window.crop), undefined);
   report.checks.cover_crop = true;
@@ -78,6 +79,8 @@ async function run() {
   await dialog.getByText('没有封面：在“文章设置”里指定').waitFor();
   await dialog.getByText('头条', { exact: true }).waitFor();
   assert.equal(await dialog.getByRole('button', { name: '同步为多图文草稿' }).isDisabled(), true);
+  const danger = await page.evaluate(() => { const probe = document.createElement('i'); probe.style.color = 'var(--ice-danger)'; document.body.append(probe); const c = getComputedStyle(probe).color; probe.remove(); return c; });
+  assert.equal(await dialog.locator('.ice-wxgroup__problem').evaluate(el => getComputedStyle(el).color), danger);
   await dialog.getByText('不会带上').waitFor();  // 第二篇有未保存成版本的修改
   await dialog.getByRole('button', { name: '移出这组' }).nth(2).click();
   await dialog.getByText('同步过').waitFor();     // doc-a,doc-b 这一组以前同步过
@@ -85,7 +88,7 @@ async function run() {
   await dialog.getByRole('button', { name: '下移' }).first().click();
   await dialog.getByText('还没有同步过').waitFor();
   const button = dialog.getByRole('button', { name: '同步为多图文草稿' });
-  await page.waitForFunction(() => !document.querySelector('[role=dialog] .ice-doc-group__item.is-blocked'));
+  await page.waitForFunction(() => !document.querySelector('[role=dialog] .ice-wxgroup__item.is-blocked'));
   await page.waitForFunction(() => [...document.querySelectorAll('[role=dialog] button')].some(b => b.textContent === '同步为多图文草稿' && !b.disabled));
   await page.evaluate(() => { window.syncResults.push({ conflict: true, media_id: 'MEDIA-GROUP-123456', message: '后台这篇多图文被修改过' }); });
   await button.click();
@@ -102,8 +105,9 @@ async function run() {
 
   // 编辑器面板：显示所在多图文，可打开这一组
   const panel = page.locator('#panel');
-  await panel.getByText(/多图文第 2 篇（共 2 篇：《头条文章》《第二篇》）/).waitFor();
-  await panel.getByText('这篇有新版本还没同步到这组').waitFor();
+  await panel.getByText('多图文 · 第 2 篇 / 共 2 篇').waitFor();
+  await panel.getByText('同组：《头条文章》').waitFor();
+  await panel.getByText('这篇有新版本未同步').waitFor();
   await panel.getByRole('button', { name: '打开这组' }).click();
   const second = page.getByRole('dialog', { name: '合成多图文草稿' });
   await second.getByRole('button', { name: '更新多图文草稿' }).waitFor();

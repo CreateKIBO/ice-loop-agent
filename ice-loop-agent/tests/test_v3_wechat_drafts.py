@@ -312,6 +312,15 @@ class TestGroupDrafts(Base):
         self.assertEqual(third['action'], 'created')
         self.assertNotEqual(third['media_id'], first['media_id'])
 
+    def test_list_marks_documents_synced_to_drafts(self):
+        """v3.27 文章列表标出已同步到草稿箱的文章（单篇或多图文都算）。"""
+        self.configure()
+        a, b, c = self.stable('甲'), self.stable('乙'), self.stable('丙')
+        flags = lambda: {d['document_id']: d['drafted'] for d in self.call('documents.list')['documents']}
+        self.assertEqual(flags(), {a: False, b: False, c: False})
+        self.call('wechat.group_sync', document_ids=[a, b])
+        self.assertEqual(flags(), {a: True, b: True, c: False})
+
     def test_status_lists_groups_of_document(self):
         self.configure()
         a, b = self.stable('甲'), self.stable('乙')
@@ -408,6 +417,36 @@ class TestHelpers(unittest.TestCase):
         small = root / 'ok.png'
         Image.new('RGB', (10, 10)).save(small, 'PNG')
         self.assertEqual(prepare_image(str(small), 'image/png', small.stat().st_size, cover=False)[3], '')
+
+    def test_token_cache_is_per_secret(self):
+        """v3.27 换了 AppSecret 后不能继续用旧密钥取到的凭据。"""
+        wx_client._TOKENS.clear()
+        seen = []
+
+        def transport(method, url, *, body=None, headers=None, timeout=30):
+            secret = json.loads(body)['secret']
+            seen.append(secret)
+            if secret != 'good':
+                return {'errcode': 40125, 'errmsg': 'invalid appsecret'}
+            return {'access_token': 'T', 'expires_in': 7200}
+        self.assertEqual(wx_client.WeChatClient('wx' + 'a' * 16, 'good', transport).token(), 'T')
+        with self.assertRaises(wx_client.WeChatError):
+            wx_client.WeChatClient('wx' + 'a' * 16, 'bad', transport).token()
+        self.assertEqual(seen, ['good', 'bad'])
+        self.assertEqual(wx_client.WeChatClient('wx' + 'a' * 16, 'good', transport).token(), 'T')
+        self.assertEqual(seen, ['good', 'bad'])  # 原密钥的凭据仍在缓存里
+
+    def test_http_5xx_is_unknown_outcome(self):
+        """v3.27 网关超时等 5xx：写入可能已被处理，按“结果未知”对账；4xx 是确定的失败。"""
+        import urllib.error
+        from unittest import mock
+        for code, outcome in ((504, 'unknown'), (502, 'unknown'), (403, 'failed')):
+            error = urllib.error.HTTPError('https://api.weixin.qq.com/x', code, 'x', None, None)
+            with mock.patch('urllib.request.urlopen', side_effect=error):
+                with self.assertRaises(wx_client.WeChatError) as caught:
+                    wx_client.urllib_transport('POST', 'https://api.weixin.qq.com/x', body=b'{}')
+            self.assertEqual(caught.exception.outcome, outcome)
+            self.assertNotIn('access_token', str(caught.exception))
 
 
 if __name__ == '__main__':

@@ -50,7 +50,8 @@ def _lock(account_id: str, document_id: str) -> threading.Lock:
 
 def prepare_image(path: str, mime: str, size: int, *, cover: bool) -> tuple[str, bytes, str, str]:
     """返回 (文件名, 字节, mime, 说明)。正文图片：jpg/png 且 <1MB；封面：jpg/png/gif 且 ≤10MB。"""
-    raw = open(path, 'rb').read()
+    with open(path, 'rb') as handle:
+        raw = handle.read()
     limit = COVER_LIMIT if cover else CONTENT_IMAGE_LIMIT
     allowed = ('image/jpeg', 'image/png', 'image/gif') if cover else ('image/jpeg', 'image/png')
     if mime in allowed and len(raw) <= limit:

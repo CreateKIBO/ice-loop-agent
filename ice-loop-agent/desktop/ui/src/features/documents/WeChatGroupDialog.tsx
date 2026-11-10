@@ -66,21 +66,22 @@ export function WeChatGroupDialog({ open, documentIds, onClose, onDone }: {
         <Button onClick={onClose} disabled={busy}>关闭</Button>
         {!ready && <Button onClick={() => setConfig(true)}>设置公众号接口</Button>}
         <Button variant="primary" loading={busy} disabled={!ready || !data?.ready || order.length < 2 || Boolean(pending) || preview.isFetching}
+                title={!ready ? "先设置公众号接口" : order.length < 2 ? "至少需要 2 篇" : data && !data.ready ? "有文章还不能同步：处理标红的那一篇，或点“移出”" : undefined}
                 onClick={() => void sync()}>{data?.group ? "更新多图文草稿" : "同步为多图文草稿"}</Button>
       </>}>
       <div className="ice-doc-form">
         {order.length < 2 && <Banner tone="warning" title="至少需要 2 篇">多图文需要 2 到 {GROUP_LIMIT} 篇文章。关闭后重新选择。</Banner>}
         {preview.error && <Banner tone="warning" title="检查没有完成">{preview.error.message}</Banner>}
-        <ol className="ice-doc-group" aria-label="多图文顺序">
+        <ol className="ice-wxgroup" aria-label="多图文顺序">
           {order.map((id, index) => {
             const item = byId.get(id);
-            return <li key={id} className={"ice-doc-group__item" + (item?.problem ? " is-blocked" : "")}>
-              <span className="ice-doc-group__pos">{index === 0 ? "头条" : `第 ${index + 1} 篇`}</span>
-              <span className="ice-doc-group__main">
+            return <li key={id} className={"ice-wxgroup__item" + (item?.problem ? " is-blocked" : "")}>
+              <span className="ice-wxgroup__pos">{index === 0 ? "头条" : `第 ${index + 1} 篇`}</span>
+              <span className="ice-wxgroup__main">
                 <strong>{item?.title || "（读取中）"}</strong>
                 <span className="ice-doc-muted">
-                  {item?.problem ? <span className="ice-doc-danger-text">{item.problem}</span>
-                    : item?.version_created_at ? `用 ${formatTime(item.version_created_at)} 的稳定版本` : ""}
+                  {item?.problem ? <span className="ice-wxgroup__problem">{item.problem}</span>
+                    : item?.version_created_at ? `稳定版本 ${formatTime(item.version_created_at)}` : ""}
                   {item?.unversioned && !item.problem ? " · 工作副本里还有未保存成版本的修改，不会带上" : ""}
                 </span>
               </span>

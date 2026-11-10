@@ -109,10 +109,21 @@ export function WeChatDraftPanel({ documentId, versionId, title, complete, onSyn
       {!ready && !status.error && <p className="ice-doc-muted">设置 AppID 与 AppSecret 后，可以把文章（正文、图片、封面、作者、摘要）直接写进草稿箱，再到后台预览和发布。</p>}
       {draft && <p className="ice-doc-muted">已同步 {formatTime(draft.synced_at)} · 草稿 …{draft.media_id.slice(-6)}
         {draft.version_id !== versionId ? " · 当前版本还没有同步" : " · 与当前版本一致"}</p>}
-      {(status.data?.groups ?? []).map(item => <p key={item.group_key} className="ice-doc-muted ice-doc-wechat__group">
-        多图文第 {item.position} 篇（共 {item.members.length} 篇：{item.members.map(m => `《${m.title}》${m.available ? "" : "（已移入回收站）"}`).join("")}）
-        · 同步于 {formatTime(item.synced_at)} · {item.current ? "草稿里是这篇最新的稳定版本" : "这篇有新版本还没同步到这组"}
-        <Button size="sm" variant="ghost" onClick={() => setGroup(item.document_ids)}>打开这组</Button></p>)}
+      {(status.data?.groups ?? []).length > 0 && <ul className="ice-wxgroups" aria-label="所在的多图文草稿">
+        {(status.data?.groups ?? []).map(item => {
+          const others = item.members.filter(member => member.document_id !== documentId)
+            .map(member => `《${member.title}》${member.available ? "" : "（已移入回收站）"}`).join("");
+          return <li key={item.group_key}>
+            <span className="ice-wxgroups__main">
+              <strong>多图文 · 第 {item.position} 篇 / 共 {item.members.length} 篇</strong>
+              <span className="ice-doc-muted ice-wxgroups__titles" title={others}>同组：{others}</span>
+              <span className="ice-doc-muted">{formatTime(item.synced_at)} 同步 · <span className={item.current ? "is-ok" : "is-stale"}>
+                {item.current ? "已是这篇的最新版本" : "这篇有新版本未同步"}</span></span>
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setGroup(item.document_ids)}>打开这组</Button>
+          </li>;
+        })}
+      </ul>}
       {pending?.needs_check && <Banner tone="warning" title="上次同步结果未知">{pending.message}
         <div className="ice-doc-row"><Button size="sm" onClick={() => void sync({ checked_unknown: true })}>我已核对，继续同步</Button>
           <Button size="sm" variant="ghost" onClick={() => setPending(null)}>稍后</Button></div></Banner>}

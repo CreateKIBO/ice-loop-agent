@@ -34,7 +34,7 @@ export type DocumentSummary = {
   id: string; document_id: string; kind: "document"; title: string; origin: Origin; origin_ref: string;
   series: string | null; episode: number | null; lifecycle: "active" | "trashed"; generation_state: GenerationState;
   updated_at: string; created_at: string; trashed_at: string | null; summary: string; word_count: number;
-  images: number; published: boolean; source_label: string;
+  images: number; published: boolean; drafted?: boolean; source_label: string;
   variant?: "A" | "B" | null; variant_group?: string | null; cover_resource_id?: string | null; planned_date?: string | null;
 };
 export type LegacyItem = {

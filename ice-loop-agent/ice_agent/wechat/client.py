@@ -10,6 +10,7 @@ transport 可替换，测试与离线环境不访问网络。
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import urllib.error
@@ -80,7 +81,9 @@ def urllib_transport(method: str, url: str, *, body: bytes | None = None, header
         with urllib.request.urlopen(request, timeout=timeout) as response:  # 遵循系统代理设置
             raw = response.read()
     except urllib.error.HTTPError as error:
-        raise WeChatError('http', f'微信接口 HTTP {error.code}', raw=str(error)) from error
+        # 5xx（含网关超时）时请求可能已经被处理：和断网一样按“结果未知”交给对账；4xx 是确定的失败
+        raise WeChatError('http', f'微信接口 HTTP {error.code}', raw=str(error),
+                          outcome=UNKNOWN_OUTCOME if error.code >= 500 else 'failed') from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         # 已发出的写入请求可能已经成功：由调用方按“结果未知”处理
         raise WeChatError('network', f'连接微信接口失败：{getattr(error, "reason", error)}', raw=str(error),
@@ -100,6 +103,8 @@ class WeChatClient:
             raise WeChatError('config', '还没有填写公众号 AppID 与 AppSecret')
         self.appid, self.secret = appid, secret
         self.transport = transport or urllib_transport
+        # 凭据缓存按“AppID + 密钥”区分：换了 AppSecret 不会继续用旧密钥取到的凭据
+        self._cache_key = appid + ':' + hashlib.sha256(secret.encode('utf-8')).hexdigest()[:16]
 
     # ------------------------------------------------------------ 基础
     def _check(self, data: dict) -> dict:
@@ -109,7 +114,7 @@ class WeChatClient:
         return data
 
     def token(self, *, force: bool = False) -> str:
-        cached = _TOKENS.get(self.appid)
+        cached = _TOKENS.get(self._cache_key)
         if cached and not force and cached[1] > time.time() + 120:
             return cached[0]
         body = json.dumps({'grant_type': 'client_credential', 'appid': self.appid, 'secret': self.secret,
@@ -124,7 +129,7 @@ class WeChatClient:
         token = data.get('access_token')
         if not isinstance(token, str) or not token:
             raise WeChatError('format', '微信没有返回调用凭据')
-        _TOKENS[self.appid] = (token, time.time() + int(data.get('expires_in') or 7200))
+        _TOKENS[self._cache_key] = (token, time.time() + int(data.get('expires_in') or 7200))
         return token
 
     def _call(self, path: str, *, payload: dict | None = None, files: tuple[str, str, bytes, str] | None = None,
@@ -143,7 +148,7 @@ class WeChatClient:
             headers = {'Content-Type': 'application/json; charset=utf-8'}
         data = self.transport('POST', url, body=body, headers=headers)
         if data.get('errcode') in (40001, 42001) and retry:  # 凭据被其他地方刷新：重取一次
-            _TOKENS.pop(self.appid, None)
+            _TOKENS.pop(self._cache_key, None)
             return self._call(path, payload=payload, files=files, query=query, retry=False)
         return self._check(data)
 
